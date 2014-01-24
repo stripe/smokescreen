@@ -1,3 +1,5 @@
+// Package einhorn allows you to communicate with the einhorn master from a Go
+// worker.
 package einhorn
 
 import (
@@ -8,6 +10,7 @@ import (
 	"strconv"
 )
 
+// CountListeners returns the number of listener fd's passed by the master.
 func CountListeners() uint {
 	count, err := strconv.ParseUint(os.Getenv("EINHORN_FD_COUNT"), 10, 64)
 	if err != nil {
@@ -17,6 +20,7 @@ func CountListeners() uint {
 	}
 }
 
+// GetListener returns the passed listener with the specified index.
 func GetListener(index uint) (net.Listener, error) {
 	if CountListeners() < (index + 1) {
 		return nil, errors.New("Too few EINHORN_FDs passed")
@@ -37,6 +41,7 @@ func GetListener(index uint) (net.Listener, error) {
 	return listener, nil
 }
 
+// Ack sends an ack to the einhorn master.
 func Ack() error {
 	return sendToMaster(workerMessage{Command: "worker:ack", Pid: os.Getpid()})
 }
