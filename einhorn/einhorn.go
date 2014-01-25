@@ -15,9 +15,8 @@ func CountListeners() uint {
 	count, err := strconv.ParseUint(os.Getenv("EINHORN_FD_COUNT"), 10, 64)
 	if err != nil {
 		return 0
-	} else {
-		return uint(count)
 	}
+	return uint(count)
 }
 
 // GetListener returns the passed listener with the specified index.
