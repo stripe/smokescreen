@@ -4,11 +4,11 @@ package einhorn
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"net"
 	"net/url"
 	"path"
+	"strings"
 
 	"launchpad.net/goyaml"
 )
@@ -65,16 +65,9 @@ func (c *Client) SendRequest(req interface{}) error {
 		return err
 	}
 
-	encoded := bytes.Replace(
-		bytes.Replace(line, []byte("%"), []byte("%25"), -1),
-		[]byte("\n"),
-		[]byte("%0A"),
-		-1)
+	encoded := strings.Replace(strings.Replace(string(line), "%", "%25", -1), "\n", "%0A", -1)
 
-	if _, err := c.writer.Write(encoded); err != nil {
-		return err
-	}
-	if err := c.writer.WriteByte('\n'); err != nil {
+	if _, err := c.writer.WriteString(fmt.Sprintf("%s\n", encoded)); err != nil {
 		return err
 	}
 	return c.writer.Flush()
