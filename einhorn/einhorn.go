@@ -11,20 +11,20 @@ import (
 )
 
 // CountListeners returns the number of listener fd's passed by the master.
-func CountListeners() uint {
-	count, err := strconv.ParseUint(os.Getenv("EINHORN_FD_COUNT"), 10, 32)
+func CountListeners() int {
+	count, err := strconv.Atoi(os.Getenv("EINHORN_FD_COUNT"))
 	if err != nil {
 		return 0
 	}
-	return uint(count)
+	return count
 }
 
 // GetListener returns the passed listener with the specified index.
-func GetListener(index uint) (net.Listener, error) {
+func GetListener(index int) (net.Listener, error) {
 	if CountListeners() < (index + 1) {
 		return nil, errors.New("Too few EINHORN_FDs passed")
 	}
-	name := "EINHORN_FD_" + strconv.Itoa(int(index))
+	name := "EINHORN_FD_" + strconv.Itoa(index)
 
 	fileno, err := strconv.Atoi(os.Getenv(name))
 	if err != nil {
