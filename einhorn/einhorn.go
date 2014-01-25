@@ -33,8 +33,7 @@ func GetListener(index int) (net.Listener, error) {
 		return nil, err
 	}
 
-	file := os.NewFile(uintptr(fileno), name)
-	listener, err := net.FileListener(file)
+	listener, err := net.FileListener(os.NewFile(uintptr(fileno), name))
 	if err != nil {
 		return nil, err
 	}
