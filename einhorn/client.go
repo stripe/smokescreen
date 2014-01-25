@@ -4,6 +4,7 @@ package einhorn
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net"
 	"net/url"
@@ -64,9 +65,13 @@ func (c *Client) SendRequest(req interface{}) error {
 		return err
 	}
 
-	encoded := url.QueryEscape(string(line))
+	encoded := bytes.Replace(
+		bytes.Replace(line, []byte("%"), []byte("%25"), -1),
+		[]byte("\n"),
+		[]byte("%0A"),
+		-1)
 
-	if _, err := c.writer.WriteString(encoded); err != nil {
+	if _, err := c.writer.Write(encoded); err != nil {
 		return err
 	}
 	if err := c.writer.WriteByte('\n'); err != nil {
