@@ -5,6 +5,7 @@ package einhorn
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -24,7 +25,8 @@ func GetListener(index int) (net.Listener, error) {
 	if CountListeners() < (index + 1) {
 		return nil, errors.New("einhorn: too few EINHORN_FDs passed")
 	}
-	name := "EINHORN_FD_" + strconv.Itoa(index)
+
+	name := fmt.Sprintf("EINHORN_FD_%d", index)
 
 	fileno, err := strconv.Atoi(os.Getenv(name))
 	if err != nil {
