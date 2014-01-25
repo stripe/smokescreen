@@ -22,19 +22,19 @@ func CountListeners() int {
 // GetListener returns the passed listener with the specified index.
 func GetListener(index int) (net.Listener, error) {
 	if CountListeners() < (index + 1) {
-		return nil, errors.New("Too few EINHORN_FDs passed")
+		return nil, errors.New("einhorn: too few EINHORN_FDs passed")
 	}
 	name := "EINHORN_FD_" + strconv.Itoa(index)
 
 	fileno, err := strconv.Atoi(os.Getenv(name))
 	if err != nil {
-		return nil, errors.New("Could not parse fd: " + err.Error())
+		return nil, err
 	}
 
 	file := os.NewFile(uintptr(fileno), name)
 	listener, err := net.FileListener(file)
 	if err != nil {
-		return nil, errors.New("Could not create listener from fd: " + err.Error())
+		return nil, err
 	}
 
 	return listener, nil
@@ -51,10 +51,9 @@ type workerMessage struct {
 }
 
 func sendToMaster(msg workerMessage) error {
-	sockPath := os.Getenv("EINHORN_SOCK_PATH")
-	controlConn, err := net.Dial("unix", sockPath)
+	controlConn, err := net.Dial("unix", os.Getenv("EINHORN_SOCK_PATH"))
 	if err != nil {
-		return errors.New("Could not connect to einhorn master: " + err.Error())
+		return err
 	}
 	defer controlConn.Close()
 
