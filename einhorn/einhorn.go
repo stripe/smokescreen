@@ -58,19 +58,13 @@ func sendToMaster(msg workerMessage) error {
 	}
 	defer controlConn.Close()
 
-	serialized, err := json.Marshal(msg)
-	if err != nil {
-		return errors.New("Could not serialize message: " + err.Error())
+	e := json.NewEncoder(controlConn)
+	if err := e.Encode(msg); err != nil {
+		return err
 	}
 
-	_, err = controlConn.Write(serialized)
-	if err != nil {
-		return errors.New("Could not write to einhorn master: " + err.Error())
-	}
-
-	_, err = controlConn.Write([]byte("\n"))
-	if err != nil {
-		return errors.New("Could not write to einhorn master: " + err.Error())
+	if _, err := controlConn.Write([]byte("\n")); err != nil {
+		return err
 	}
 
 	return nil
