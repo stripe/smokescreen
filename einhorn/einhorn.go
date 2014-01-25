@@ -27,13 +27,13 @@ func GetListener(index uint) (net.Listener, error) {
 	}
 	name := "EINHORN_FD_" + strconv.Itoa(int(index))
 
-	listener_fileno, err := strconv.Atoi(os.Getenv(name))
+	fileno, err := strconv.Atoi(os.Getenv(name))
 	if err != nil {
 		return nil, errors.New("Could not parse fd: " + err.Error())
 	}
 
-	listener_file := os.NewFile(uintptr(listener_fileno), name)
-	listener, err := net.FileListener(listener_file)
+	file := os.NewFile(uintptr(fileno), name)
+	listener, err := net.FileListener(file)
 	if err != nil {
 		return nil, errors.New("Could not create listener from fd: " + err.Error())
 	}
@@ -52,8 +52,8 @@ type workerMessage struct {
 }
 
 func sendToMaster(msg workerMessage) error {
-	einhorn_sock_path := os.Getenv("EINHORN_SOCK_PATH")
-	einhorn_control_conn, err := net.Dial("unix", einhorn_sock_path)
+	sockPath := os.Getenv("EINHORN_SOCK_PATH")
+	controlConn, err := net.Dial("unix", sockPath)
 	if err != nil {
 		return errors.New("Could not connect to einhorn master: " + err.Error())
 	}
@@ -63,17 +63,17 @@ func sendToMaster(msg workerMessage) error {
 		return errors.New("Could not serialize message: " + err.Error())
 	}
 
-	_, err = einhorn_control_conn.Write(serialized)
+	_, err = controlConn.Write(serialized)
 	if err != nil {
 		return errors.New("Could not write to einhorn master: " + err.Error())
 	}
 
-	_, err = einhorn_control_conn.Write([]byte("\n"))
+	_, err = controlConn.Write([]byte("\n"))
 	if err != nil {
 		return errors.New("Could not write to einhorn master: " + err.Error())
 	}
 
-	err = einhorn_control_conn.Close()
+	err = controlConn.Close()
 	if err != nil {
 		return errors.New("Could not close connection to einhorn master: " + err.Error())
 	}
