@@ -12,7 +12,7 @@ import (
 
 // CountListeners returns the number of listener fd's passed by the master.
 func CountListeners() uint {
-	count, err := strconv.ParseUint(os.Getenv("EINHORN_FD_COUNT"), 10, 64)
+	count, err := strconv.ParseUint(os.Getenv("EINHORN_FD_COUNT"), 10, 32)
 	if err != nil {
 		return 0
 	}
