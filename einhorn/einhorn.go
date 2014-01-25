@@ -56,6 +56,7 @@ func sendToMaster(msg workerMessage) error {
 	if err != nil {
 		return errors.New("Could not connect to einhorn master: " + err.Error())
 	}
+	defer controlConn.Close()
 
 	serialized, err := json.Marshal(msg)
 	if err != nil {
@@ -70,11 +71,6 @@ func sendToMaster(msg workerMessage) error {
 	_, err = controlConn.Write([]byte("\n"))
 	if err != nil {
 		return errors.New("Could not write to einhorn master: " + err.Error())
-	}
-
-	err = controlConn.Close()
-	if err != nil {
-		return errors.New("Could not close connection to einhorn master: " + err.Error())
 	}
 
 	return nil
