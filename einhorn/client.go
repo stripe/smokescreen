@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	"launchpad.net/goyaml"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var TmpDir = "/tmp"
@@ -60,7 +60,7 @@ func NewClientForName(name string) (*Client, error) {
 }
 
 func (c *Client) SendRequest(req interface{}) error {
-	line, err := goyaml.Marshal(req)
+	line, err := yaml.Marshal(req)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (c *Client) ReadResponse() (*ClientResponse, error) {
 	}
 
 	var response ClientResponse
-	if err := goyaml.Unmarshal([]byte(line), &response); err != nil {
+	if err := yaml.Unmarshal([]byte(line), &response); err != nil {
 		return nil, err
 	}
 
