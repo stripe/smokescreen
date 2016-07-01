@@ -1,0 +1,8 @@
+language: go
+go:
+  - 1.6
+install:
+  - go get -u github.com/kardianos/govendor
+before_script:
+  - govendor vet +l
+script: govendor test -v +l

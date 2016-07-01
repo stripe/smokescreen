@@ -1,0 +1,44 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "TvDRz908FXsiR7xaw82Pn/qKN3k=",
+			"path": "github.com/DataDog/datadog-go/statsd",
+			"revision": "8b6f59aa4f252b3b547523c21381330138bfe3ac",
+			"revisionTime": "2016-02-15T18:25:23Z"
+		},
+		{
+			"checksumSHA1": "5R1YybXVnKuEK2U5L3WsXnEf66o=",
+			"origin": "gopkg.in/elazarl/goproxy.v1/vendor/github.com/elazarl/goproxy/transport",
+			"path": "github.com/elazarl/goproxy/transport",
+			"revision": "0890fc15d1b6428a674b8252a2d238ca589daf73",
+			"revisionTime": "2014-02-02T12:23:12Z"
+		},
+		{
+			"checksumSHA1": "VMHE0tBRRPhQ/6yBr+4IVgqCT+c=",
+			"path": "github.com/icub3d/graceful",
+			"revision": "bb9e370d9ddf05f4b7e077c8599ddaf4ddd2a00e",
+			"revisionTime": "2015-03-18T14:27:10Z"
+		},
+		{
+			"checksumSHA1": "BEfg9G4r0MJ8O6jKfmK4yRm0jIs=",
+			"path": "github.com/stripe/go-einhorn/einhorn",
+			"revision": "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da",
+			"revisionTime": "2016-02-25T01:47:57Z"
+		},
+		{
+			"checksumSHA1": "KRc1jAK9Xe9Tm4xqstLBLqDHPaM=",
+			"path": "gopkg.in/elazarl/goproxy.v1",
+			"revision": "0890fc15d1b6428a674b8252a2d238ca589daf73",
+			"revisionTime": "2014-02-02T12:23:12Z"
+		},
+		{
+			"checksumSHA1": "Ww6wiSKdA8LwxoJz4DNUF+crH4g=",
+			"path": "gopkg.in/yaml.v2",
+			"revision": "f7716cbe52baa25d2e9b0d0da546fcf909fc16b4",
+			"revisionTime": "2015-12-01T16:27:45Z"
+		}
+	],
+	"rootPath": "github.com/stripe-internal/smokescreen"
+}
