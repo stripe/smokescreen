@@ -1,4 +1,4 @@
-# Smokescreen
+# Smokescreen [![Build Status](https://travis-ci.org/stripe/smokescreen.svg?branch=master)](https://travis-ci.org/stripe/smokescreen)
 Smokescreen is a HTTP CONNECT proxy. It proxies most traffic from Stripe to the
 external world (e.g., webhooks).
 
