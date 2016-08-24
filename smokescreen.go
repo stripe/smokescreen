@@ -101,7 +101,7 @@ func errorResponse(req *http.Request, err error) *http.Response {
 
 func buildProxy() *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Verbose = true
+	proxy.Verbose = false
 	proxy.Tr.Dial = dial
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.Logf("Received HTTP proxy request: "+
