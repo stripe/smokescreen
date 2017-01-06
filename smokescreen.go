@@ -109,6 +109,7 @@ func buildProxy() *goproxy.ProxyHttpServer {
 			ctx.Req.RemoteAddr,
 			ctx.Req.Host,
 			ctx.Req.RequestURI)
+		ctx.UserData = time.Now().Unix()
 		return req, nil
 	})
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
@@ -122,9 +123,12 @@ func buildProxy() *goproxy.ProxyHttpServer {
 			ctx.Resp = errorResponse(ctx.Req, err)
 			return goproxy.RejectConnect, ""
 		}
+		ctx.UserData = time.Now().Unix()
 		return goproxy.OkConnect, resolved
 	})
+
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		logResponse(ctx)
 		if resp == nil && ctx.Error != nil {
 			resp = errorResponse(ctx.Req, ctx.Error)
 		}
@@ -132,6 +136,22 @@ func buildProxy() *goproxy.ProxyHttpServer {
 	})
 
 	return proxy
+}
+
+func logResponse(ctx *goproxy.ProxyCtx) {
+	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
+	log.Printf("Completed response: "+
+		"src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%d\n",
+		from_host,
+		from_port,
+		ctx.Req.Host,
+		ctx.RoundTrip.TCPAddr.IP.String(),
+		ctx.RoundTrip.TCPAddr.Port,
+		ctx.UserData,
+		time.Now().Unix(),
+		// The content length is often -1 because of HTTP chunked encoding. this is normal.
+		ctx.Resp.ContentLength,
+		)
 }
 
 func findListener(defaultPort int) (net.Listener, error) {
