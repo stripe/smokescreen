@@ -139,13 +139,22 @@ func buildProxy() *goproxy.ProxyHttpServer {
 }
 
 func logResponse(ctx *goproxy.ProxyCtx) {
-	if(ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil) {
+	var contentLength int64
+	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
+		// Reasons this might happen:
+		// 1) private ip destination (eg. 192.168.0.0/16, 10.0.0.0/8, etc)
+		// 2) Destination that doesn't respond (eg. i/o timeout)
+		// 3) destination domain that doesn't resolve
+		// 4) bogus IP address (eg. 1154.218.100.183)
 		log.Println("Could not log response: missing IP address")
 		return
 	}
+	if ctx.Resp != nil {
+		contentLength = ctx.Resp.ContentLength
+	}
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	log.Printf("Completed response: "+
-		"src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%d\n",
+		"src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
 		from_host,
 		from_port,
 		ctx.Req.Host,
@@ -154,8 +163,8 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 		ctx.UserData,
 		time.Now().Unix(),
 		// The content length is often -1 because of HTTP chunked encoding. this is normal.
-		ctx.Resp.ContentLength,
-		)
+		contentLength,
+	)
 }
 
 func findListener(defaultPort int) (net.Listener, error) {
