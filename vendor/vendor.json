@@ -9,6 +9,12 @@
 			"revisionTime": "2016-02-15T18:25:23Z"
 		},
 		{
+			"checksumSHA1": "dAA8PW3uJcFhdSfglb+J+ovCqXM=",
+			"path": "github.com/armon/go-proxyproto",
+			"revision": "3daa90aec0039a806299b9078f4422fee950f33c",
+			"revisionTime": "2016-07-18T23:16:24Z"
+		},
+		{
 			"checksumSHA1": "5R1YybXVnKuEK2U5L3WsXnEf66o=",
 			"origin": "gopkg.in/elazarl/goproxy.v1/vendor/github.com/elazarl/goproxy/transport",
 			"path": "github.com/elazarl/goproxy/transport",
@@ -40,5 +46,5 @@
 			"revisionTime": "2015-12-01T16:27:45Z"
 		}
 	],
-	"rootPath": "github.com/stripe-internal/smokescreen"
+	"rootPath": "github.com/stripe/smokescreen"
 }

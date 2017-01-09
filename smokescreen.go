@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
+	"github.com/armon/go-proxyproto"
 	"github.com/icub3d/graceful"
 	"github.com/stripe/go-einhorn/einhorn"
 	"gopkg.in/elazarl/goproxy.v1"
@@ -185,12 +186,14 @@ func findListener(defaultPort int) (net.Listener, error) {
 func main() {
 	var port int
 	var maintenanceFile string
+	var proxyProto bool
 
 	flag.IntVar(&port, "port", 4750, "Port to bind on")
 	flag.DurationVar(&connectTimeout, "timeout",
 		time.Duration(10)*time.Second, "Time to wait while connecting")
 	flag.StringVar(&maintenanceFile, "maintenance", "",
 		"Flag file for maintenance. chmod to 000 to put into maintenance mode")
+	flag.BoolVar(&proxyProto, "proxy-protocol", false, "Enables PROXY protocol support")
 	flag.Parse()
 
 	proxy := buildProxy()
@@ -198,6 +201,10 @@ func main() {
 	listener, err := findListener(port)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if proxyProto {
+		listener = &proxyproto.Listener{Listener: listener}
 	}
 
 	kill := make(chan os.Signal, 1)
