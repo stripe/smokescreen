@@ -139,6 +139,10 @@ func buildProxy() *goproxy.ProxyHttpServer {
 }
 
 func logResponse(ctx *goproxy.ProxyCtx) {
+	if(ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil) {
+		log.Println("Could not log response: missing IP address")
+		return
+	}
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	log.Printf("Completed response: "+
 		"src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%d\n",
