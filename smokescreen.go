@@ -124,6 +124,7 @@ func buildProxy() *goproxy.ProxyHttpServer {
 			return goproxy.RejectConnect, ""
 		}
 		ctx.UserData = time.Now().Unix()
+		logHttpsRequest(ctx, resolved)
 		return goproxy.OkConnect, resolved
 	})
 
@@ -136,6 +137,27 @@ func buildProxy() *goproxy.ProxyHttpServer {
 	})
 
 	return proxy
+}
+
+func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
+	var contentLength int64
+	if ctx.Resp != nil {
+		contentLength = ctx.Resp.ContentLength
+	}
+	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
+	to_host, to_port, _ := net.SplitHostPort(resolved)
+	log.Printf("Received CONNECT request: "+
+		"proxy_type=connect src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%s start_time=%#v end_time=%d content_length=%#v\n",
+		from_host,
+		from_port,
+		ctx.Req.Host,
+		to_host,
+		to_port,
+		ctx.UserData,
+		time.Now().Unix(),
+		// The content length is often -1 because of HTTP chunked encoding. this is normal.
+		contentLength,
+	)
 }
 
 func logResponse(ctx *goproxy.ProxyCtx) {
@@ -154,7 +176,7 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 	}
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	log.Printf("Completed response: "+
-		"src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
+		"proxy_type=http src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
 		from_host,
 		from_port,
 		ctx.Req.Host,
