@@ -22,12 +22,6 @@
 			"revisionTime": "2014-02-02T12:23:12Z"
 		},
 		{
-			"checksumSHA1": "VMHE0tBRRPhQ/6yBr+4IVgqCT+c=",
-			"path": "github.com/icub3d/graceful",
-			"revision": "bb9e370d9ddf05f4b7e077c8599ddaf4ddd2a00e",
-			"revisionTime": "2015-03-18T14:27:10Z"
-		},
-		{
 			"checksumSHA1": "BEfg9G4r0MJ8O6jKfmK4yRm0jIs=",
 			"path": "github.com/stripe/go-einhorn/einhorn",
 			"revision": "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da",
