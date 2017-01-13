@@ -14,7 +14,6 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/armon/go-proxyproto"
-	"github.com/icub3d/graceful"
 	"github.com/stripe/go-einhorn/einhorn"
 	"gopkg.in/elazarl/goproxy.v1"
 )
@@ -24,6 +23,8 @@ var privateNetworks []net.IPNet
 var connectTimeout time.Duration
 
 var track *statsd.Client
+
+const exitTimeout = 60 * time.Second
 
 func init() {
 	var err error
@@ -239,8 +240,6 @@ func main() {
 		listener = &proxyproto.Listener{Listener: listener}
 	}
 
-	kill := make(chan os.Signal, 1)
-
 	var handler http.Handler = proxy
 	if maintenanceFile != "" {
 		handler = &HealthcheckMiddleware{
@@ -249,17 +248,41 @@ func main() {
 		}
 	}
 
-	server := graceful.NewServer(&http.Server{
+	server := http.Server{
 		Handler: handler,
-	})
+	}
+
+	runServer(&server, listener)
+}
+
+func runServer(server *http.Server, listener net.Listener) {
+	// Runs the server and shuts it down when it receives a signal.
+	//
+	// Why aren't we using goji's graceful shutdown library? Great question!
+	//
+	// There are several things we might want to do when shutting down gracefully:
+	// 1. close the listening socket (so that we don't accept *new* connections)
+	// 2. close *existing* keepalive connections once they become idle
+	//
+	// It is impossible to close existing keepalive connections, because goproxy
+	// hijacks the socket and doesn't tell us when they become idle. So all we
+	// can do is close the listening socket when we receive a signal, not accept
+	// new connections, and then exit the program after a timeout.
+	kill := make(chan os.Signal, 1)
+
+	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		<-kill
-		server.Close()
+		listener.Close()
+		log.Printf("Closed socket.")
 	}()
-	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM)
-
-	err = server.Serve(listener)
+	err := server.Serve(listener)
 	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 		log.Fatal(err)
+	} else {
+		// the program has exited normally, wait 60s in an attempt to shutdown
+		// semi-gracefully
+		log.Printf("Waiting %s before shutting down\n", exitTimeout)
+		time.Sleep(exitTimeout)
 	}
 }
