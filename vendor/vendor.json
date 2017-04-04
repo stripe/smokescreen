@@ -15,23 +15,16 @@
 			"revisionTime": "2016-07-18T23:16:24Z"
 		},
 		{
-			"checksumSHA1": "5R1YybXVnKuEK2U5L3WsXnEf66o=",
-			"origin": "gopkg.in/elazarl/goproxy.v1/vendor/github.com/elazarl/goproxy/transport",
-			"path": "github.com/elazarl/goproxy/transport",
-			"revision": "0890fc15d1b6428a674b8252a2d238ca589daf73",
-			"revisionTime": "2014-02-02T12:23:12Z"
+			"checksumSHA1": "/KYkXshlMe6QUQAcoibsos5BtWk=",
+			"path": "github.com/elazarl/goproxy",
+			"revision": "d58a790a89732c01a4e109a0abe9f4a86ee8fdc8",
+			"revisionTime": "2017-04-02T06:59:46Z"
 		},
 		{
 			"checksumSHA1": "BEfg9G4r0MJ8O6jKfmK4yRm0jIs=",
 			"path": "github.com/stripe/go-einhorn/einhorn",
 			"revision": "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da",
 			"revisionTime": "2016-02-25T01:47:57Z"
-		},
-		{
-			"checksumSHA1": "KRc1jAK9Xe9Tm4xqstLBLqDHPaM=",
-			"path": "gopkg.in/elazarl/goproxy.v1",
-			"revision": "0890fc15d1b6428a674b8252a2d238ca589daf73",
-			"revisionTime": "2014-02-02T12:23:12Z"
 		},
 		{
 			"checksumSHA1": "Ww6wiSKdA8LwxoJz4DNUF+crH4g=",
