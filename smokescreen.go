@@ -156,7 +156,11 @@ func buildProxy() *goproxy.ProxyHttpServer {
 func extractHostname(ctx *goproxy.ProxyCtx) string {
 	var hostname string
 	if ctx.Req != nil {
-		hostname, _, _ = net.SplitHostPort(ctx.Req.Host)
+		var err error
+		hostname, _, err = net.SplitHostPort(ctx.Req.Host)
+		if err != nil { // probably "missing port in address"
+			hostname = ctx.Req.Host
+		}
 	}
 	return hostname
 }
