@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,9 +15,14 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/armon/go-proxyproto"
+	"github.com/elazarl/goproxy"
 	"github.com/stripe/go-einhorn/einhorn"
-	"gopkg.in/elazarl/goproxy.v1"
 )
+
+type LogDetails struct {
+	RemoteAddr *net.TCPAddr
+	StartTime  int64
+}
 
 var privateNetworks []net.IPNet
 
@@ -106,19 +112,25 @@ func buildProxy() *goproxy.ProxyHttpServer {
 	proxy.Verbose = false
 	proxy.Tr.Dial = dial
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		ctx.Logf("Received HTTP proxy request: "+
-			"remote=%#v host=%#v url=%#v",
-			ctx.Req.RemoteAddr,
-			ctx.Req.Host,
-			ctx.Req.RequestURI)
-		ctx.UserData = time.Now().Unix()
+		ctx.Logf("Received HTTP proxy request: remote=%#v host=%#v url=%#v",
+			ctx.Req.RemoteAddr, ctx.Req.Host, ctx.Req.RequestURI)
+
+		ctx.UserData = &LogDetails{
+			RemoteAddr: nil,
+			StartTime:  time.Now().Unix(),
+		}
+		trace := &httptrace.ClientTrace{
+			GotConn: func(connInfo httptrace.GotConnInfo) {
+				ctx.UserData.(*LogDetails).RemoteAddr = connInfo.Conn.RemoteAddr().(*net.TCPAddr)
+			},
+		}
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
 		return req, nil
 	})
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		ctx.Logf("Received CONNECT proxy request: "+
-			"remote=%#v host=%#v",
-			ctx.Req.RemoteAddr,
-			host)
+		ctx.Logf("Received CONNECT proxy request: remote=%#v host=%#v",
+			ctx.Req.RemoteAddr, host)
 
 		resolved, err := safeResolve("tcp", host)
 		if err != nil {
@@ -143,8 +155,12 @@ func buildProxy() *goproxy.ProxyHttpServer {
 
 func extractHostname(ctx *goproxy.ProxyCtx) string {
 	var hostname string
-	if (ctx.Req != nil) {
-		hostname, _, _ = net.SplitHostPort(ctx.Req.Host);
+	if ctx.Req != nil {
+		var err error
+		hostname, _, err = net.SplitHostPort(ctx.Req.Host)
+		if err != nil { // probably "missing port in address"
+			hostname = ctx.Req.Host
+		}
 	}
 	return hostname
 }
@@ -172,8 +188,8 @@ func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
 }
 
 func logResponse(ctx *goproxy.ProxyCtx) {
-	var contentLength int64
-	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
+	logDetails, ok := ctx.UserData.(*LogDetails)
+	if ctx.RoundTrip == nil || !ok || logDetails.RemoteAddr == nil {
 		// Reasons this might happen:
 		// 1) private ip destination (eg. 192.168.0.0/16, 10.0.0.0/8, etc)
 		// 2) Destination that doesn't respond (eg. i/o timeout)
@@ -182,6 +198,7 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 		log.Println("Could not log response: missing IP address")
 		return
 	}
+	var contentLength int64
 	if ctx.Resp != nil {
 		contentLength = ctx.Resp.ContentLength
 	}
@@ -192,9 +209,9 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 		from_host,
 		from_port,
 		hostname,
-		ctx.RoundTrip.TCPAddr.IP.String(),
-		ctx.RoundTrip.TCPAddr.Port,
-		ctx.UserData,
+		logDetails.RemoteAddr.IP.String(),
+		logDetails.RemoteAddr.Port,
+		logDetails.StartTime,
 		time.Now().Unix(),
 		// The content length is often -1 because of HTTP chunked encoding. this is normal.
 		contentLength,
