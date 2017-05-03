@@ -26,6 +26,8 @@ var track *statsd.Client
 
 const exitTimeout = 60 * time.Second
 
+const errorHeader = "X-Smokescreen-Error"
+
 func init() {
 	var err error
 	privateNetworkStrings := []string{
@@ -97,7 +99,7 @@ func errorResponse(req *http.Request, err error) *http.Response {
 		err.Error()+"\n")
 	resp.ProtoMajor = req.ProtoMajor
 	resp.ProtoMinor = req.ProtoMinor
-	resp.Header.Add("X-Smokescreen-Error", err.Error())
+	resp.Header.Set(errorHeader, err.Error())
 	return resp
 }
 
@@ -132,6 +134,9 @@ func buildProxy() *goproxy.ProxyHttpServer {
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		logResponse(ctx)
+		if resp != nil {
+			resp.Header.Del(errorHeader)
+		}
 		if resp == nil && ctx.Error != nil {
 			resp = errorResponse(ctx.Req, ctx.Error)
 		}
@@ -143,8 +148,8 @@ func buildProxy() *goproxy.ProxyHttpServer {
 
 func extractHostname(ctx *goproxy.ProxyCtx) string {
 	var hostname string
-	if (ctx.Req != nil) {
-		hostname, _, _ = net.SplitHostPort(ctx.Req.Host);
+	if ctx.Req != nil {
+		hostname, _, _ = net.SplitHostPort(ctx.Req.Host)
 	}
 	return hostname
 }
