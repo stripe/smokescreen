@@ -25,7 +25,9 @@ package statsd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"strconv"
@@ -33,6 +35,25 @@ import (
 	"sync"
 	"time"
 )
+
+/*
+OptimalPayloadSize defines the optimal payload size for a UDP datagram, 1432 bytes
+is optimal for regular networks with an MTU of 1500 so datagrams don't get
+fragmented. It's generally recommended not to fragment UDP datagrams as losing
+a single fragment will cause the entire datagram to be lost.
+
+This can be increased if your network has a greater MTU or you don't mind UDP
+datagrams getting fragmented. The practical limit is MaxUDPPayloadSize
+*/
+const OptimalPayloadSize = 1432
+
+/*
+MaxUDPPayloadSize defines the maximum payload size for a UDP datagram.
+Its value comes from the calculation: 65535 bytes Max UDP datagram size -
+8byte UDP header - 60byte max IP headers
+any number greater than that will see frames being cut out.
+*/
+const MaxUDPPayloadSize = 65467
 
 // A Client is a handle for sending udp messages to dogstatsd.  It is safe to
 // use one Client from multiple goroutines simultaneously.
@@ -46,6 +67,7 @@ type Client struct {
 	bufferLength int
 	flushTime    time.Duration
 	commands     []string
+	buffer       bytes.Buffer
 	stop         bool
 	sync.Mutex
 }
@@ -93,15 +115,8 @@ func (c *Client) format(name, value string, tags []string, rate float64) string 
 		buf.WriteString(strconv.FormatFloat(rate, 'f', -1, 64))
 	}
 
-	tags = append(c.Tags, tags...)
-	if len(tags) > 0 {
-		buf.WriteString("|#")
-		buf.WriteString(tags[0])
-		for _, tag := range tags[1:] {
-			buf.WriteString(",")
-			buf.WriteString(tag)
-		}
-	}
+	writeTagString(&buf, c.Tags, tags)
+
 	return buf.String()
 }
 
@@ -121,35 +136,101 @@ func (c *Client) watch() {
 
 func (c *Client) append(cmd string) error {
 	c.Lock()
+	defer c.Unlock()
 	c.commands = append(c.commands, cmd)
 	// if we should flush, lets do it
 	if len(c.commands) == c.bufferLength {
 		if err := c.flush(); err != nil {
-			c.Unlock()
 			return err
 		}
 	}
-	c.Unlock()
 	return nil
+}
+
+func (c *Client) joinMaxSize(cmds []string, sep string, maxSize int) ([][]byte, []int) {
+	c.buffer.Reset() //clear buffer
+
+	var frames [][]byte
+	var ncmds []int
+	sepBytes := []byte(sep)
+	sepLen := len(sep)
+
+	elem := 0
+	for _, cmd := range cmds {
+		needed := len(cmd)
+
+		if elem != 0 {
+			needed = needed + sepLen
+		}
+
+		if c.buffer.Len()+needed <= maxSize {
+			if elem != 0 {
+				c.buffer.Write(sepBytes)
+			}
+			c.buffer.WriteString(cmd)
+			elem++
+		} else {
+			frames = append(frames, copyAndResetBuffer(&c.buffer))
+			ncmds = append(ncmds, elem)
+			// if cmd is bigger than maxSize it will get flushed on next loop
+			c.buffer.WriteString(cmd)
+			elem = 1
+		}
+	}
+
+	//add whatever is left! if there's actually something
+	if c.buffer.Len() > 0 {
+		frames = append(frames, copyAndResetBuffer(&c.buffer))
+		ncmds = append(ncmds, elem)
+	}
+
+	return frames, ncmds
+}
+
+func copyAndResetBuffer(buf *bytes.Buffer) []byte {
+	tmpBuf := make([]byte, buf.Len())
+	copy(tmpBuf, buf.Bytes())
+	buf.Reset()
+	return tmpBuf
 }
 
 // flush the commands in the buffer.  Lock must be held by caller.
 func (c *Client) flush() error {
-	data := strings.Join(c.commands, "\n")
-	_, err := c.conn.Write([]byte(data))
+	frames, flushable := c.joinMaxSize(c.commands, "\n", OptimalPayloadSize)
+	var err error
+	cmdsFlushed := 0
+	for i, data := range frames {
+		_, e := c.conn.Write(data)
+		if e != nil {
+			err = e
+			break
+		}
+		cmdsFlushed += flushable[i]
+	}
+
 	// clear the slice with a slice op, doesn't realloc
-	c.commands = c.commands[:0]
+	if cmdsFlushed == len(c.commands) {
+		c.commands = c.commands[:0]
+	} else {
+		//this case will cause a future realloc...
+		// drop problematic command though (sorry).
+		c.commands = c.commands[cmdsFlushed+1:]
+	}
 	return err
 }
 
 func (c *Client) sendMsg(msg string) error {
+	// return an error if message is bigger than MaxUDPPayloadSize
+	if len(msg) > MaxUDPPayloadSize {
+		return errors.New("message size exceeds MaxUDPPayloadSize")
+	}
+
 	// if this client is buffered, then we'll just append this
 	if c.bufferLength > 0 {
 		return c.append(msg)
 	}
-	c.Lock()
+
 	_, err := c.conn.Write([]byte(msg))
-	c.Unlock()
 	return err
 }
 
@@ -183,10 +264,25 @@ func (c *Client) Histogram(name string, value float64, tags []string, rate float
 	return c.send(name, stat, tags, rate)
 }
 
+// Decr is just Count of -1
+func (c *Client) Decr(name string, tags []string, rate float64) error {
+	return c.send(name, "-1|c", tags, rate)
+}
+
+// Incr is just Count of 1
+func (c *Client) Incr(name string, tags []string, rate float64) error {
+	return c.send(name, "1|c", tags, rate)
+}
+
 // Set counts the number of unique elements in a group.
 func (c *Client) Set(name string, value string, tags []string, rate float64) error {
 	stat := fmt.Sprintf("%s|s", value)
 	return c.send(name, stat, tags, rate)
+}
+
+// Timing sends timing information, it is an alias for TimeInMilliseconds
+func (c *Client) Timing(name string, value time.Duration, tags []string, rate float64) error {
+	return c.TimeInMilliseconds(name, value.Seconds()*1000, tags, rate)
 }
 
 // TimeInMilliseconds sends timing information in milliseconds.
@@ -198,6 +294,9 @@ func (c *Client) TimeInMilliseconds(name string, value float64, tags []string, r
 
 // Event sends the provided Event.
 func (c *Client) Event(e *Event) error {
+	if c == nil {
+		return nil
+	}
 	stat, err := e.Encode(c.Tags...)
 	if err != nil {
 		return err
@@ -209,6 +308,21 @@ func (c *Client) Event(e *Event) error {
 func (c *Client) SimpleEvent(title, text string) error {
 	e := NewEvent(title, text)
 	return c.Event(e)
+}
+
+// ServiceCheck sends the provided ServiceCheck.
+func (c *Client) ServiceCheck(sc *ServiceCheck) error {
+	stat, err := sc.Encode(c.Tags...)
+	if err != nil {
+		return err
+	}
+	return c.sendMsg(stat)
+}
+
+// SimpleServiceCheck sends an serviceCheck with the provided name and status.
+func (c *Client) SimpleServiceCheck(name string, status ServiceCheckStatus) error {
+	sc := NewServiceCheck(name, status)
+	return c.ServiceCheck(sc)
 }
 
 // Close the client connection.
@@ -339,16 +453,94 @@ func (e Event) Encode(tags ...string) (string, error) {
 		buffer.WriteString(string(e.AlertType))
 	}
 
-	if len(tags)+len(e.Tags) > 0 {
-		all := make([]string, 0, len(tags)+len(e.Tags))
-		all = append(all, tags...)
-		all = append(all, e.Tags...)
-		buffer.WriteString("|#")
-		buffer.WriteString(all[0])
-		for _, tag := range all[1:] {
-			buffer.WriteString(",")
-			buffer.WriteString(tag)
-		}
+	writeTagString(&buffer, tags, e.Tags)
+
+	return buffer.String(), nil
+}
+
+// ServiceCheck support
+
+type ServiceCheckStatus byte
+
+const (
+	// Ok is the "ok" ServiceCheck status
+	Ok ServiceCheckStatus = 0
+	// Warn is the "warning" ServiceCheck status
+	Warn ServiceCheckStatus = 1
+	// Critical is the "critical" ServiceCheck status
+	Critical ServiceCheckStatus = 2
+	// Unknown is the "unknown" ServiceCheck status
+	Unknown ServiceCheckStatus = 3
+)
+
+// An ServiceCheck is an object that contains status of DataDog service check.
+type ServiceCheck struct {
+	// Name of the service check.  Required.
+	Name string
+	// Status of service check.  Required.
+	Status ServiceCheckStatus
+	// Timestamp is a timestamp for the serviceCheck.  If not provided, the dogstatsd
+	// server will set this to the current time.
+	Timestamp time.Time
+	// Hostname for the serviceCheck.
+	Hostname string
+	// A message describing the current state of the serviceCheck.
+	Message string
+	// Tags for the serviceCheck.
+	Tags []string
+}
+
+// NewServiceCheck creates a new serviceCheck with the given name and status.  Error checking
+// against these values is done at send-time, or upon running sc.Check.
+func NewServiceCheck(name string, status ServiceCheckStatus) *ServiceCheck {
+	return &ServiceCheck{
+		Name:   name,
+		Status: status,
+	}
+}
+
+// Check verifies that an event is valid.
+func (sc ServiceCheck) Check() error {
+	if len(sc.Name) == 0 {
+		return fmt.Errorf("statsd.ServiceCheck name is required")
+	}
+	if byte(sc.Status) < 0 || byte(sc.Status) > 3 {
+		return fmt.Errorf("statsd.ServiceCheck status has invalid value")
+	}
+	return nil
+}
+
+// Encode returns the dogstatsd wire protocol representation for an serviceCheck.
+// Tags may be passed which will be added to the encoded output but not to
+// the Event's list of tags, eg. for default tags.
+func (sc ServiceCheck) Encode(tags ...string) (string, error) {
+	err := sc.Check()
+	if err != nil {
+		return "", err
+	}
+	message := sc.escapedMessage()
+
+	var buffer bytes.Buffer
+	buffer.WriteString("_sc|")
+	buffer.WriteString(sc.Name)
+	buffer.WriteRune('|')
+	buffer.WriteString(strconv.FormatInt(int64(sc.Status), 10))
+
+	if !sc.Timestamp.IsZero() {
+		buffer.WriteString("|d:")
+		buffer.WriteString(strconv.FormatInt(int64(sc.Timestamp.Unix()), 10))
+	}
+
+	if len(sc.Hostname) != 0 {
+		buffer.WriteString("|h:")
+		buffer.WriteString(sc.Hostname)
+	}
+
+	writeTagString(&buffer, tags, sc.Tags)
+
+	if len(message) != 0 {
+		buffer.WriteString("|m:")
+		buffer.WriteString(message)
 	}
 
 	return buffer.String(), nil
@@ -356,4 +548,33 @@ func (e Event) Encode(tags ...string) (string, error) {
 
 func (e Event) escapedText() string {
 	return strings.Replace(e.Text, "\n", "\\n", -1)
+}
+
+func (sc ServiceCheck) escapedMessage() string {
+	msg := strings.Replace(sc.Message, "\n", "\\n", -1)
+	return strings.Replace(msg, "m:", `m\:`, -1)
+}
+
+func removeNewlines(str string) string {
+	return strings.Replace(str, "\n", "", -1)
+}
+
+func writeTagString(w io.Writer, tagList1, tagList2 []string) {
+	// the tag lists may be shared with other callers, so we cannot modify
+	// them in any way (which means we cannot append to them either)
+	// therefore we must make an entirely separate copy just for this call
+	totalLen := len(tagList1) + len(tagList2)
+	if totalLen == 0 {
+		return
+	}
+	tags := make([]string, 0, totalLen)
+	tags = append(tags, tagList1...)
+	tags = append(tags, tagList2...)
+
+	io.WriteString(w, "|#")
+	io.WriteString(w, removeNewlines(tags[0]))
+	for _, tag := range tags[1:] {
+		io.WriteString(w, ",")
+		io.WriteString(w, removeNewlines(tag))
+	}
 }
