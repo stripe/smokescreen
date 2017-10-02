@@ -17,15 +17,6 @@ and [in Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
 For example, the URL you should use as proxy when running `./bin/basic` is
 `localhost:8080`, as this is the default binding for the basic proxy.
 
-## Mailing List
-
-New features would be discussed on the [mailing list](https://groups.google.com/forum/#!forum/goproxy-dev)
-before their development.
-
-## Latest Stable Release
-
-Get the latest goproxy from `gopkg.in/elazarl/goproxy.v1`.
-
 # Why not Fiddler2?
 
 Fiddler is an excellent software with similar intent. However, Fiddler is not
@@ -61,7 +52,8 @@ This line will add `X-GoProxy: yxorPoG-X` header to all requests sent through th
         func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
             r.Header.Set("X-GoProxy","yxorPoG-X")
             return r,nil
-        })
+        }
+    )
 
 `DoFunc` will process all incoming requests to the proxy. It will add a header to the request
 and return it. The proxy will send the modified request.
@@ -90,11 +82,6 @@ return a response. If the time is between 8:00am and 17:00pm, we will neglect th
 return a precanned text response saying "do not waste your time".
 
 See additional examples in the examples directory.
-
-# What's New
-
-  1. Ability to `Hijack` CONNECT requests. See
-[the eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/eavesdropper/main.go#L17)
 
 # License
 

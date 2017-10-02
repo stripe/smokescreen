@@ -14,16 +14,15 @@
   revision = "48572f11356f1843b694f21a290d4f1006bc5e47"
 
 [[projects]]
+  name = "github.com/elazarl/goproxy"
+  packages = [".","transport"]
+  revision = "0890fc15d1b6428a674b8252a2d238ca589daf73"
+
+[[projects]]
   branch = "master"
   name = "github.com/stripe/go-einhorn"
   packages = ["einhorn"]
   revision = "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da"
-
-[[projects]]
-  name = "gopkg.in/elazarl/goproxy.v1"
-  packages = ["."]
-  revision = "0a5b8bdb09049ae4ae68e75437ded0b7a2e324e3"
-  version = "v1.0"
 
 [[projects]]
   branch = "v2"
@@ -34,6 +33,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1ec3bbc3d36d05e444a82e5a3a795eec7ae679a172afe99cd7ab10108e4c493e"
+  inputs-digest = "89b7f2a958e9bbffce5537fcaf79e906bd76973e58149e337414998b4cd0375c"
   solver-name = "gps-cdcl"
   solver-version = 1

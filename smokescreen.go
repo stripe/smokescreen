@@ -14,8 +14,8 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/armon/go-proxyproto"
+	"github.com/elazarl/goproxy"
 	"github.com/stripe/go-einhorn/einhorn"
-	"gopkg.in/elazarl/goproxy.v1"
 )
 
 var privateNetworks []net.IPNet

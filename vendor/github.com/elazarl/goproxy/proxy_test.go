@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/image"
 	"image"
 	"io"
 	"io/ioutil"
@@ -13,12 +15,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
-
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -69,7 +67,6 @@ func getOrFail(url string, client *http.Client, t *testing.T) []byte {
 	}
 	return txt
 }
-
 func localFile(url string) string { return fs.URL + "/" + url }
 func localTls(url string) string  { return https.URL + url }
 
@@ -562,8 +559,6 @@ func TestChunkedResponse(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			c, err := l.Accept()
 			panicOnErr(err, "accept")
-			_, err = http.ReadRequest(bufio.NewReader(c))
-			panicOnErr(err, "readrequest")
 			io.WriteString(c, "HTTP/1.1 200 OK\r\n"+
 				"Content-Type: text/plain\r\n"+
 				"Transfer-Encoding: chunked\r\n\r\n"+
@@ -583,7 +578,6 @@ func TestChunkedResponse(t *testing.T) {
 	panicOnErr(err, "dial")
 	defer c.Close()
 	req, _ := http.NewRequest("GET", "/", nil)
-	req.Write(c)
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	panicOnErr(err, "readresp")
 	b, err := ioutil.ReadAll(resp.Body)
@@ -597,7 +591,6 @@ func TestChunkedResponse(t *testing.T) {
 	defer s.Close()
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		panicOnErr(ctx.Error, "error reading output")
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		panicOnErr(err, "readall onresp")
@@ -614,111 +607,5 @@ func TestChunkedResponse(t *testing.T) {
 	panicOnErr(err, "readall proxy")
 	if string(b) != strings.Replace(expected, "e", "E", -1) {
 		t.Error("expected", expected, "w/ e->E. Got", string(b))
-	}
-}
-
-func TestGoproxyThroughProxy(t *testing.T) {
-	_, proxy, l := oneShotProxy(t)
-	defer l.Close()
-	client, proxy2, l2 := oneShotProxy(t)
-	defer l2.Close()
-	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		b, err := ioutil.ReadAll(resp.Body)
-		panicOnErr(err, "readAll resp")
-		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
-		return resp
-	}
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnResponse().DoFunc(doubleString)
-	proxy2.ConnectDial = proxy2.NewConnectDialToProxy(l.URL)
-
-	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
-		t.Error("Expected bobo doubled twice, got", r)
-	}
-
-}
-
-func TestGoproxyHijackConnect(t *testing.T) {
-	client, proxy, l := oneShotProxy(t)
-	defer l.Close()
-	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
-		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
-		t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
-		resp, err := http.Get("http:" + req.URL.String() + "/bobo")
-		panicOnErr(err, "http.Get(CONNECT url)")
-		panicOnErr(resp.Write(client), "resp.Write(client)")
-		resp.Body.Close()
-		client.Close()
-	})
-	proxyAddr := l.Listener.Addr().String()
-	conn, err := net.Dial("tcp", proxyAddr)
-	panicOnErr(err, "conn "+proxyAddr)
-	buf := bufio.NewReader(conn)
-	writeConnect(conn)
-	readConnectResponse(buf)
-	if txt := readResponse(buf); txt != "bobo" {
-		t.Error("Expected bobo for CONNECT /foo, got", txt)
-	}
-
-	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo" {
-		t.Error("Expected bobo would keep working with CONNECT", r)
-	}
-}
-
-func readResponse(buf *bufio.Reader) string {
-	req, err := http.NewRequest("GET", srv.URL, nil)
-	panicOnErr(err, "NewRequest")
-	resp, err := http.ReadResponse(buf, req)
-	panicOnErr(err, "resp.Read")
-	defer resp.Body.Close()
-	txt, err := ioutil.ReadAll(resp.Body)
-	panicOnErr(err, "resp.Read")
-	return string(txt)
-}
-
-func writeConnect(w io.Writer) {
-	req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
-	panicOnErr(err, "NewRequest")
-	req.Write(w)
-	panicOnErr(err, "req(CONNECT).Write")
-}
-
-func readConnectResponse(buf *bufio.Reader) {
-	_, err := buf.ReadString('\n')
-	panicOnErr(err, "resp.Read connect resp")
-	_, err = buf.ReadString('\n')
-	panicOnErr(err, "resp.Read connect resp")
-}
-
-func TestCurlMinusP(t *testing.T) {
-	_, proxy, l := oneShotProxy(t)
-	defer l.Close()
-	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		return goproxy.HTTPMitmConnect, host
-	})
-	called := false
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		called = true
-		return req, nil
-	})
-	cmd := exec.Command("curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(output) != "bobo" {
-		t.Error("Expected bobo, got", string(output))
-	}
-	if !called {
-		t.Error("handler not called")
-	}
-}
-
-func TestSelfRequest(t *testing.T) {
-	_, proxy, l := oneShotProxy(t)
-	proxy.Verbose = true
-	defer l.Close()
-	if !strings.Contains(string(getOrFail(l.URL, http.DefaultClient, t)), "non-proxy") {
-		t.Fatal("non proxy requests should fail")
 	}
 }

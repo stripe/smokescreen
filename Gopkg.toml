@@ -34,5 +34,5 @@
   name = "github.com/stripe/go-einhorn"
 
 [[constraint]]
-  name = "gopkg.in/elazarl/goproxy.v1"
-  version = "1.0.0"
+  name = "github.com/elazarl/goproxy"
+  revision = "0890fc15d1b6428a674b8252a2d238ca589daf73"
