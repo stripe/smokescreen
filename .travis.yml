@@ -2,7 +2,7 @@ language: go
 go:
   - 1.6
 install:
-  - go get -u github.com/kardianos/govendor
+  - go get -u github.com/golang/dep
 before_script:
-  - govendor vet +l
-script: govendor test -v +l
+  - go vet +l
+script: go test -v ./...
