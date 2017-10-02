@@ -35,4 +35,5 @@
 
 [[constraint]]
   name = "github.com/elazarl/goproxy"
+  source = "git@github.com:stripe/goproxy.git"
   revision = "0890fc15d1b6428a674b8252a2d238ca589daf73"
