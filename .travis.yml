@@ -1,8 +1,14 @@
 language: go
 go:
   - 1.6
+  - 1.9
+
+
 install:
-  - go get -u github.com/kardianos/govendor
+  - go get -v .
+
 before_script:
-  - govendor vet +l
-script: govendor test -v +l
+  - go vet
+script:
+  - if [ "$TRAVIS_GO_VERSION" = "1.6" ]; then go list ./... | grep -v vendor | xargs go test -race -v -timeout 60s; fi
+  - if [ "$TRAVIS_GO_VERSION" != "1.6" ]; then echo $TRAVIS_GO_VERSION; go test -race -v -timeout 60s ./...; fi
