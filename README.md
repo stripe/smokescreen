@@ -13,21 +13,19 @@ of which Stripe service is making the request.
 
 ## Dependencies
 
-Smokescreen uses [govendor][govendor] to manage dependencies.  The
+Smokescreen uses [dep][dep] to manage dependencies.  The
 repo contains documentation, but some useful commands are reproduced
 below:
 
-- **Installing or updating govendor**: `go get -u
-    github.com/kardianos/govendor` (ensure `$GOPATH/bin` is in your
+- **Installing or updating dep**: `go get -u
+    github.com/golang/dep/cmd/dep` (ensure `$GOPATH/bin` is in your
     `$PATH`)
-- **Adding or updating a dependency**: `govendor fetch
-    github.com/path/to/dep`
+- **Adding a dependency**: `dep ensure`
+- **Updating a dependency**: `dep ensure -update`
 
-WARNING: smokescreen is currently very sensitive to the specific
-version of goproxy. We've had problems in the past with keepalive
-connections under newer versions.
+Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to avoid problems with keepalive connections present under newer versions of the upstream project.
 
-[govendor]: https://github.com/kardianos/govendor
+[dep]: https://github.com/golang/dep
 
 # Contributors
 
@@ -35,3 +33,4 @@ connections under newer versions.
  - Andrew Dunham
  - Andreas Fuchs
  - Carl Jackson
+ - Aditya Mukerjee
