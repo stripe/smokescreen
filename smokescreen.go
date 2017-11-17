@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"os/signal"
 	"strings"
@@ -155,15 +156,30 @@ func extractHostname(ctx *goproxy.ProxyCtx) string {
 }
 
 func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
+	var bytesUp int
+	reqDump, err := httputil.DumpRequest(ctx.Req, true)
+	if err != nil {
+		log.Println("Error dump request for bytes")
+	} else {
+		bytesUp = len(reqDump)
+	}
+
 	var contentLength int64
+	var bytesDown int
 	if ctx.Resp != nil {
 		contentLength = ctx.Resp.ContentLength
+		respDump, err := httputil.DumpResponse(ctx.Resp, true)
+		if err != nil {
+			log.Println("Error dumping response")
+		} else {
+			bytesDown = len(respDump)
+		}
 	}
 	hostname := extractHostname(ctx)
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	to_host, to_port, _ := net.SplitHostPort(resolved)
 	log.Printf("Received CONNECT request: "+
-		"proxy_type=connect src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%s start_time=%#v end_time=%d content_length=%#v\n",
+		"proxy_type=connect src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%s start_time=%#v end_time=%d content_length=%#v bytes_up=%#v bytes_down=%#v\n",
 		from_host,
 		from_port,
 		hostname,
@@ -173,6 +189,8 @@ func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
 		time.Now().Unix(),
 		// The content length is often -1 because of HTTP chunked encoding. this is normal.
 		contentLength,
+		bytesUp,
+		bytesDown,
 	)
 }
 
