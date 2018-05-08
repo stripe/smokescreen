@@ -40,7 +40,7 @@ func TestIsPrivate(t *testing.T) {
 }
 
 func TestClearsErrorHeader(t *testing.T) {
-	proxy := buildProxy()
+	proxy := buildProxy(false)
 	proxySrv := httptest.NewServer(proxy)
 	defer proxySrv.Close()
 

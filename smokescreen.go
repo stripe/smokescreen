@@ -66,7 +66,7 @@ func isPrivateNetwork(ip net.IP) bool {
 	return false
 }
 
-func safeResolve(network, addr string) (string, error) {
+func safeResolve(network, addr string, allowPrivate bool) (string, error) {
 	track.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
@@ -75,21 +75,34 @@ func safeResolve(network, addr string) (string, error) {
 	}
 
 	if isPrivateNetwork(resolved.IP) {
-		track.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return "", fmt.Errorf("host %s resolves to illegal IP %s",
-			addr, resolved.IP)
+		// even if we're allowing private addresses, we still don't want to proxy
+		// requests to localhost, or to the ec2 metadata service, or whatever
+		if allowPrivate && resolved.IP.IsGlobalUnicast() {
+			tags := []string{
+				fmt.Sprintf("network:%s", network),
+				fmt.Sprintf("addr:%s", addr),
+				fmt.Sprintf("resolved_ip:%s", resolved.IP),
+			}
+			track.Count("resolver.allowed_private_address", 1, tags, 1.0)
+		} else {
+			track.Count("resolver.illegal_total", 1, []string{}, 0.3)
+			return "", fmt.Errorf("host %s resolves to illegal IP %s",
+				addr, resolved.IP)
+		}
 	}
 
 	return resolved.String(), nil
 }
 
-func dial(network, addr string) (net.Conn, error) {
-	resolved, err := safeResolve(network, addr)
-	if err != nil {
-		return nil, err
-	}
+func makeDial(allowPrivate bool) func(string, string) (net.Conn, error) {
+	return func(network, addr string) (net.Conn, error) {
+		resolved, err := safeResolve(network, addr, allowPrivate)
+		if err != nil {
+			return nil, err
+		}
 
-	return net.DialTimeout(network, resolved, connectTimeout)
+		return net.DialTimeout(network, resolved, connectTimeout)
+	}
 }
 
 func errorResponse(req *http.Request, err error) *http.Response {
@@ -103,10 +116,10 @@ func errorResponse(req *http.Request, err error) *http.Response {
 	return resp
 }
 
-func buildProxy() *goproxy.ProxyHttpServer {
+func buildProxy(allowPrivate bool) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
-	proxy.Tr.Dial = dial
+	proxy.Tr.Dial = makeDial(allowPrivate)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.Logf("Received HTTP proxy request: "+
 			"remote=%#v host=%#v url=%#v",
@@ -122,7 +135,7 @@ func buildProxy() *goproxy.ProxyHttpServer {
 			ctx.Req.RemoteAddr,
 			host)
 
-		resolved, err := safeResolve("tcp", host)
+		resolved, err := safeResolve("tcp", host, allowPrivate)
 		if err != nil {
 			ctx.Resp = errorResponse(ctx.Req, err)
 			return goproxy.RejectConnect, ""
@@ -225,6 +238,7 @@ func main() {
 	var port int
 	var maintenanceFile string
 	var proxyProto bool
+	var allowPrivate bool
 
 	flag.IntVar(&port, "port", 4750, "Port to bind on")
 	flag.DurationVar(&connectTimeout, "timeout",
@@ -232,9 +246,10 @@ func main() {
 	flag.StringVar(&maintenanceFile, "maintenance", "",
 		"Flag file for maintenance. chmod to 000 to put into maintenance mode")
 	flag.BoolVar(&proxyProto, "proxy-protocol", false, "Enables PROXY protocol support")
+	flag.BoolVar(&allowPrivate, "allow-private", false, "Allow proxying to private addresses")
 	flag.Parse()
 
-	proxy := buildProxy()
+	proxy := buildProxy(allowPrivate)
 
 	listener, err := findListener(port)
 	if err != nil {
