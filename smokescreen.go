@@ -66,7 +66,7 @@ func isPrivateNetwork(ip net.IP) bool {
 	return false
 }
 
-func safeResolve(network, addr string, allowPrivate bool) (string, error) {
+func safeResolve(network, addr, remoteAddr string, allowPrivate bool) (string, error) {
 	track.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
@@ -77,6 +77,7 @@ func safeResolve(network, addr string, allowPrivate bool) (string, error) {
 	tags := []string{
 		fmt.Sprintf("network:%s", network),
 		fmt.Sprintf("addr:%s", addr),
+		fmt.Sprintf("remote_addr:%s", remoteAddr),
 	}
 	if isPrivateNetwork(resolved.IP) {
 		// even if we're allowing private addresses, we still don't want to proxy
@@ -95,7 +96,7 @@ func safeResolve(network, addr string, allowPrivate bool) (string, error) {
 
 func makeDial(allowPrivate bool) func(string, string) (net.Conn, error) {
 	return func(network, addr string) (net.Conn, error) {
-		resolved, err := safeResolve(network, addr, allowPrivate)
+		resolved, err := safeResolve(network, addr, "unknown", allowPrivate)
 		if err != nil {
 			return nil, err
 		}
@@ -129,12 +130,13 @@ func buildProxy(allowPrivate bool) *goproxy.ProxyHttpServer {
 		return req, nil
 	})
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		remoteAddr := ctx.Req.RemoteAddr
 		ctx.Logf("Received CONNECT proxy request: "+
 			"remote=%#v host=%#v",
-			ctx.Req.RemoteAddr,
+			remoteAddr,
 			host)
 
-		resolved, err := safeResolve("tcp", host, allowPrivate)
+		resolved, err := safeResolve("tcp", host, remoteAddr, allowPrivate)
 		if err != nil {
 			ctx.Resp = errorResponse(ctx.Req, err)
 			return goproxy.RejectConnect, ""
