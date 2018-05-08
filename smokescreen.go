@@ -74,18 +74,17 @@ func safeResolve(network, addr string, allowPrivate bool) (string, error) {
 		return "", err
 	}
 
+	tags := []string{
+		fmt.Sprintf("network:%s", network),
+		fmt.Sprintf("addr:%s", addr),
+	}
 	if isPrivateNetwork(resolved.IP) {
 		// even if we're allowing private addresses, we still don't want to proxy
 		// requests to localhost, or to the ec2 metadata service, or whatever
 		if allowPrivate && resolved.IP.IsGlobalUnicast() {
-			tags := []string{
-				fmt.Sprintf("network:%s", network),
-				fmt.Sprintf("addr:%s", addr),
-				fmt.Sprintf("resolved_ip:%s", resolved.IP),
-			}
 			track.Count("resolver.allowed_private_address", 1, tags, 1.0)
 		} else {
-			track.Count("resolver.illegal_total", 1, []string{}, 0.3)
+			track.Count("resolver.illegal_total", 1, tags, 1.0)
 			return "", fmt.Errorf("host %s resolves to illegal IP %s",
 				addr, resolved.IP)
 		}
