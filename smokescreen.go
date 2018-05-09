@@ -18,7 +18,28 @@ import (
 	"github.com/stripe/go-einhorn/einhorn"
 )
 
+type ipType int
+const (
+	public ipType = iota
+	private
+	whitelisted
+)
+
+func (t ipType) String() string {
+	switch t {
+	case public:
+		return "public"
+	case private:
+		return "private"
+	case whitelisted:
+		return "whitelisted"
+	default:
+		panic(fmt.Sprintf("unknown ip type %d", t))
+	}
+}
+
 var privateNetworks []net.IPNet
+var whitelistNetworks []net.IPNet
 
 var connectTimeout time.Duration
 
@@ -66,6 +87,31 @@ func isPrivateNetwork(ip net.IP) bool {
 	return false
 }
 
+func isWhitelistNetwork(ip net.IP) bool {
+	if !ip.IsGlobalUnicast() {
+		return false
+	}
+
+	for _, net := range whitelistNetworks {
+		if net.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func classifyIP(ip net.IP) ipType {
+	if isPrivateNetwork(ip) {
+		if isWhitelistNetwork(ip) {
+			return whitelisted
+		} else {
+			return private
+		}
+	} else {
+		return public
+	}
+}
+
 func safeResolve(network, addr string) (string, error) {
 	track.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
@@ -74,13 +120,17 @@ func safeResolve(network, addr string) (string, error) {
 		return "", err
 	}
 
-	if isPrivateNetwork(resolved.IP) {
+	switch classifyIP(resolved.IP) {
+	case public:
+		return resolved.String(), nil
+	case whitelisted:
+		track.Count("resolver.private_whitelist_total", 1, []string{}, 0.3)
+		return resolved.String(), nil
+	default:
 		track.Count("resolver.illegal_total", 1, []string{}, 0.3)
 		return "", fmt.Errorf("host %s resolves to illegal IP %s",
 			addr, resolved.IP)
 	}
-
-	return resolved.String(), nil
 }
 
 func dial(network, addr string) (net.Conn, error) {
@@ -221,10 +271,21 @@ func findListener(defaultPort int) (net.Listener, error) {
 	}
 }
 
+func populateWhitelist(ranges []string) {
+	for _, netstring := range ranges {
+		_, net, err := net.ParseCIDR(netstring)
+		if err != nil {
+			log.Fatal(err)
+		}
+		whitelistNetworks = append(whitelistNetworks, *net)
+	}
+}
+
 func main() {
 	var port int
 	var maintenanceFile string
 	var proxyProto bool
+	var cidrWhitelist string
 
 	flag.IntVar(&port, "port", 4750, "Port to bind on")
 	flag.DurationVar(&connectTimeout, "timeout",
@@ -232,7 +293,12 @@ func main() {
 	flag.StringVar(&maintenanceFile, "maintenance", "",
 		"Flag file for maintenance. chmod to 000 to put into maintenance mode")
 	flag.BoolVar(&proxyProto, "proxy-protocol", false, "Enables PROXY protocol support")
+	flag.StringVar(&cidrWhitelist, "cidr-whitelist", "", "Comma-separated list of private address ranges to allow proxying to")
 	flag.Parse()
+
+	if cidrWhitelist != "" {
+		populateWhitelist(strings.Split(cidrWhitelist, ","))
+	}
 
 	proxy := buildProxy()
 

@@ -9,32 +9,60 @@ import (
 	"time"
 )
 
-func TestIsPrivate(t *testing.T) {
-	testIPs := []string{
+type testCase struct {
+	ip string
+	expected ipType
+}
+
+func TestClassifyIP(t *testing.T) {
+	cidrWhitelist := []string{
+		"8.8.9.0/24",
+		"10.0.1.0/24",
+		"172.16.1.0/24",
+		"192.168.1.0/24",
+		"127.0.1.0/24",
+	}
+	populateWhitelist(cidrWhitelist)
+
+	testIPs := []testCase{
+		// public addresses
+		testCase{"8.8.8.8", public},
+		// whitelisting a public address does nothing
+		testCase{"8.8.9.8", public},
+
 		// Specific blocked networks
-		"10.0.0.1",
-		"172.16.0.1",
-		"192.168.0.1",
+		testCase{"10.0.0.1", private},
+		testCase{"10.0.1.1", whitelisted},
+		testCase{"172.16.0.1", private},
+		testCase{"172.16.1.1", whitelisted},
+		testCase{"192.168.0.1", private},
+		testCase{"192.168.1.1", whitelisted},
 
 		// localhost
-		"127.0.0.1",
-		"127.255.255.255",
-		"::1",
+		testCase{"127.0.0.1", private},
+		testCase{"127.255.255.255", private},
+		testCase{"::1", private},
+		// whitelisting a localhost address does nothing
+		testCase{"127.0.1.1", private},
+
+		// ec2 metadata endpoint
+		testCase{"169.254.169.254", private},
 
 		// Broadcast addresses
-		"255.255.255.255",
-		"ff02:0:0:0:0:0:0:2",
+		testCase{"255.255.255.255", private},
+		testCase{"ff02:0:0:0:0:0:0:2", private},
 	}
 
-	for _, ip := range testIPs {
-		localIP := net.ParseIP(ip)
+	for _, test := range testIPs {
+		localIP := net.ParseIP(test.ip)
 		if localIP == nil {
-			t.Errorf("Could not parse IP from string: %s", ip)
+			t.Errorf("Could not parse IP from string: %s", test.ip)
 			continue
 		}
 
-		if !isPrivateNetwork(localIP) {
-			t.Errorf("Local IP (%s) should be private, but isn't", localIP)
+		got := classifyIP(localIP)
+		if got != test.expected {
+			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s", localIP, test.expected, got)
 		}
 	}
 }
