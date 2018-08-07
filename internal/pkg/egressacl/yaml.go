@@ -12,17 +12,17 @@ import (
 	"regexp"
 )
 
-type EgressAclYamlEntry struct {
+type EgressAclRule struct {
 	Project           string
 	Policy            enforcementpolicy.EnforcementPolicy
 	DomainExpressions []*regexp.Regexp
 }
 
-type EgressAclYaml struct {
-	Services map[string]EgressAclYamlEntry
+type EgressAclConfig struct {
+	Services map[string]EgressAclRule
 }
 
-func (ew EgressAclYaml) Decide(fromService string, toHost string) (decision.Decision, error) {
+func (ew EgressAclConfig) Decide(fromService string, toHost string) (decision.Decision, error) {
 	service, found := ew.Services[fromService]
 
 	if !found {
@@ -72,7 +72,7 @@ type EgressAclConfiguration struct {
 	} `yaml:"services"`
 }
 
-func LoadFromYamlFile(configPath string) (*EgressAclYaml, error) {
+func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 
 	yamlConfig := EgressAclConfiguration{}
 
@@ -88,7 +88,7 @@ func LoadFromYamlFile(configPath string) (*EgressAclYaml, error) {
 		return nil, err
 	}
 
-	acl := EgressAclYaml{Services: make(map[string]EgressAclYamlEntry)}
+	acl := EgressAclConfig{Services: make(map[string]EgressAclRule)}
 
 	if yamlConfig.Services == nil {
 		return nil, errors.New("Top level list 'services' is missing")
@@ -122,7 +122,7 @@ func LoadFromYamlFile(configPath string) (*EgressAclYaml, error) {
 			return nil, errors.New(fmt.Sprintf("Unknown action '%s' under '%s'.", v.Action, v.Name))
 		}
 
-		acl.Services[v.Name] = EgressAclYamlEntry{
+		acl.Services[v.Name] = EgressAclRule{
 			Project:           v.Project,
 			Policy:            enforcement_policy,
 			DomainExpressions: domain_expr,
