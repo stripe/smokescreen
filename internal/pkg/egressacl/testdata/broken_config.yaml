@@ -1,9 +1,10 @@
+# This config file is broken because `broken` is not a valid top level element.
 broken:
   - name: enforce-dummy-srv
     project: usersec
     action: enforce
     allowed_domains:
-      - '$example1\.com$' # Matches all Lyft+subdomains
+      - '$example1\.com$'
       - '$([^.]*\.)?example2\.com$'
     
   - name: report-dummy-srv
