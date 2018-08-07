@@ -16,7 +16,7 @@ func main() {
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
-	app.Usage = "A simple HTTP proxy that fogs over naughty URLs"
+	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 
 	app.Flags = []cli.Flag{
 		cli.IntFlag{
