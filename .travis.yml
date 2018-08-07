@@ -5,10 +5,10 @@ go:
 
 
 install:
-  - go get -v .
+  - go get -v ./cmd/smokescreen/
 
 before_script:
-  - go vet
+  - go vet -v ./cmd/smokescreen/
 script:
   - if [ "$TRAVIS_GO_VERSION" = "1.6" ]; then go list ./... | grep -v vendor | xargs go test -race -v -timeout 60s; fi
   - if [ "$TRAVIS_GO_VERSION" != "1.6" ]; then echo $TRAVIS_GO_VERSION; go test -race -v -timeout 60s ./...; fi
