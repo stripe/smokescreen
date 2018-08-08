@@ -34,3 +34,5 @@ Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy t
  - Andreas Fuchs
  - Carl Jackson
  - Aditya Mukerjee
+ - Ryan Koppenhaver
+ - Marc-André Tremblay

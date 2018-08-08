@@ -1,7 +1,6 @@
-package main
+package pkg
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -12,13 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/armon/go-proxyproto"
 	"github.com/elazarl/goproxy"
 	"github.com/stripe/go-einhorn/einhorn"
+	config "github.com/stripe/smokescreen/pkg/config"
 )
 
 type ipType int
+
 const (
 	public ipType = iota
 	private
@@ -38,61 +38,24 @@ func (t ipType) String() string {
 	}
 }
 
-var privateNetworks []net.IPNet
-var whitelistNetworks []net.IPNet
-
-var connectTimeout time.Duration
-
-var track *statsd.Client
-
-const exitTimeout = 60 * time.Second
-
 const errorHeader = "X-Smokescreen-Error"
 
-func init() {
-	var err error
-	privateNetworkStrings := []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-		"fc00::/7",
-	}
-
-	privateNetworks = make([]net.IPNet, len(privateNetworkStrings))
-	for i, netstring := range privateNetworkStrings {
-		_, net, err := net.ParseCIDR(netstring)
-		if err != nil {
-			log.Fatal(err)
-		}
-		privateNetworks[i] = *net
-	}
-
-	track, err = statsd.New("127.0.0.1:8200")
-	if err != nil {
-		log.Fatal(err)
-	}
-	track.Namespace = "smokescreen."
-}
-
-func isPrivateNetwork(ip net.IP) bool {
+func isPrivateNetwork(nets []net.IPNet, ip net.IP) bool {
 	if !ip.IsGlobalUnicast() {
 		return true
 	}
-
-	for _, net := range privateNetworks {
-		if net.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return ipIsInSetOfNetworks(nets, ip)
 }
 
-func isWhitelistNetwork(ip net.IP) bool {
+func isWhitelistNetwork(nets []net.IPNet, ip net.IP) bool {
 	if !ip.IsGlobalUnicast() {
 		return false
 	}
+	return ipIsInSetOfNetworks(nets, ip)
+}
 
-	for _, net := range whitelistNetworks {
+func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
+	for _, net := range nets {
 		if net.Contains(ip) {
 			return true
 		}
@@ -100,9 +63,9 @@ func isWhitelistNetwork(ip net.IP) bool {
 	return false
 }
 
-func classifyIP(ip net.IP) ipType {
-	if isPrivateNetwork(ip) {
-		if isWhitelistNetwork(ip) {
+func classifyIP(config *config.SmokescreenConfig, ip net.IP) ipType {
+	if isPrivateNetwork(config.PrivateNetworks, ip) {
+		if isWhitelistNetwork(config.WhitelistNetworks, ip) {
 			return whitelisted
 		} else {
 			return private
@@ -112,34 +75,34 @@ func classifyIP(ip net.IP) ipType {
 	}
 }
 
-func safeResolve(network, addr string) (string, error) {
-	track.Count("resolver.attempts_total", 1, []string{}, 0.3)
+func safeResolve(config *config.SmokescreenConfig, network, addr string) (string, error) {
+	config.StatsdClient.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
-		track.Count("resolver.errors_total", 1, []string{}, 0.3)
+		config.StatsdClient.Count("resolver.errors_total", 1, []string{}, 0.3)
 		return "", err
 	}
 
-	switch classifyIP(resolved.IP) {
+	switch classifyIP(config, resolved.IP) {
 	case public:
 		return resolved.String(), nil
 	case whitelisted:
-		track.Count("resolver.private_whitelist_total", 1, []string{}, 0.3)
+		config.StatsdClient.Count("resolver.private_whitelist_total", 1, []string{}, 0.3)
 		return resolved.String(), nil
 	default:
-		track.Count("resolver.illegal_total", 1, []string{}, 0.3)
+		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
 		return "", fmt.Errorf("host %s resolves to illegal IP %s",
 			addr, resolved.IP)
 	}
 }
 
-func dial(network, addr string) (net.Conn, error) {
-	resolved, err := safeResolve(network, addr)
+func dial(config *config.SmokescreenConfig, network, addr string) (net.Conn, error) {
+	resolved, err := safeResolve(config, network, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	return net.DialTimeout(network, resolved, connectTimeout)
+	return net.DialTimeout(network, resolved, config.ConnectTimeout)
 }
 
 func errorResponse(req *http.Request, err error) *http.Response {
@@ -153,10 +116,12 @@ func errorResponse(req *http.Request, err error) *http.Response {
 	return resp
 }
 
-func buildProxy() *goproxy.ProxyHttpServer {
+func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
-	proxy.Tr.Dial = dial
+	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
+		return dial(config, network, addr)
+	}
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.Logf("Received HTTP proxy request: "+
 			"remote=%#v host=%#v url=%#v",
@@ -172,7 +137,7 @@ func buildProxy() *goproxy.ProxyHttpServer {
 			ctx.Req.RemoteAddr,
 			host)
 
-		resolved, err := safeResolve("tcp", host)
+		resolved, err := safeResolve(config, "tcp", host)
 		if err != nil {
 			ctx.Resp = errorResponse(ctx.Req, err)
 			return goproxy.RejectConnect, ""
@@ -271,51 +236,23 @@ func findListener(defaultPort int) (net.Listener, error) {
 	}
 }
 
-func populateWhitelist(ranges []string) {
-	for _, netstring := range ranges {
-		_, net, err := net.ParseCIDR(netstring)
-		if err != nil {
-			log.Fatal(err)
-		}
-		whitelistNetworks = append(whitelistNetworks, *net)
-	}
-}
+func StartWithConfig(config *config.SmokescreenConfig) {
+	proxy := buildProxy(config)
 
-func main() {
-	var port int
-	var maintenanceFile string
-	var proxyProto bool
-	var cidrWhitelist string
-
-	flag.IntVar(&port, "port", 4750, "Port to bind on")
-	flag.DurationVar(&connectTimeout, "timeout",
-		time.Duration(10)*time.Second, "Time to wait while connecting")
-	flag.StringVar(&maintenanceFile, "maintenance", "",
-		"Flag file for maintenance. chmod to 000 to put into maintenance mode")
-	flag.BoolVar(&proxyProto, "proxy-protocol", false, "Enables PROXY protocol support")
-	flag.StringVar(&cidrWhitelist, "cidr-whitelist", "", "Comma-separated list of private address ranges to allow proxying to")
-	flag.Parse()
-
-	if cidrWhitelist != "" {
-		populateWhitelist(strings.Split(cidrWhitelist, ","))
-	}
-
-	proxy := buildProxy()
-
-	listener, err := findListener(port)
+	listener, err := findListener(config.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if proxyProto {
+	if config.SupportProxyProtocol {
 		listener = &proxyproto.Listener{Listener: listener}
 	}
 
 	var handler http.Handler = proxy
-	if maintenanceFile != "" {
+	if config.MaintenanceFile != "" {
 		handler = &HealthcheckMiddleware{
 			App:             handler,
-			MaintenanceFile: maintenanceFile,
+			MaintenanceFile: config.MaintenanceFile,
 		}
 	}
 
@@ -323,10 +260,10 @@ func main() {
 		Handler: handler,
 	}
 
-	runServer(&server, listener)
+	runServer(config, &server, listener)
 }
 
-func runServer(server *http.Server, listener net.Listener) {
+func runServer(config *config.SmokescreenConfig, server *http.Server, listener net.Listener) {
 	// Runs the server and shuts it down when it receives a signal.
 	//
 	// Why aren't we using goji's graceful shutdown library? Great question!
@@ -353,7 +290,7 @@ func runServer(server *http.Server, listener net.Listener) {
 	} else {
 		// the program has exited normally, wait 60s in an attempt to shutdown
 		// semi-gracefully
-		log.Printf("Waiting %s before shutting down\n", exitTimeout)
-		time.Sleep(exitTimeout)
+		log.Printf("Waiting %s before shutting down\n", config.ExitTimeout)
+		time.Sleep(config.ExitTimeout)
 	}
 }

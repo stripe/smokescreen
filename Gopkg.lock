@@ -14,10 +14,31 @@
   revision = "48572f11356f1843b694f21a290d4f1006bc5e47"
 
 [[projects]]
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  revision = "346938d642f2ec3594ed81d874461961cd0faa76"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/elazarl/goproxy"
-  packages = [".","transport"]
-  revision = "92f3b809c67db40d0cecefbf83bb76598614c8f3"
+  packages = [
+    ".",
+    "transport"
+  ]
+  revision = "7d72f050809adb6424b4f729619fa290eeb5f253"
   source = "git@github.com:stripe/goproxy.git"
+
+[[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = ["assert"]
+  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
+  version = "v1.2.2"
 
 [[projects]]
   branch = "master"
@@ -26,14 +47,20 @@
   revision = "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da"
 
 [[projects]]
-  branch = "v2"
+  name = "gopkg.in/urfave/cli.v1"
+  packages = ["."]
+  revision = "cfb38830724cc34fedffe9a2a29fb54fa9169cd1"
+  version = "v1.20.0"
+
+[[projects]]
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "eb3733d160e74a9c7e442f435eb3bea458e1d19f"
+  revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
+  version = "v2.2.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4ace25e2096444a7786fe2c85e46018d4802b3ad72b16f2b747ded82a5ee8311"
+  inputs-digest = "d18072917721e401d16a09486ce0ca5a71fd50de5134026d87022ec63045cdcb"
   solver-name = "gps-cdcl"
   solver-version = 1

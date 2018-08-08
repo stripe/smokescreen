@@ -1,16 +1,19 @@
-package main
+package pkg
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
+
+	config "github.com/stripe/smokescreen/pkg/config"
 )
 
 type testCase struct {
-	ip string
+	ip       string
 	expected ipType
 }
 
@@ -22,7 +25,20 @@ func TestClassifyIP(t *testing.T) {
 		"192.168.1.0/24",
 		"127.0.1.0/24",
 	}
-	populateWhitelist(cidrWhitelist)
+
+	conf, err := config.NewConfig(
+		int(0),
+		cidrWhitelist,
+		10*time.Second,
+		10*time.Second,
+		"",
+		"",
+		"",
+		false,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	testIPs := []testCase{
 		// public addresses
@@ -60,15 +76,39 @@ func TestClassifyIP(t *testing.T) {
 			continue
 		}
 
-		got := classifyIP(localIP)
+		got := classifyIP(conf, localIP)
 		if got != test.expected {
-			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s", localIP, test.expected, got)
+			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
 		}
 	}
 }
 
 func TestClearsErrorHeader(t *testing.T) {
-	proxy := buildProxy()
+
+	cidrWhitelist := []string{
+		"8.8.9.0/24",
+		"10.0.1.0/24",
+		"172.16.1.0/24",
+		"192.168.1.0/24",
+		"127.0.1.0/24",
+	}
+
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	conf, err := config.NewConfig(
+		int(39381),
+		cidrWhitelist,
+		10*time.Second,
+		10*time.Second,
+		"",
+		"",
+		"",
+		false,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	proxy := buildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 	defer proxySrv.Close()
 
