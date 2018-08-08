@@ -3,7 +3,6 @@ package egressacl
 import (
 	"errors"
 	"fmt"
-	_ "github.com/stripe/smokescreen/pkg/egressacl"
 	"github.com/stripe/smokescreen/pkg/egressacl/decision"
 	"github.com/stripe/smokescreen/pkg/egressacl/enforcementpolicy"
 	"gopkg.in/yaml.v2"
