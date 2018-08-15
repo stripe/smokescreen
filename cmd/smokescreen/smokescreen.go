@@ -1,10 +1,12 @@
 package main
 
 import (
-	"github.com/stripe/smokescreen/pkg"
+	"fmt"
+	"github.com/stripe/smokescreen/internal/pkg"
 	config "github.com/stripe/smokescreen/pkg/config"
 	"gopkg.in/urfave/cli.v1"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -50,26 +52,43 @@ func main() {
 			Value: "127.0.0.1:8200",
 			Usage: "IP and port of statsd.",
 		},
+		cli.StringFlag{
+			Name:  "tls-server-pem",
+			Value: "/etc/ssl/private/machine.pem",
+			Usage: "Certificate chain and private key used by the server",
+		},
+		cli.StringFlag{
+			Name:  "tls-client-ca",
+			Value: "/etc/ssl/certs/machine-cas.pem",
+			Usage: "Root Certificate Authority used to authenticate clients",
+		},
+		cli.StringFlag{
+			Name:  "crls",
+			Value: "/etc/ssl/crls/machine-cas.crl",
+			Usage: "CRL used by the server (reloaded upon change)",
+		},
+		cli.BoolFlag{
+			Name:  "danger-allow-private-ranges",
+			Usage: "WARNING: this will circumvent the check preventing client to reach hosts in private networks. It will make you vulnerable to SSRF.",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
 
-		var whitelistStrings []string
-		if len(c.String("cidr-whitelist")) > 0 {
-			whitelistStrings = strings.Split(c.String("cidr-whitelist"), ",")
-		} else {
-			whitelistStrings = nil
-		}
-
 		conf, err := config.NewConfig(
+			func() {},
 			c.Int("port"),
-			whitelistStrings,
+			splitIfNotEmpty(c.String("cidr-whitelist"), ","),
 			c.Duration("timeout"),
 			60*time.Second,
 			c.String("maintenance"),
 			c.String("statsd-service"),
 			c.String("egress-acl"),
 			c.Bool("proxy-protocol"),
+			c.String("tls-server-pem"),
+			splitIfNotEmpty(c.String("tls-client-ca"), ","),
+			splitIfNotEmpty(c.String("crls"), ","),
+			c.Bool("danger-allow-private-ranges"),
 		)
 		if err != nil {
 			return err
@@ -77,7 +96,17 @@ func main() {
 
 		conf.StatsdClient.Namespace = "smokescreen."
 
-		pkg.StartServer(conf)
+		conf.RoleFromRequest = func(request *http.Request) (string, error) {
+			fail := func(err error) (string, error) { return "", err }
+
+			subject := request.TLS.PeerCertificates[0].Subject
+			if len(subject.OrganizationalUnit) == 0 {
+				fail(fmt.Errorf("warn: Provided cert has no 'OrganizationalUnit'. Can't extract service role."))
+			}
+			return strings.SplitN(subject.OrganizationalUnit[0], ".", 2)[0], nil
+		}
+
+		pkg.StartWithConfig(conf)
 
 		return nil
 	}
@@ -86,5 +115,13 @@ func main() {
 	if err != nil {
 		log.Print(err)
 		os.Exit(1)
+	}
+}
+
+func splitIfNotEmpty(in, sep string) []string {
+	if in == "" {
+		return []string{}
+	} else {
+		return strings.Split(in, sep)
 	}
 }

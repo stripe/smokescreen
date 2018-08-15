@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/stripe/go-einhorn/einhorn"
 	config "github.com/stripe/smokescreen/pkg/config"
+	"github.com/stripe/smokescreen/pkg/egressacl/decision"
 )
 
 type ipType int
@@ -83,6 +85,10 @@ func safeResolve(config *config.SmokescreenConfig, network, addr string) (string
 		return "", err
 	}
 
+	if config.AllowPrivateRange {
+		return resolved.String(), nil
+	}
+
 	switch classifyIP(config, resolved.IP) {
 	case public:
 		return resolved.String(), nil
@@ -122,6 +128,8 @@ func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
 	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
 		return dial(config, network, addr)
 	}
+
+	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.Logf("Received HTTP proxy request: "+
 			"remote=%#v host=%#v url=%#v",
@@ -129,19 +137,47 @@ func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
 			ctx.Req.Host,
 			ctx.Req.RequestURI)
 		ctx.UserData = time.Now().Unix()
+
 		return req, nil
 	})
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		fail := func(err error) (*goproxy.ConnectAction, string) { return goproxy.RejectConnect, fmt.Sprint(err) }
+
 		ctx.Logf("Received CONNECT proxy request: "+
 			"remote=%#v host=%#v",
 			ctx.Req.RemoteAddr,
 			host)
 
+		fmt.Printf("Host: %#v", host)
+		fmt.Println(len(ctx.Req.TLS.PeerCertificates))
+
 		resolved, err := safeResolve(config, "tcp", host)
 		if err != nil {
 			ctx.Resp = errorResponse(ctx.Req, err)
-			return goproxy.RejectConnect, ""
+			return goproxy.RejectConnect, host
 		}
+
+		// Check if requesting service is allowed to talk to remote
+
+		checkOutcome := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.RemoteAddr)
+
+		// todo: refactor this
+		serviceName, _ := config.RoleFromRequest(ctx.Req)
+		if err != nil {
+			return fail(err)
+		}
+		switch checkOutcome {
+		case decision.DENY:
+			ctx.Logf("critical: Service '%s' tried to access host '%s'. Denied by ACL.", serviceName, host)
+			return goproxy.RejectConnect, host
+
+		case decision.ALLOW_REPORT:
+			ctx.Logf("info: Service '%s' tried to access host '%s'. ACL specifies REPORT mode: traffic allowed.", serviceName, host)
+
+		case decision.ALLOW:
+			// Well, nothing special to be done in this case
+		}
+
 		ctx.UserData = time.Now().Unix()
 		logHttpsRequest(ctx, resolved)
 		return goproxy.OkConnect, resolved
@@ -157,7 +193,6 @@ func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
 		}
 		return resp
 	})
-
 	return proxy
 }
 
@@ -256,6 +291,12 @@ func StartWithConfig(config *config.SmokescreenConfig) {
 		}
 	}
 
+	// TLS support
+
+	if config.TlsConfig != nil {
+		listener = tls.NewListener(listener, config.TlsConfig)
+	}
+
 	server := http.Server{
 		Handler: handler,
 	}
@@ -293,4 +334,24 @@ func runServer(config *config.SmokescreenConfig, server *http.Server, listener n
 		log.Printf("Waiting %s before shutting down\n", config.ExitTimeout)
 		time.Sleep(config.ExitTimeout)
 	}
+}
+
+func checkIfRequestShouldBeProxied(config *config.SmokescreenConfig, req *http.Request, outboundHost string) decision.Decision {
+	fail := func(err error) decision.Decision {
+		log.Printf("warn: %#v", err)
+		return decision.DENY
+	}
+
+	if config.EgressAcl != nil {
+		role, err := config.RoleFromRequest(req)
+		if err != nil {
+			return fail(err)
+		}
+		result, err := config.EgressAcl.Decide(role, outboundHost)
+		if err != nil {
+			return decision.DENY
+		}
+		return result
+	}
+	return decision.ALLOW
 }

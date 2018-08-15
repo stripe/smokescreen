@@ -30,3 +30,6 @@
 [[constraint]]
   version = "v2"
   name = "gopkg.in/yaml.v2"
+[[constraint]]
+  name = "gopkg.in/fsnotify/fsnotify.v1"
+  version = "1.4.7"
