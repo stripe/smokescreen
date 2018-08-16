@@ -1,4 +1,4 @@
-package pkg
+package smokescreen
 
 import (
 	"crypto/tls"
@@ -15,8 +15,6 @@ import (
 	"github.com/armon/go-proxyproto"
 	"github.com/elazarl/goproxy"
 	"github.com/stripe/go-einhorn/einhorn"
-	config "github.com/stripe/smokescreen/pkg/config"
-	"github.com/stripe/smokescreen/pkg/egressacl/decision"
 )
 
 type ipType int
@@ -65,7 +63,7 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 	return false
 }
 
-func classifyIP(config *config.SmokescreenConfig, ip net.IP) ipType {
+func classifyIP(config *Config, ip net.IP) ipType {
 	if isPrivateNetwork(config.PrivateNetworks, ip) {
 		if isWhitelistNetwork(config.WhitelistNetworks, ip) {
 			return whitelisted
@@ -77,7 +75,7 @@ func classifyIP(config *config.SmokescreenConfig, ip net.IP) ipType {
 	}
 }
 
-func safeResolve(config *config.SmokescreenConfig, network, addr string) (string, error) {
+func safeResolve(config *Config, network, addr string) (string, error) {
 	config.StatsdClient.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
@@ -102,7 +100,7 @@ func safeResolve(config *config.SmokescreenConfig, network, addr string) (string
 	}
 }
 
-func dial(config *config.SmokescreenConfig, network, addr string) (net.Conn, error) {
+func dial(config *Config, network, addr string) (net.Conn, error) {
 	resolved, err := safeResolve(config, network, addr)
 	if err != nil {
 		return nil, err
@@ -122,7 +120,7 @@ func errorResponse(req *http.Request, err error) *http.Response {
 	return resp
 }
 
-func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
+func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
 	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
@@ -167,14 +165,14 @@ func buildProxy(config *config.SmokescreenConfig) *goproxy.ProxyHttpServer {
 			return fail(err)
 		}
 		switch checkOutcome {
-		case decision.DENY:
+		case EgressAclDecisionDeny:
 			ctx.Logf("critical: Service '%s' tried to access host '%s'. Denied by ACL.", serviceName, host)
 			return goproxy.RejectConnect, host
 
-		case decision.ALLOW_REPORT:
-			ctx.Logf("info: Service '%s' tried to access host '%s'. ACL specifies REPORT mode: traffic allowed.", serviceName, host)
+		case EgressAclDecisionAllowAndReport:
+			ctx.Logf("info: Service '%s' tried to access host '%s'. ACL specifies ConfigEnforcementPolicyReport mode: traffic allowed.", serviceName, host)
 
-		case decision.ALLOW:
+		case EgressAclDecisionAllow:
 			// Well, nothing special to be done in this case
 		}
 
@@ -271,7 +269,7 @@ func findListener(defaultPort int) (net.Listener, error) {
 	}
 }
 
-func StartWithConfig(config *config.SmokescreenConfig) {
+func StartWithConfig(config *Config) {
 	proxy := buildProxy(config)
 
 	listener, err := findListener(config.Port)
@@ -304,7 +302,7 @@ func StartWithConfig(config *config.SmokescreenConfig) {
 	runServer(config, &server, listener)
 }
 
-func runServer(config *config.SmokescreenConfig, server *http.Server, listener net.Listener) {
+func runServer(config *Config, server *http.Server, listener net.Listener) {
 	// Runs the server and shuts it down when it receives a signal.
 	//
 	// Why aren't we using goji's graceful shutdown library? Great question!
@@ -336,10 +334,10 @@ func runServer(config *config.SmokescreenConfig, server *http.Server, listener n
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *config.SmokescreenConfig, req *http.Request, outboundHost string) decision.Decision {
-	fail := func(err error) decision.Decision {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) EgressAclDecision {
+	fail := func(err error) EgressAclDecision {
 		log.Printf("warn: %#v", err)
-		return decision.DENY
+		return EgressAclDecisionDeny
 	}
 
 	if config.EgressAcl != nil {
@@ -349,9 +347,9 @@ func checkIfRequestShouldBeProxied(config *config.SmokescreenConfig, req *http.R
 		}
 		result, err := config.EgressAcl.Decide(role, outboundHost)
 		if err != nil {
-			return decision.DENY
+			return EgressAclDecisionDeny
 		}
 		return result
 	}
-	return decision.ALLOW
+	return EgressAclDecisionAllow
 }

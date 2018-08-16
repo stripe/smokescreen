@@ -1,80 +1,79 @@
-package egressacl
+package smokescreen
 
 import "github.com/stretchr/testify/assert"
-import "github.com/stripe/smokescreen/pkg/egressacl/decision"
 import "testing"
 
 func TestLoadFromYaml(t *testing.T) {
-	assert := assert.New(t)
+	a := assert.New(t)
 
 	// Load a sane config
 	{
 		acl, err := LoadFromYamlFile("testdata/sample_config.yaml")
-		assert.Nil(err)
-		assert.NotNil(acl)
-		assert.Equal(3, len(acl.Services))
+		a.Nil(err)
+		a.NotNil(acl)
+		a.Equal(3, len(acl.Services))
 	}
 
 	// Load a broken config
 	{
 		acl, err := LoadFromYamlFile("testdata/broken_config.yaml")
-		assert.NotNil(err)
-		assert.Nil(acl)
+		a.NotNil(err)
+		a.Nil(acl)
 	}
 
 	// Load a config that contains an unknown action
 	{
 		acl, err := LoadFromYamlFile("testdata/unknown_action.yaml")
-		assert.NotNil(err)
-		assert.Nil(acl)
+		a.NotNil(err)
+		a.Nil(acl)
 	}
 }
 
 func TestDecide(t *testing.T) {
-	assert := assert.New(t)
+	a := assert.New(t)
 
 	acl, _ := LoadFromYamlFile("testdata/sample_config.yaml")
 
 	// Test allowed domain for enforcing service
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "example1.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
 	}
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "www.example2.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
 	}
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "example2.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
 	}
 
 	// Test disallowed domain for enforcing service
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "www.example1.com")
-		assert.Nil(err)
-		assert.Equal(decision.DENY, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionDeny, res)
 	}
 
 	// Test on reporting service
 	{
 		res, err := acl.Decide("report-dummy-srv", "example3.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
 	}
 	{
 		res, err := acl.Decide("report-dummy-srv", "example1.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW_REPORT, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllowAndReport, res)
 	}
 
 	// Test on open service
 	{
 		res, err := acl.Decide("open-dummy-srv", "anythingisgoodreally.com")
-		assert.Nil(err)
-		assert.Equal(decision.ALLOW, res)
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
 	}
 }

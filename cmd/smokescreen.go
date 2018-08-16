@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/stripe/smokescreen/internal/pkg"
-	config "github.com/stripe/smokescreen/pkg/config"
 	"gopkg.in/urfave/cli.v1"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+	"github.com/stripe/smokescreen"
 )
 
 func main() {
@@ -57,14 +56,12 @@ func main() {
 			Value: "/etc/ssl/private/machine.pem",
 			Usage: "Certificate chain and private key used by the server",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "tls-client-ca",
-			Value: "/etc/ssl/certs/machine-cas.pem",
 			Usage: "Root Certificate Authority used to authenticate clients",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "crls",
-			Value: "/etc/ssl/crls/machine-cas.crl",
 			Usage: "CRL used by the server (reloaded upon change)",
 		},
 		cli.BoolFlag{
@@ -75,8 +72,7 @@ func main() {
 
 	app.Action = func(c *cli.Context) error {
 
-		conf, err := config.NewConfig(
-			func() {},
+		conf, err := smokescreen.NewConfig(
 			c.Int("port"),
 			splitIfNotEmpty(c.String("cidr-whitelist"), ","),
 			c.Duration("timeout"),
@@ -86,8 +82,8 @@ func main() {
 			c.String("egress-acl"),
 			c.Bool("proxy-protocol"),
 			c.String("tls-server-pem"),
-			splitIfNotEmpty(c.String("tls-client-ca"), ","),
-			splitIfNotEmpty(c.String("crls"), ","),
+			c.StringSlice("tls-client-ca"),
+			c.StringSlice("crls"),
 			c.Bool("danger-allow-private-ranges"),
 		)
 		if err != nil {
@@ -106,7 +102,7 @@ func main() {
 			return strings.SplitN(subject.OrganizationalUnit[0], ".", 2)[0], nil
 		}
 
-		pkg.StartWithConfig(conf)
+		smokescreen.StartWithConfig(conf)
 
 		return nil
 	}

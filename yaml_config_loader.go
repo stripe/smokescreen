@@ -1,10 +1,8 @@
-package egressacl
+package smokescreen
 
 import (
 	"errors"
 	"fmt"
-	"github.com/stripe/smokescreen/pkg/egressacl/decision"
-	"github.com/stripe/smokescreen/pkg/egressacl/enforcementpolicy"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -13,7 +11,7 @@ import (
 
 type EgressAclRule struct {
 	Project           string
-	Policy            enforcementpolicy.EnforcementPolicy
+	Policy            ConfigEnforcementPolicy
 	DomainExpressions []*regexp.Regexp
 }
 
@@ -21,15 +19,15 @@ type EgressAclConfig struct {
 	Services map[string]EgressAclRule
 }
 
-func (ew EgressAclConfig) Decide(fromService string, toHost string) (decision.Decision, error) {
+func (ew EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
 	service, found := ew.Services[fromService]
 
 	if !found {
 		return 0, errors.New("Unknown service")
 	}
 
-	if service.Policy == enforcementpolicy.OPEN {
-		return decision.ALLOW, nil
+	if service.Policy == ConfigEnforcementPolicyOpen {
+		return EgressAclDecisionAllow, nil
 	}
 
 	matches := false
@@ -43,17 +41,17 @@ func (ew EgressAclConfig) Decide(fromService string, toHost string) (decision.De
 	}
 
 	switch service.Policy {
-	case enforcementpolicy.REPORT:
+	case ConfigEnforcementPolicyReport:
 		if matches {
-			return decision.ALLOW, nil
+			return EgressAclDecisionAllow, nil
 		} else {
-			return decision.ALLOW_REPORT, nil
+			return EgressAclDecisionAllowAndReport, nil
 		}
-	case enforcementpolicy.ENFORCE:
+	case ConfigEnforcementPolicyEnforce:
 		if matches {
-			return decision.ALLOW, nil
+			return EgressAclDecisionAllow, nil
 		} else {
-			return decision.DENY, nil
+			return EgressAclDecisionDeny, nil
 		}
 	default:
 		return 0, errors.New("unexpected state")
@@ -107,15 +105,15 @@ func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 			domain_expr[i] = expr
 		}
 
-		var enforcement_policy enforcementpolicy.EnforcementPolicy
+		var enforcement_policy ConfigEnforcementPolicy
 
 		switch v.Action {
 		case "open":
-			enforcement_policy = enforcementpolicy.OPEN
+			enforcement_policy = ConfigEnforcementPolicyOpen
 		case "report":
-			enforcement_policy = enforcementpolicy.REPORT
+			enforcement_policy = ConfigEnforcementPolicyReport
 		case "enforce":
-			enforcement_policy = enforcementpolicy.ENFORCE
+			enforcement_policy = ConfigEnforcementPolicyEnforce
 		default:
 			enforcement_policy = 0
 			return nil, errors.New(fmt.Sprintf("Unknown action '%s' under '%s'.", v.Action, v.Name))

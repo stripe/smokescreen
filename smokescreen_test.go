@@ -1,4 +1,4 @@
-package pkg
+package smokescreen
 
 import (
 	"log"
@@ -8,9 +8,7 @@ import (
 	"net/url"
 	"testing"
 	"time"
-
-	config "github.com/stripe/smokescreen/pkg/config"
-)
+	)
 
 type testCase struct {
 	ip       string
@@ -26,7 +24,7 @@ func TestClassifyIP(t *testing.T) {
 		"127.0.1.0/24",
 	}
 
-	conf, err := config.NewConfig(
+	conf, err := NewConfig(
 		int(0),
 		cidrWhitelist,
 		10*time.Second,
@@ -34,6 +32,10 @@ func TestClassifyIP(t *testing.T) {
 		"",
 		"",
 		"",
+		false,
+		"",
+		nil,
+		nil,
 		false,
 	)
 	if err != nil {
@@ -94,7 +96,7 @@ func TestClearsErrorHeader(t *testing.T) {
 	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	conf, err := config.NewConfig(
+	conf, err := NewConfig(
 		int(39381),
 		cidrWhitelist,
 		10*time.Second,
@@ -102,6 +104,10 @@ func TestClearsErrorHeader(t *testing.T) {
 		"",
 		"",
 		"",
+		false,
+		"",
+		nil,
+		nil,
 		false,
 	)
 	if err != nil {

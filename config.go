@@ -1,9 +1,7 @@
-package pkg
+package smokescreen
 
 import "errors"
 import "github.com/DataDog/datadog-go/statsd"
-import internal_acl "github.com/stripe/smokescreen/internal/pkg/egressacl"
-import "github.com/stripe/smokescreen/pkg/egressacl"
 import "encoding/asn1"
 import "crypto/x509/pkix"
 
@@ -22,8 +20,7 @@ import "strings"
 import "net/http"
 import "encoding/hex"
 
-type SmokescreenConfig struct {
-	OnShutdown              func() // Do not forget to wrap the existing function
+type Config struct {
 	Port                    int
 	PrivateNetworks         []net.IPNet
 	WhitelistNetworks       []net.IPNet
@@ -32,7 +29,7 @@ type SmokescreenConfig struct {
 	MaintenanceFile         string
 	StatsdClient            *statsd.Client
 	AllowPrivateRange       bool
-	EgressAcl               egressacl.EgressAcl
+	EgressAcl               EgressAcl
 	SupportProxyProtocol    bool
 	TlsConfig               *tls.Config
 	CrlByAuthorityKeyId     map[string]*pkix.CertificateList
@@ -46,7 +43,6 @@ type authKeyId struct {
 }
 
 func NewConfig(
-	onShutdown func(),
 	port int,
 	whitelistNetworkStrings []string,
 	connectTimeout time.Duration,
@@ -60,10 +56,9 @@ func NewConfig(
 	crlFiles []string,
 	allowPrivateRanges bool,
 
-) (*SmokescreenConfig, error) {
+) (*Config, error) {
 
-	config := SmokescreenConfig{
-		OnShutdown:              onShutdown,
+	config := Config{
 		Port:                    port,
 		ConnectTimeout:          connectTimeout,
 		ExitTimeout:             exitTimeout,
@@ -122,7 +117,7 @@ func NewConfig(
 	return &config, nil
 }
 
-func (config *SmokescreenConfig) setupCrls(crlFiles []string) error {
+func (config *Config) setupCrls(crlFiles []string) error {
 	fail := func(err error) error { fmt.Print(err); return err }
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
@@ -187,7 +182,7 @@ func (config *SmokescreenConfig) setupCrls(crlFiles []string) error {
 	return nil
 }
 
-func (config *SmokescreenConfig) setupNetworkLists(whitelistNetworkStrings []string) error {
+func (config *Config) setupNetworkLists(whitelistNetworkStrings []string) error {
 
 	privateNetworkStrings := []string{
 		"10.0.0.0/8",
@@ -211,7 +206,7 @@ func (config *SmokescreenConfig) setupNetworkLists(whitelistNetworkStrings []str
 	return nil
 }
 
-func (config *SmokescreenConfig) setupStatsd(statsdAddr string) error {
+func (config *Config) setupStatsd(statsdAddr string) error {
 	if statsdAddr != "" {
 		track, err := statsd.New(statsdAddr)
 		if err != nil {
@@ -222,10 +217,10 @@ func (config *SmokescreenConfig) setupStatsd(statsdAddr string) error {
 	return nil
 }
 
-func (config *SmokescreenConfig) setupEgressAcl(aclFile string) error {
+func (config *Config) setupEgressAcl(aclFile string) error {
 	if aclFile != "" {
 		log.Printf("Loading egress ACL from %s", aclFile)
-		egressAcl, err := internal_acl.LoadFromYamlFile(aclFile)
+		egressAcl, err := LoadFromYamlFile(aclFile)
 		if err != nil {
 			log.Print(err)
 			return err
@@ -235,7 +230,7 @@ func (config *SmokescreenConfig) setupEgressAcl(aclFile string) error {
 	return nil
 }
 
-func (config *SmokescreenConfig) setupTls(tlsServerPemFile string, tlsClientCasFiles []string) error {
+func (config *Config) setupTls(tlsServerPemFile string, tlsClientCasFiles []string) error {
 	fail := func(err error) error { return err }
 
 	if tlsServerPemFile != "" {
@@ -389,7 +384,7 @@ func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 	return nil, errors.New("tls: failed to parse private key")
 }
 
-func (config *SmokescreenConfig) populateClientCaMap(pemCerts []byte) (ok bool) {
+func (config *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
 
 	for len(pemCerts) > 0 {
 		var block *pem.Block
