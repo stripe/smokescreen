@@ -4,10 +4,11 @@ package smokescreen
 type EgressAclDecision int
 
 const (
-	EgressAclDecisionAllow          EgressAclDecision = 1 + iota
+	EgressAclDecisionAllow EgressAclDecision = 1 + iota
 	EgressAclDecisionAllowAndReport
 	EgressAclDecisionDeny
 )
+
 func (s EgressAclDecision) String() string {
 	return [...]string{"UNKNOWN", "EgressAclDecisionAllow", "EgressAclDecisionAllowAndReport", "EgressAclDecisionDeny"}[s]
 }
@@ -16,10 +17,11 @@ func (s EgressAclDecision) String() string {
 type ConfigEnforcementPolicy int
 
 const (
-	ConfigEnforcementPolicyOpen        = 1 + iota
+	ConfigEnforcementPolicyOpen = 1 + iota
 	ConfigEnforcementPolicyReport
 	ConfigEnforcementPolicyEnforce
 )
+
 func (s ConfigEnforcementPolicy) String() string {
 	return [...]string{"UNKNOWN", "ConfigEnforcementPolicyOpen", "ConfigEnforcementPolicyReport", "ConfigEnforcementPolicyEnforce"}[s]
 }

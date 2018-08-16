@@ -147,7 +147,7 @@ func (config *Config) setupCrls(crlFiles []string) error {
 			}
 		}
 		if crlIssuerId == "" {
-			log.Print(fmt.Errorf("error: CRL from '%s' has no Authority Key Identifier: ignoring it\n", certList.TBSCertList.Issuer.String()))
+			log.Print(fmt.Errorf("error: CRL from '%s' has no Authority Key Identifier: ignoring it\n", crlFile))
 			continue
 		}
 
@@ -330,8 +330,8 @@ func parsePemChain(pemBytes []byte) (tls.Certificate, error) {
 	if cert.PrivateKey == nil {
 		return fail(fmt.Errorf("Could not find a '*PRIVATE KEY' in the provided file."))
 	}
-	// We don't need to parse the public key for TLS, but we so do anyway
-	// to check that it looks sane and matches the private key.
+	// We don't need to parse the IpTypePublic key for TLS, but we so do anyway
+	// to check that it looks sane and matches the IpTypePrivate key.
 	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		return fail(err)
@@ -341,30 +341,30 @@ func parsePemChain(pemBytes []byte) (tls.Certificate, error) {
 	case *rsa.PublicKey:
 		priv, ok := cert.PrivateKey.(*rsa.PrivateKey)
 		if !ok {
-			return fail(errors.New("tls: private key type does not match public key type"))
+			return fail(errors.New("tls: IpTypePrivate key type does not match IpTypePublic key type"))
 		}
 		if pub.N.Cmp(priv.N) != 0 {
-			return fail(errors.New("tls: private key does not match public key"))
+			return fail(errors.New("tls: IpTypePrivate key does not match IpTypePublic key"))
 		}
 	case *ecdsa.PublicKey:
 		priv, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
 		if !ok {
-			return fail(errors.New("tls: private key type does not match public key type"))
+			return fail(errors.New("tls: IpTypePrivate key type does not match IpTypePublic key type"))
 		}
 		if pub.X.Cmp(priv.X) != 0 || pub.Y.Cmp(priv.Y) != 0 {
-			return fail(errors.New("tls: private key does not match public key"))
+			return fail(errors.New("tls: IpTypePrivate key does not match IpTypePublic key"))
 		}
 	default:
-		return fail(errors.New("tls: unknown public key algorithm"))
+		return fail(errors.New("tls: unknown IpTypePublic key algorithm"))
 	}
 
 	return cert, nil
 }
 
 // Cargoculted from pkg/tls/tls.go
-// Attempt to parse the given private key DER block. OpenSSL 0.9.8 generates
-// PKCS#1 private keys by default, while OpenSSL 1.0.0 generates PKCS#8 keys.
-// OpenSSL ecparam generates SEC1 EC private keys for ECDSA. We try all three.
+// Attempt to parse the given IpTypePrivate key DER block. OpenSSL 0.9.8 generates
+// PKCS#1 IpTypePrivate keys by default, while OpenSSL 1.0.0 generates PKCS#8 keys.
+// OpenSSL ecparam generates SEC1 EC IpTypePrivate keys for ECDSA. We try all three.
 func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
 		return key, nil
@@ -374,14 +374,14 @@ func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 		case *rsa.PrivateKey, *ecdsa.PrivateKey:
 			return key, nil
 		default:
-			return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")
+			return nil, errors.New("tls: found unknown IpTypePrivate key type in PKCS#8 wrapping")
 		}
 	}
 	if key, err := x509.ParseECPrivateKey(der); err == nil {
 		return key, nil
 	}
 
-	return nil, errors.New("tls: failed to parse private key")
+	return nil, errors.New("tls: failed to parse IpTypePrivate key")
 }
 
 func (config *Config) populateClientCaMap(pemCerts []byte) (ok bool) {

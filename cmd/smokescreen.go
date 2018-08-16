@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/stripe/smokescreen"
 	"gopkg.in/urfave/cli.v1"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-	"github.com/stripe/smokescreen"
 )
 
 func main() {

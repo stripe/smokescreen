@@ -1,3 +1,5 @@
+// +build !nounit
+
 package smokescreen
 
 import "github.com/stretchr/testify/assert"

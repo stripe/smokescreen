@@ -1,3 +1,5 @@
+// +build !nounit
+
 package smokescreen
 
 import (
@@ -8,11 +10,11 @@ import (
 	"net/url"
 	"testing"
 	"time"
-	)
+)
 
 type testCase struct {
 	ip       string
-	expected ipType
+	expected IpType
 }
 
 func TestClassifyIP(t *testing.T) {
@@ -43,32 +45,32 @@ func TestClassifyIP(t *testing.T) {
 	}
 
 	testIPs := []testCase{
-		// public addresses
-		testCase{"8.8.8.8", public},
-		// whitelisting a public address does nothing
-		testCase{"8.8.9.8", public},
+		// IpTypePublic addresses
+		testCase{"8.8.8.8", IpTypePublic},
+		// whitelisting a IpTypePublic address does nothing
+		testCase{"8.8.9.8", IpTypePublic},
 
 		// Specific blocked networks
-		testCase{"10.0.0.1", private},
-		testCase{"10.0.1.1", whitelisted},
-		testCase{"172.16.0.1", private},
-		testCase{"172.16.1.1", whitelisted},
-		testCase{"192.168.0.1", private},
-		testCase{"192.168.1.1", whitelisted},
+		testCase{"10.0.0.1", IpTypePrivate},
+		testCase{"10.0.1.1", IpTypeWhitelisted},
+		testCase{"172.16.0.1", IpTypePrivate},
+		testCase{"172.16.1.1", IpTypeWhitelisted},
+		testCase{"192.168.0.1", IpTypePrivate},
+		testCase{"192.168.1.1", IpTypeWhitelisted},
 
 		// localhost
-		testCase{"127.0.0.1", private},
-		testCase{"127.255.255.255", private},
-		testCase{"::1", private},
+		testCase{"127.0.0.1", IpTypePrivate},
+		testCase{"127.255.255.255", IpTypePrivate},
+		testCase{"::1", IpTypePrivate},
 		// whitelisting a localhost address does nothing
-		testCase{"127.0.1.1", private},
+		testCase{"127.0.1.1", IpTypePrivate},
 
 		// ec2 metadata endpoint
-		testCase{"169.254.169.254", private},
+		testCase{"169.254.169.254", IpTypePrivate},
 
 		// Broadcast addresses
-		testCase{"255.255.255.255", private},
-		testCase{"ff02:0:0:0:0:0:0:2", private},
+		testCase{"255.255.255.255", IpTypePrivate},
+		testCase{"ff02:0:0:0:0:0:0:2", IpTypePrivate},
 	}
 
 	for _, test := range testIPs {

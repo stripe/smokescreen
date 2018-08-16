@@ -17,22 +17,22 @@ import (
 	"github.com/stripe/go-einhorn/einhorn"
 )
 
-type ipType int
+type IpType int
 
 const (
-	public ipType = iota
-	private
-	whitelisted
+	IpTypePublic IpType = iota
+	IpTypePrivate
+	IpTypeWhitelisted
 )
 
-func (t ipType) String() string {
+func (t IpType) String() string {
 	switch t {
-	case public:
-		return "public"
-	case private:
-		return "private"
-	case whitelisted:
-		return "whitelisted"
+	case IpTypePublic:
+		return "IpTypePublic"
+	case IpTypePrivate:
+		return "IpTypePrivate"
+	case IpTypeWhitelisted:
+		return "IpTypeWhitelisted"
 	default:
 		panic(fmt.Sprintf("unknown ip type %d", t))
 	}
@@ -63,15 +63,15 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 	return false
 }
 
-func classifyIP(config *Config, ip net.IP) ipType {
+func classifyIP(config *Config, ip net.IP) IpType {
 	if isPrivateNetwork(config.PrivateNetworks, ip) {
 		if isWhitelistNetwork(config.WhitelistNetworks, ip) {
-			return whitelisted
+			return IpTypeWhitelisted
 		} else {
-			return private
+			return IpTypePrivate
 		}
 	} else {
-		return public
+		return IpTypePublic
 	}
 }
 
@@ -88,9 +88,9 @@ func safeResolve(config *Config, network, addr string) (string, error) {
 	}
 
 	switch classifyIP(config, resolved.IP) {
-	case public:
+	case IpTypePublic:
 		return resolved.String(), nil
-	case whitelisted:
+	case IpTypeWhitelisted:
 		config.StatsdClient.Count("resolver.private_whitelist_total", 1, []string{}, 0.3)
 		return resolved.String(), nil
 	default:
@@ -170,10 +170,10 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return goproxy.RejectConnect, host
 
 		case EgressAclDecisionAllowAndReport:
-			ctx.Logf("info: Service '%s' tried to access host '%s'. ACL specifies ConfigEnforcementPolicyReport mode: traffic allowed.", serviceName, host)
+			ctx.Logf("info: Service '%s' is accessing host '%s'. ACL specifies ConfigEnforcementPolicyReport mode: traffic allowed.", serviceName, host)
 
 		case EgressAclDecisionAllow:
-			// Well, nothing special to be done in this case
+			// Well, everything is going as expected.
 		}
 
 		ctx.UserData = time.Now().Unix()
@@ -228,7 +228,7 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 	var contentLength int64
 	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
 		// Reasons this might happen:
-		// 1) private ip destination (eg. 192.168.0.0/16, 10.0.0.0/8, etc)
+		// 1) IpTypePrivate ip destination (eg. 192.168.0.0/16, 10.0.0.0/8, etc)
 		// 2) Destination that doesn't respond (eg. i/o timeout)
 		// 3) destination domain that doesn't resolve
 		// 4) bogus IP address (eg. 1154.218.100.183)
@@ -269,7 +269,8 @@ func findListener(defaultPort int) (net.Listener, error) {
 	}
 }
 
-func StartWithConfig(config *Config) {
+func StartWithConfig(config *Config) chan<- os.Signal {
+	log.Printf("Starting Smokescreen\n")
 	proxy := buildProxy(config)
 
 	listener, err := findListener(config.Port)
@@ -299,10 +300,10 @@ func StartWithConfig(config *Config) {
 		Handler: handler,
 	}
 
-	runServer(config, &server, listener)
+	return runServer(config, &server, listener)
 }
 
-func runServer(config *Config, server *http.Server, listener net.Listener) {
+func runServer(config *Config, server *http.Server, listener net.Listener) chan<- os.Signal {
 	// Runs the server and shuts it down when it receives a signal.
 	//
 	// Why aren't we using goji's graceful shutdown library? Great question!
@@ -332,6 +333,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener) {
 		log.Printf("Waiting %s before shutting down\n", config.ExitTimeout)
 		time.Sleep(config.ExitTimeout)
 	}
+	return kill
 }
 
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) EgressAclDecision {
