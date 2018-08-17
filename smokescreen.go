@@ -22,7 +22,7 @@ type IpType int
 const (
 	IpTypePublic IpType = iota
 	IpTypePrivate
-	IpTypeWhitelisted
+	IpTypeBlacklistExempted
 )
 
 func (t IpType) String() string {
@@ -31,8 +31,8 @@ func (t IpType) String() string {
 		return "IpTypePublic"
 	case IpTypePrivate:
 		return "IpTypePrivate"
-	case IpTypeWhitelisted:
-		return "IpTypeWhitelisted"
+	case IpTypeBlacklistExempted:
+		return "IpTypeBlacklistExempted"
 	default:
 		panic(fmt.Sprintf("unknown ip type %d", t))
 	}
@@ -55,8 +55,8 @@ func isWhitelistNetwork(nets []net.IPNet, ip net.IP) bool {
 }
 
 func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
-	for _, net := range nets {
-		if net.Contains(ip) {
+	for _, network := range nets {
+		if network.Contains(ip) {
 			return true
 		}
 	}
@@ -64,9 +64,9 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 }
 
 func classifyIP(config *Config, ip net.IP) IpType {
-	if isPrivateNetwork(config.PrivateNetworks, ip) {
-		if isWhitelistNetwork(config.WhitelistNetworks, ip) {
-			return IpTypeWhitelisted
+	if isPrivateNetwork(config.CidrBlacklist, ip) {
+		if isWhitelistNetwork(config.CidrBlacklistExemptions, ip) {
+			return IpTypeBlacklistExempted
 		} else {
 			return IpTypePrivate
 		}
@@ -90,8 +90,8 @@ func safeResolve(config *Config, network, addr string) (string, error) {
 	switch classifyIP(config, resolved.IP) {
 	case IpTypePublic:
 		return resolved.String(), nil
-	case IpTypeWhitelisted:
-		config.StatsdClient.Count("resolver.private_whitelist_total", 1, []string{}, 0.3)
+	case IpTypeBlacklistExempted:
+		config.StatsdClient.Count("resolver.private_blacklist_exempted_total", 1, []string{}, 0.3)
 		return resolved.String(), nil
 	default:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
@@ -151,6 +151,7 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		resolved, err := safeResolve(config, "tcp", host)
 		if err != nil {
+			fmt.Printf("Err %#v", err)
 			ctx.Resp = errorResponse(ctx.Req, err)
 			return goproxy.RejectConnect, host
 		}
@@ -270,7 +271,7 @@ func findListener(defaultPort int) (net.Listener, error) {
 }
 
 func StartWithConfig(config *Config) chan<- os.Signal {
-	log.Printf("Starting Smokescreen\n")
+	log.Println("Starting Smokescreen\n")
 	proxy := buildProxy(config)
 
 	listener, err := findListener(config.Port)

@@ -10,7 +10,29 @@ import (
 	"net/url"
 	"testing"
 	"time"
+	"github.com/stretchr/testify/assert"
 )
+
+var cidrBlacklistExemptionsStrings = []string{
+	"8.8.9.0/24",
+	"10.0.1.0/24",
+	"172.16.1.0/24",
+	"192.168.1.0/24",
+	"127.0.1.0/24",
+}
+
+func generateCidrBlacklistExemptions() ([]net.IPNet, error) {
+	var cidrBlacklistExemptions []net.IPNet
+
+	for _, cidrString := range cidrBlacklistExemptionsStrings {
+		_, network, err := net.ParseCIDR(cidrString)
+		if err != nil {
+			return nil, err
+		}
+		cidrBlacklistExemptions = append(cidrBlacklistExemptions, *network)
+	}
+	return cidrBlacklistExemptions, nil
+}
 
 type testCase struct {
 	ip       string
@@ -18,17 +40,15 @@ type testCase struct {
 }
 
 func TestClassifyIP(t *testing.T) {
-	cidrWhitelist := []string{
-		"8.8.9.0/24",
-		"10.0.1.0/24",
-		"172.16.1.0/24",
-		"192.168.1.0/24",
-		"127.0.1.0/24",
-	}
+	a := assert.New(t)
+
+	cidrBlacklistExemptions, err:= generateCidrBlacklistExemptions()
+	a.NoError(err)
 
 	conf, err := NewConfig(
 		int(0),
-		cidrWhitelist,
+		PrivateNetworks(),
+		cidrBlacklistExemptions,
 		10*time.Second,
 		10*time.Second,
 		"",
@@ -40,9 +60,7 @@ func TestClassifyIP(t *testing.T) {
 		nil,
 		false,
 	)
-	if err != nil {
-		log.Fatal(err)
-	}
+	a.NoError(err)
 
 	testIPs := []testCase{
 		// IpTypePublic addresses
@@ -52,11 +70,11 @@ func TestClassifyIP(t *testing.T) {
 
 		// Specific blocked networks
 		testCase{"10.0.0.1", IpTypePrivate},
-		testCase{"10.0.1.1", IpTypeWhitelisted},
+		testCase{"10.0.1.1", IpTypeBlacklistExempted},
 		testCase{"172.16.0.1", IpTypePrivate},
-		testCase{"172.16.1.1", IpTypeWhitelisted},
+		testCase{"172.16.1.1", IpTypeBlacklistExempted},
 		testCase{"192.168.0.1", IpTypePrivate},
-		testCase{"192.168.1.1", IpTypeWhitelisted},
+		testCase{"192.168.1.1", IpTypeBlacklistExempted},
 
 		// localhost
 		testCase{"127.0.0.1", IpTypePrivate},
@@ -88,19 +106,16 @@ func TestClassifyIP(t *testing.T) {
 }
 
 func TestClearsErrorHeader(t *testing.T) {
+	a := assert.New(t)
 
-	cidrWhitelist := []string{
-		"8.8.9.0/24",
-		"10.0.1.0/24",
-		"172.16.1.0/24",
-		"192.168.1.0/24",
-		"127.0.1.0/24",
-	}
+	cidrBlacklistExemptions, err:= generateCidrBlacklistExemptions()
+	a.NoError(err)
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conf, err := NewConfig(
 		int(39381),
-		cidrWhitelist,
+		PrivateNetworks(),
+		cidrBlacklistExemptions,
 		10*time.Second,
 		10*time.Second,
 		"",

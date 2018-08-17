@@ -22,8 +22,8 @@ import "encoding/hex"
 
 type Config struct {
 	Port                    int
-	PrivateNetworks         []net.IPNet
-	WhitelistNetworks       []net.IPNet
+	CidrBlacklist           []net.IPNet
+	CidrBlacklistExemptions []net.IPNet
 	ConnectTimeout          time.Duration
 	ExitTimeout             time.Duration
 	MaintenanceFile         string
@@ -44,7 +44,8 @@ type authKeyId struct {
 
 func NewConfig(
 	port int,
-	whitelistNetworkStrings []string,
+	cidrBlacklist []net.IPNet,
+	cidrBlacklistExemptions []net.IPNet, // Formerly conceptually called networkWhitelist
 	connectTimeout time.Duration,
 	exitTimeout time.Duration,
 	maintenanceFile string,
@@ -58,8 +59,11 @@ func NewConfig(
 
 ) (*Config, error) {
 
+	var err error
 	config := Config{
 		Port:                    port,
+		CidrBlacklist: cidrBlacklist,
+		CidrBlacklistExemptions: cidrBlacklistExemptions,
 		ConnectTimeout:          connectTimeout,
 		ExitTimeout:             exitTimeout,
 		MaintenanceFile:         maintenanceFile,
@@ -87,11 +91,6 @@ func NewConfig(
 			}
 			return idHeader[0], nil
 		}
-	}
-
-	err := config.setupNetworkLists(whitelistNetworkStrings)
-	if err != nil {
-		return nil, err
 	}
 
 	err = config.setupStatsd(statsdAddr)
@@ -179,30 +178,6 @@ func (config *Config) setupCrls(crlFiles []string) error {
 			fmt.Printf("warn: no CRL loaded for Authority ID '%s'\n", hex.EncodeToString([]byte(k)))
 		}
 	}
-	return nil
-}
-
-func (config *Config) setupNetworkLists(whitelistNetworkStrings []string) error {
-
-	privateNetworkStrings := []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-		"fc00::/7",
-	}
-
-	privateNetworks, err := cidrBlocksToIpNets(privateNetworkStrings)
-	if err != nil {
-		return err
-	}
-	config.PrivateNetworks = privateNetworks
-
-	whitelistNetworks, err := cidrBlocksToIpNets(whitelistNetworkStrings)
-	if err != nil {
-		return err
-	}
-	config.WhitelistNetworks = whitelistNetworks
-
 	return nil
 }
 

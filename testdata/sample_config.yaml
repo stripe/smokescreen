@@ -5,7 +5,7 @@ services:
     project: usersec
     action: enforce
     allowed_domains:
-      - '^example1\.com$'
+      - /^example1\.com$/
       - '^([^.]*\.)?example2\.com$'
 
   - name: report-dummy-srv
@@ -17,3 +17,13 @@ services:
   - name: open-dummy-srv
     project: automation
     action: open
+
+  - name: egreesneedingservice
+    project: test
+    action: report
+    allowed_domains:
+      -
+
+default:
+    project: security
+    action: report

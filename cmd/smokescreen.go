@@ -1,17 +1,36 @@
 package main
 
 import (
-	"fmt"
 	"github.com/stripe/smokescreen"
 	"gopkg.in/urfave/cli.v1"
 	"log"
-	"net/http"
 	"os"
-	"strings"
 	"time"
+	"net"
 )
 
 func main() {
+	conf, err := ConfigFromCli()
+	if err != nil {
+		log.Print(err)
+		os.Exit(1)
+	}
+	smokescreen.StartWithConfig(conf)
+}
+
+
+func ConfigFromCli() (*smokescreen.Config, error) {
+	return configFromCli(nil)
+}
+
+func ConfigFromArgs(args []string) (*smokescreen.Config, error) {
+	cwd, _ := os.Getwd()
+	return configFromCli(append([]string{cwd}, args...))
+}
+
+func configFromCli(args []string) (*smokescreen.Config, error) {
+
+	var configToReturn *smokescreen.Config
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -38,9 +57,13 @@ func main() {
 			Name:  "proxy-protocol",
 			Usage: "Enables PROXY protocol support",
 		},
-		cli.StringFlag{
-			Name:  "cidr-whitelist",
-			Usage: "Comma-separated list of private address ranges to allow proxying to",
+		cli.StringSliceFlag{
+			Name: "cidr-blacklist",
+			Usage: "CIDR blocks to consider private",
+		},
+		cli.StringSliceFlag{
+			Name:  "cidr-blacklist-exemption",
+			Usage: "CIDR block to consider public even if englobing block is found in the blacklist or if IP address is Global Unicast",
 		},
 		cli.StringFlag{
 			Name:  "egress-acl",
@@ -53,7 +76,6 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "tls-server-pem",
-			Value: "/etc/ssl/private/machine.pem",
 			Usage: "Certificate chain and private key used by the server",
 		},
 		cli.StringSliceFlag{
@@ -65,16 +87,42 @@ func main() {
 			Usage: "CRL used by the server (reloaded upon change)",
 		},
 		cli.BoolFlag{
-			Name:  "danger-allow-private-ranges",
+			Name:  "danger-allow-access-to-private-ranges",
 			Usage: "WARNING: this will circumvent the check preventing client to reach hosts in private networks. It will make you vulnerable to SSRF.",
 		},
 	}
 
 	app.Action = func(c *cli.Context) error {
 
+		var err error
+		var cidrBlacklist []net.IPNet
+		var cidrBlacklistExemptions []net.IPNet
+
+		for _, cidrBlock := range smokescreen.PrivateNetworkStrings {
+			cidrBlacklist, err = addCidrToSlice(cidrBlacklist, cidrBlock)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, cidrBlock := range c.StringSlice("cidr-blacklist") {
+			cidrBlacklist, err = addCidrToSlice(cidrBlacklist, cidrBlock)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, cidrBlock := range c.StringSlice("cidr-blacklist-exemption") {
+			cidrBlacklistExemptions, err = addCidrToSlice(cidrBlacklistExemptions, cidrBlock)
+			if err != nil {
+				return err
+			}
+		}
+
 		conf, err := smokescreen.NewConfig(
 			c.Int("port"),
-			splitIfNotEmpty(c.String("cidr-whitelist"), ","),
+			cidrBlacklist,
+			cidrBlacklistExemptions,
 			c.Duration("timeout"),
 			60*time.Second,
 			c.String("maintenance"),
@@ -84,7 +132,7 @@ func main() {
 			c.String("tls-server-pem"),
 			c.StringSlice("tls-client-ca"),
 			c.StringSlice("crls"),
-			c.Bool("danger-allow-private-ranges"),
+			c.Bool("danger-allow-access-to-private-ranges"),
 		)
 		if err != nil {
 			return err
@@ -92,32 +140,24 @@ func main() {
 
 		conf.StatsdClient.Namespace = "smokescreen."
 
-		conf.RoleFromRequest = func(request *http.Request) (string, error) {
-			fail := func(err error) (string, error) { return "", err }
-
-			subject := request.TLS.PeerCertificates[0].Subject
-			if len(subject.OrganizationalUnit) == 0 {
-				fail(fmt.Errorf("warn: Provided cert has no 'OrganizationalUnit'. Can't extract service role."))
-			}
-			return strings.SplitN(subject.OrganizationalUnit[0], ".", 2)[0], nil
-		}
-
-		smokescreen.StartWithConfig(conf)
-
+		configToReturn = conf
 		return nil
 	}
 
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Print(err)
-		os.Exit(1)
+	var err error
+	if args == nil {
+		err = app.Run(os.Args)
+	} else {
+		err = app.Run(args)
 	}
+
+	return configToReturn, err
 }
 
-func splitIfNotEmpty(in, sep string) []string {
-	if in == "" {
-		return []string{}
-	} else {
-		return strings.Split(in, sep)
+func addCidrToSlice(blocks []net.IPNet, cidrBlockString string) ([]net.IPNet, error) {
+	_, ipnet, err := net.ParseCIDR(cidrBlockString)
+	if err != nil {
+		return nil, err
 	}
+	return append(blocks, *ipnet), nil
 }
