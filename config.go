@@ -21,6 +21,7 @@ import "net/http"
 import "encoding/hex"
 
 type Config struct {
+	Ip string
 	Port                    int
 	CidrBlacklist           []net.IPNet
 	CidrBlacklistExemptions []net.IPNet
@@ -35,6 +36,7 @@ type Config struct {
 	CrlByAuthorityKeyId     map[string]*pkix.CertificateList
 	RoleFromRequest         func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId map[string]*x509.Certificate
+	ErrorMessageOnDeny string
 }
 
 // RFC 5280,  4.2.1.1
@@ -43,6 +45,7 @@ type authKeyId struct {
 }
 
 func NewConfig(
+	serverIp string,
 	port int,
 	cidrBlacklist []net.IPNet,
 	cidrBlacklistExemptions []net.IPNet, // Formerly conceptually called networkWhitelist
@@ -56,11 +59,13 @@ func NewConfig(
 	tlsClientCasFiles []string,
 	crlFiles []string,
 	allowPrivateRanges bool,
+	errorMessageOnDeny string,
 
 ) (*Config, error) {
 
 	var err error
 	config := Config{
+		Ip: serverIp,
 		Port:                    port,
 		CidrBlacklist: cidrBlacklist,
 		CidrBlacklistExemptions: cidrBlacklistExemptions,
@@ -71,6 +76,7 @@ func NewConfig(
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		AllowPrivateRange:       allowPrivateRanges,
+		ErrorMessageOnDeny: errorMessageOnDeny,
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.

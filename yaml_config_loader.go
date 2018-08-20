@@ -17,13 +17,19 @@ type EgressAclRule struct {
 
 type EgressAclConfig struct {
 	Services map[string]EgressAclRule
+	Default *EgressAclRule
 }
 
-func (ew EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
+func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
 	service, found := ew.Services[fromService]
 
+	if !found && ew.Default != nil {
+		found = true
+		service = *ew.Default
+	}
+
 	if !found {
-		return 0, errors.New("Unknown service")
+		return 0, fmt.Errorf("Unknown role role=%#v", fromService)
 	}
 
 	if service.Policy == ConfigEnforcementPolicyOpen {
@@ -58,18 +64,36 @@ func (ew EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDe
 	}
 }
 
+func (ew *EgressAclConfig) Project(fromService string) (string, error) {
+	service, found := ew.Services[fromService]
+
+	if found {
+		return service.Project, nil
+	}
+
+	if ew.Default != nil {
+		return ew.Default.Project, nil
+	}
+
+	return "", fmt.Errorf("warn: No known project: role=%#v\n", fromService)
+}
+
 // Configuration
 
+type ServiceRule struct {
+	Name           string   `yaml:"name"`
+	Project        string   `yaml:"project"`
+	Action         string   `yaml:"action"`
+	AllowedDomains []string `yaml:"allowed_domains"`
+}
+
 type EgressAclConfiguration struct {
-	Services []struct {
-		Name           string   `yaml:"name"`
-		Project        string   `yaml:"project"`
-		Action         string   `yaml:"action"`
-		AllowedDomains []string `yaml:"allowed_domains"`
-	} `yaml:"services"`
+	Services []ServiceRule `yaml:"services"`
+	Default *ServiceRule `yaml:"default"`
 }
 
 func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
+	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
 	yamlConfig := EgressAclConfiguration{}
 
@@ -92,38 +116,53 @@ func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 	}
 
 	for _, v := range yamlConfig.Services {
-
-		domain_expr := make([]*regexp.Regexp, len(v.AllowedDomains))
-
-		for i, v := range v.AllowedDomains {
-			expr, err := regexp.Compile(v)
-
-			if err != nil {
-				return nil, err
-			}
-
-			domain_expr[i] = expr
+		res, err := aclConfigToRule(&v)
+		if err != nil {
+			return fail(err)
 		}
+		acl.Services[v.Name] = res
+	}
 
-		var enforcement_policy ConfigEnforcementPolicy
-
-		switch v.Action {
-		case "open":
-			enforcement_policy = ConfigEnforcementPolicyOpen
-		case "report":
-			enforcement_policy = ConfigEnforcementPolicyReport
-		case "enforce":
-			enforcement_policy = ConfigEnforcementPolicyEnforce
-		default:
-			enforcement_policy = 0
-			return nil, errors.New(fmt.Sprintf("Unknown action '%s' under '%s'.", v.Action, v.Name))
+	if yamlConfig.Default != nil {
+		res, err := aclConfigToRule(yamlConfig.Default)
+		if err != nil {
+			return fail(err)
 		}
-
-		acl.Services[v.Name] = EgressAclRule{
-			Project:           v.Project,
-			Policy:            enforcement_policy,
-			DomainExpressions: domain_expr,
-		}
+		acl.Default = &res
 	}
 	return &acl, nil
+}
+
+
+func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
+	domainExpr := make([]*regexp.Regexp, len(v.AllowedDomains))
+
+	for i, v := range v.AllowedDomains {
+		expr, err := regexp.Compile(v)
+
+		if err != nil {
+			return EgressAclRule{}, err
+		}
+		domainExpr[i] = expr
+	}
+
+	var enforcement_policy ConfigEnforcementPolicy
+
+	switch v.Action {
+	case "open":
+		enforcement_policy = ConfigEnforcementPolicyOpen
+	case "report":
+		enforcement_policy = ConfigEnforcementPolicyReport
+	case "enforce":
+		enforcement_policy = ConfigEnforcementPolicyEnforce
+	default:
+		enforcement_policy = 0
+		return EgressAclRule{}, errors.New(fmt.Sprintf("Unknown action '%s' under '%s'.", v.Action, v.Name))
+	}
+
+	return EgressAclRule{
+		Project:           v.Project,
+		Policy:            enforcement_policy,
+		DomainExpressions: domainExpr,
+	}, nil
 }

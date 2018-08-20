@@ -15,9 +15,8 @@ func main() {
 		log.Print(err)
 		os.Exit(1)
 	}
-	smokescreen.StartWithConfig(conf)
+	smokescreen.StartWithConfig(conf, nil)
 }
-
 
 func ConfigFromCli() (*smokescreen.Config, error) {
 	return configFromCli(nil)
@@ -39,6 +38,10 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 
 	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name: "server-ip",
+			Usage: "Specify the server's IP",
+		},
 		cli.IntFlag{
 			Name:  "port",
 			Value: 4750,
@@ -90,6 +93,10 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 			Name:  "danger-allow-access-to-private-ranges",
 			Usage: "WARNING: this will circumvent the check preventing client to reach hosts in private networks. It will make you vulnerable to SSRF.",
 		},
+		cli.StringFlag{
+			Name: "error-message-on-deny",
+			Usage: "Message to return in the HTTP response if proxying request is denied",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -120,6 +127,7 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 		}
 
 		conf, err := smokescreen.NewConfig(
+			c.String("server-ip"),
 			c.Int("port"),
 			cidrBlacklist,
 			cidrBlacklistExemptions,
@@ -133,6 +141,7 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 			c.StringSlice("tls-client-ca"),
 			c.StringSlice("crls"),
 			c.Bool("danger-allow-access-to-private-ranges"),
+			c.String("error-message-on-deny"),
 		)
 		if err != nil {
 			return err

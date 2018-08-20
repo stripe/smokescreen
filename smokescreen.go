@@ -136,10 +136,15 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 			ctx.Req.RequestURI)
 		ctx.UserData = time.Now().Unix()
 
-		return req, nil
+		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+
+		if shouldProxy {
+			return req, nil
+		} else {
+			return req, errorResponse(req, fmt.Errorf(config.ErrorMessageOnDeny))
+		}
 	})
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		fail := func(err error) (*goproxy.ConnectAction, string) { return goproxy.RejectConnect, fmt.Sprint(err) }
 
 		ctx.Logf("Received CONNECT proxy request: "+
 			"remote=%#v host=%#v",
@@ -156,34 +161,24 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return goproxy.RejectConnect, host
 		}
 
-		// Check if requesting service is allowed to talk to remote
+		// Check if requesting role is allowed to talk to remote
 
-		checkOutcome := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.RemoteAddr)
+		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 
-		// todo: refactor this
-		serviceName, _ := config.RoleFromRequest(ctx.Req)
-		if err != nil {
-			return fail(err)
-		}
-		switch checkOutcome {
-		case EgressAclDecisionDeny:
-			ctx.Logf("critical: Service '%s' tried to access host '%s'. Denied by ACL.", serviceName, host)
+		if shouldProxy {
+			ctx.UserData = time.Now().Unix()
+			logHttpsRequest(ctx, resolved)
+			return goproxy.OkConnect, resolved
+			return goproxy.OkConnect, host
+		} else {
 			return goproxy.RejectConnect, host
-
-		case EgressAclDecisionAllowAndReport:
-			ctx.Logf("info: Service '%s' is accessing host '%s'. ACL specifies ConfigEnforcementPolicyReport mode: traffic allowed.", serviceName, host)
-
-		case EgressAclDecisionAllow:
-			// Well, everything is going as expected.
 		}
-
-		ctx.UserData = time.Now().Unix()
-		logHttpsRequest(ctx, resolved)
-		return goproxy.OkConnect, resolved
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		logResponse(ctx)
+		if ctx.RoundTrip != nil {
+			logResponse(config, ctx)
+		}
 		if resp != nil {
 			resp.Header.Del(errorHeader)
 		}
@@ -196,11 +191,7 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 }
 
 func extractHostname(ctx *goproxy.ProxyCtx) string {
-	var hostname string
-	if ctx.Req != nil {
-		hostname, _, _ = net.SplitHostPort(ctx.Req.Host)
-	}
-	return hostname
+	return ctx.Req.Host
 }
 
 func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
@@ -225,7 +216,7 @@ func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
 	)
 }
 
-func logResponse(ctx *goproxy.ProxyCtx) {
+func logResponse(conf *Config, ctx *goproxy.ProxyCtx) {
 	var contentLength int64
 	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
 		// Reasons this might happen:
@@ -241,8 +232,16 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 	}
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	hostname := extractHostname(ctx)
-	log.Printf("Completed response: "+
-		"proxy_type=http src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
+
+	serviceName, serviceNameErr := conf.RoleFromRequest(ctx.Req)
+	if serviceNameErr != nil {
+		serviceName = ""
+	}
+
+	log.Printf("info: Completed response: "+
+		"proxy_type=http known_role=%#v role=%#v src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
+		serviceNameErr == nil,
+		serviceName,
 		from_host,
 		from_port,
 		hostname,
@@ -255,7 +254,7 @@ func logResponse(ctx *goproxy.ProxyCtx) {
 	)
 }
 
-func findListener(defaultPort int) (net.Listener, error) {
+func findListener(ip string, defaultPort int) (net.Listener, error) {
 	if einhorn.IsWorker() {
 		listener, err := einhorn.GetListener(0)
 		if err != nil {
@@ -266,15 +265,15 @@ func findListener(defaultPort int) (net.Listener, error) {
 
 		return listener, err
 	} else {
-		return net.Listen("tcp", fmt.Sprintf(":%d", defaultPort))
+		return net.Listen("tcp", fmt.Sprintf("%s:%d", ip, defaultPort))
 	}
 }
 
-func StartWithConfig(config *Config) chan<- os.Signal {
-	log.Println("Starting Smokescreen\n")
+func StartWithConfig(config *Config, quit <-chan interface{}) {
+	log.Println("info: Starting Smokescreen")
 	proxy := buildProxy(config)
 
-	listener, err := findListener(config.Port)
+	listener, err := findListener(config.Ip, config.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -301,10 +300,11 @@ func StartWithConfig(config *Config) chan<- os.Signal {
 		Handler: handler,
 	}
 
-	return runServer(config, &server, listener)
+	runServer(config, &server, listener, quit)
+	return
 }
 
-func runServer(config *Config, server *http.Server, listener net.Listener) chan<- os.Signal {
+func runServer(config *Config, server *http.Server, listener net.Listener, quit <-chan interface{}) {
 	// Runs the server and shuts it down when it receives a signal.
 	//
 	// Why aren't we using goji's graceful shutdown library? Great question!
@@ -317,30 +317,36 @@ func runServer(config *Config, server *http.Server, listener net.Listener) chan<
 	// hijacks the socket and doesn't tell us when they become idle. So all we
 	// can do is close the listening socket when we receive a signal, not accept
 	// new connections, and then exit the program after a timeout.
-	kill := make(chan os.Signal, 1)
 
+	semiGraceful := true
+	kill := make(chan os.Signal, 1)
 	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
-		<-kill
+		select {
+		case <- kill:
+			log.Printf("Closed socket.")
+
+		case <- quit:
+			semiGraceful = false
+		}
 		listener.Close()
-		log.Printf("Closed socket.")
 	}()
 	err := server.Serve(listener)
 	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 		log.Fatal(err)
-	} else {
+	}
+
+	if semiGraceful {
 		// the program has exited normally, wait 60s in an attempt to shutdown
 		// semi-gracefully
 		log.Printf("Waiting %s before shutting down\n", config.ExitTimeout)
 		time.Sleep(config.ExitTimeout)
 	}
-	return kill
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) EgressAclDecision {
-	fail := func(err error) EgressAclDecision {
-		log.Printf("warn: %#v", err)
-		return EgressAclDecisionDeny
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) bool {
+	fail := func(err error) bool {
+		return false
 	}
 
 	if config.EgressAcl != nil {
@@ -348,11 +354,28 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		if err != nil {
 			return fail(err)
 		}
+
+		project := ""
+		project, projectErr := config.EgressAcl.Project(role)
+
 		result, err := config.EgressAcl.Decide(role, outboundHost)
 		if err != nil {
-			return EgressAclDecisionDeny
+			return fail(err)
 		}
-		return result
+		switch result {
+		case EgressAclDecisionDeny:
+			log.Printf("critical: Request denied by ACL: " +
+				"proxied=false known_project=%#v project=%#v role=%#v host%#v",
+				projectErr == nil, project, role, outboundHost)
+		    return false
+
+		case EgressAclDecisionAllowAndReport:
+			log.Printf("warn: Request allowed and reported by ACL: " +
+				"proxied=true known_project=%#v project=%#v role=%#v host%#v\n",
+				projectErr == nil, project, role, outboundHost)
+		case EgressAclDecisionAllow:
+			// Well, everything is going as expected.
+		}
 	}
-	return EgressAclDecisionAllow
+	return true
 }
