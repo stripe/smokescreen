@@ -2,65 +2,128 @@
 
 
 [[projects]]
+  digest = "1:b801fcfde3e5b0b997919941238438a7eb5ca43e431467e19540b59626908e18"
   name = "github.com/DataDog/datadog-go"
   packages = ["statsd"]
+  pruneopts = ""
   revision = "0ddda6bee21174ef6c4873647cb0d6ec9cba996f"
   version = "1.1.0"
 
 [[projects]]
   branch = "master"
+  digest = "1:0c222e59f6fe764e14476c226c183e862457947890a265752388de9e99779ff8"
   name = "github.com/armon/go-proxyproto"
   packages = ["."]
+  pruneopts = ""
   revision = "48572f11356f1843b694f21a290d4f1006bc5e47"
 
 [[projects]]
+  digest = "1:56c130d885a4aacae1dd9c7b71cfe39912c7ebc1ff7d2b46083c8812996dc43b"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
+  pruneopts = ""
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
   version = "v1.1.0"
 
 [[projects]]
+  digest = "1:d0e0f7cbe97a8eace20e2d0459e28c5df82e96f0d0e8e1989770850bc731750d"
   name = "github.com/elazarl/goproxy"
   packages = [
     ".",
-    "transport"
+    "transport",
   ]
+  pruneopts = ""
   revision = "7d72f050809adb6424b4f729619fa290eeb5f253"
   source = "git@github.com:stripe/goproxy.git"
 
 [[projects]]
+  branch = "master"
+  digest = "1:f5d25fd7bdda08e39e01193ef94a1ebf7547b1b931bcdec785d08050598f306c"
+  name = "github.com/hashicorp/go-cleanhttp"
+  packages = ["."]
+  pruneopts = ""
+  revision = "d5fe4b57a186c716b0e00b8c301cbd9b4182694d"
+
+[[projects]]
+  digest = "1:256484dbbcd271f9ecebc6795b2df8cad4c458dd0f5fd82a8c2fa0c29f233411"
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
+  pruneopts = ""
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
 
 [[projects]]
-  name = "github.com/stretchr/testify"
-  packages = ["assert"]
-  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
-  version = "v1.2.2"
+  digest = "1:3fcbf733a8d810a21265a7f2fe08a3353db2407da052b233f8b204b5afc03d9b"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = ""
+  revision = "3e01752db0189b9157070a0e1668a620f9a85da2"
+  version = "v1.0.6"
 
 [[projects]]
   branch = "master"
+  digest = "1:c587772fb8ad29ad4db67575dad25ba17a51f072ff18a22b4f0257a4d9c24f75"
+  name = "github.com/stretchr/testify"
+  packages = ["assert"]
+  pruneopts = ""
+  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
+
+[[projects]]
+  branch = "master"
+  digest = "1:42ea38631a393ea8eb121b3c5a35d76f347e4e8d64cf8895734b95103bc9e065"
   name = "github.com/stripe/go-einhorn"
   packages = ["einhorn"]
+  pruneopts = ""
   revision = "79db5cd84b4be2b4c3b4d9e23f9bb8cfb3e9d6da"
 
 [[projects]]
+  branch = "master"
+  digest = "1:793a79198b755828dec284c6f1325e24e09186f1b7ba818b65c7c35104ed86eb"
+  name = "golang.org/x/crypto"
+  packages = ["ssh/terminal"]
+  pruneopts = ""
+  revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
+
+[[projects]]
+  branch = "master"
+  digest = "1:307dc7ae5d3161196e1400a6600bae3daef4042e80a15db8d79da90f1130cac3"
+  name = "golang.org/x/sys"
+  packages = [
+    "unix",
+    "windows",
+  ]
+  pruneopts = ""
+  revision = "11551d06cbcc94edc80a0facaccbda56473c19c1"
+
+[[projects]]
+  digest = "1:e85837cb04b78f61688c6eba93ea9d14f60d611e2aaf8319999b1a60d2dafbfa"
   name = "gopkg.in/urfave/cli.v1"
   packages = ["."]
+  pruneopts = ""
   revision = "cfb38830724cc34fedffe9a2a29fb54fa9169cd1"
   version = "v1.20.0"
 
 [[projects]]
+  digest = "1:f0620375dd1f6251d9973b5f2596228cc8042e887cd7f827e4220bc1ce8c30e2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
+  pruneopts = ""
   revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
   version = "v2.2.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d18072917721e401d16a09486ce0ca5a71fd50de5134026d87022ec63045cdcb"
+  input-imports = [
+    "github.com/DataDog/datadog-go/statsd",
+    "github.com/armon/go-proxyproto",
+    "github.com/elazarl/goproxy",
+    "github.com/hashicorp/go-cleanhttp",
+    "github.com/sirupsen/logrus",
+    "github.com/stretchr/testify/assert",
+    "github.com/stripe/go-einhorn/einhorn",
+    "gopkg.in/urfave/cli.v1",
+    "gopkg.in/yaml.v2",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1

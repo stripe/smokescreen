@@ -1,41 +1,24 @@
 ---
-
+version: v1
 services:
-  - name: enforce-dummy-srv
-    project: usersec
-    action: enforce
-    allowed_domains:
-      - /^example1\.com$/
-      - '^([^.]*\.)?example2\.com$'
 
-  - name: report-dummy-srv
-    project: security
-    action: report
-    allowed_domains:
-      - '^example3\.com$'
-      
-  - name: open-dummy-srv
-    project: automation
-    action: open
-
-  - name: egressneedingservice
+  - name: egressneedingservice-enforce
     project: test
     action: enforce
     allowed_domains:
-      - '127\.0\.0\.1(:\d+)?'
+      - example.com
+      - /127\.0\.0\.1(:\d+)?/
+      - 2example.com
 
   - name: egressneedingservice-report
     project: test
     action: report
     allowed_domains:
-    - '127\.0\.0\.1(:\d+)?'
+      - /127\.0\.0\.1(:\d+)?/
 
   - name: egressneedingservice-open
     project: test
     action: open
-    allowed_domains:
-    - '127\.0\.0\.1(:\d+)?'
-
 
 default:
   name: unknown-role

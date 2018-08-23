@@ -1,22 +1,13 @@
-package main
+package cmd
 
 import (
-	"github.com/stripe/smokescreen"
+	smokescreen "github.com/stripe/smokescreen/smoker"
 	"gopkg.in/urfave/cli.v1"
 	"log"
 	"os"
 	"time"
 	"net"
 )
-
-func main() {
-	conf, err := ConfigFromCli()
-	if err != nil {
-		log.Print(err)
-		os.Exit(1)
-	}
-	smokescreen.StartWithConfig(conf, nil)
-}
 
 func ConfigFromCli() (*smokescreen.Config, error) {
 	return configFromCli(nil)

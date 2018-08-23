@@ -1,22 +1,35 @@
 // +build integration
 
-package main
+package cmd
 
 import "github.com/stretchr/testify/assert"
 import (
+	"crypto/x509"
 	"testing"
-	"github.com/stripe/smokescreen"
+	smokescreen "github.com/stripe/smokescreen/smoker"
 	"net/http"
 	"io"
 	"net"
-	"io/ioutil"
 	"fmt"
 	"syscall"
+	"net/url"
+	"context"
+	"crypto/tls"
+	"github.com/hashicorp/go-cleanhttp"
+	"strconv"
+	"math/rand"
+	"bytes"
+	"io/ioutil"
 )
 
-type DummyHandler struct {}
+var plainSmokescreenPort = 4520
+var tlsSmokescreenPort = 4521
+
+type DummyHandler struct{}
+
+
 func (s *DummyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-		io.WriteString(rw, "ok")
+	io.WriteString(rw, "ok")
 }
 
 func NewDummyServer() *http.Server {
@@ -25,93 +38,262 @@ func NewDummyServer() *http.Server {
 	}
 }
 
+type TestCase struct {
+	AuthorizedHost bool
+	OverTls        bool
+	OverConnect    bool
+	Action         smokescreen.ConfigEnforcementPolicy
+	ProxyPort      int
+	TargetPort     int
+	RandomTrace int
+}
 
-func TestSmokescreenNoTls(t *testing.T) {
+func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error) {
+	a := assert.New(t)
+	if test.Action == smokescreen.ConfigEnforcementPolicyEnforce {
+		if test.AuthorizedHost || test.Action != smokescreen.ConfigEnforcementPolicyEnforce {
+			if !a.NoError(err) {return}
+			a.Equal(200, resp.StatusCode)
+		} else {
+			if test.OverConnect {
+				a.Error(err)
+			} else {
+				if !a.NoError(err) {
+					return
+				}
+				a.Equal(503, resp.StatusCode)
+			}
+		}
+	} else {
+		if !a.NoError(err) {
+			return
+		}
+		a.Equal(200, resp.StatusCode)
+	}
+}
+
+func generateRoleForTest(test *TestCase) string {
+	switch test.Action {
+	case smokescreen.ConfigEnforcementPolicyOpen:
+		return "egressneedingservice-open"
+	case smokescreen.ConfigEnforcementPolicyReport:
+		return "egressneedingservice-report"
+	case smokescreen.ConfigEnforcementPolicyEnforce:
+		return "egressneedingservice-enforce"
+	}
+	return "unknown-mode"
+}
+
+func actionStringForTest(test *TestCase) string {
+	switch test.Action {
+	case smokescreen.ConfigEnforcementPolicyOpen:
+		return "open"
+	case smokescreen.ConfigEnforcementPolicyReport:
+		return "report"
+	case smokescreen.ConfigEnforcementPolicyEnforce:
+		return "enforce"
+	}
+	return ""
+}
+
+func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
+	a := assert.New(t)
+
+	client := cleanhttp.DefaultClient()
+
+	if test.OverConnect {
+		client.Transport.(*http.Transport).DialContext =
+			func(ctx context.Context, network, addr string) (net.Conn, error) {
+				fmt.Println(addr)
+
+				var conn net.Conn
+
+				proxyUrl := fmt.Sprintf("localhost:%d", test.ProxyPort)
+				if test.OverTls {
+
+					// Client certs
+					actionString := actionStringForTest(test)
+					certPath := fmt.Sprintf("testdata/pki/%s-client.pem", actionString)
+					keyPath := fmt.Sprintf("testdata/pki/%s-client-key.pem", actionString)
+					cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+					a.NoError(err)
+
+					caBytes, err := ioutil.ReadFile("testdata/pki/ca.pem")
+					a.NoError(err)
+					caPool := x509.NewCertPool()
+					a.True(caPool.AppendCertsFromPEM(caBytes))
+
+					proxyTlsClientConfig := tls.Config{
+						Certificates: []tls.Certificate{cert},
+						RootCAs: caPool,
+
+					}
+					connRaw, err := tls.Dial("tcp", proxyUrl, &proxyTlsClientConfig)
+					a.NoError(err)
+					conn = connRaw
+
+				} else {
+					connRaw, err := net.Dial(network, proxyUrl)
+					a.NoError(err)
+					conn = connRaw
+				}
+
+				connectProxyReq, err := http.NewRequest(
+					"CONNECT",
+					 fmt.Sprintf("http://%s", addr),
+					nil)
+
+				if !test.OverTls { // If we're not talking to the proxy over TLS, let's use headers as identifiers
+					connectProxyReq.Header.Add("X-Smokescreen-Role", generateRoleForTest(test))
+					connectProxyReq.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
+				}
+
+				a.NoError(err)
+				buf := bytes.NewBuffer([]byte{})
+				connectProxyReq.Write(buf)
+				buf.Write([]byte{'\n'})
+				buf.WriteTo(conn)
+
+				// Todo: Catch the proxy response here and act on it.
+				return conn, nil
+			}
+	}
+	return client
+}
+
+func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
+	a := assert.New(t)
+
+	var host string
+	if test.AuthorizedHost {
+		host = "127.0.0.1"
+	} else { // localhost is not in the list of authorised targets
+		host = "localhost"
+	}
+
+	var req *http.Request
+	var err error
+	if test.OverConnect {
+		// Target the external destination
+		target := fmt.Sprintf("http://%s:%d", host, test.TargetPort)
+		req, err = http.NewRequest("GET", target, nil)
+	} else {
+		// Target the proxy
+		target := fmt.Sprintf("http://%s:%d", "127.0.0.1", test.ProxyPort)
+		req, err = http.NewRequest("GET", target, nil)
+		req.Host = fmt.Sprintf("%s:%d", host, test.TargetPort)
+	}
+	a.NoError(err)
+
+	if !test.OverTls && !test.OverConnect { // If we're not talking to the proxy over TLS, let's use headers as identifiers
+		req.Header.Add("X-Smokescreen-Role", generateRoleForTest(test))
+		req.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
+	}
+	return req
+}
+
+func executeRequestForTest(t *testing.T, test *TestCase) {
+	client := generateClientForTest(t, test)
+	req := generateRequestForTest(t, test)
+
+	resp, err := client.Do(req)
+	conformResult(t, test, resp, err)
+
+}
+
+func TestSmokescreenIntegration(t *testing.T) {
 	a := assert.New(t)
 
 	dummyServer := NewDummyServer()
 	outsideListener, err := net.Listen("tcp4", "127.0.0.1:")
+	outsideListenerUrl, err := url.Parse(fmt.Sprintf("//%s", outsideListener.Addr().String()))
+	a.NoError(err)
+	outsideListenerPort, err := strconv.Atoi(outsideListenerUrl.Port())
+	a.NoError(err)
+
 	go dummyServer.Serve(outsideListener)
 
-	conf, err := ConfigFromArgs([]string{
-		"--server-ip=127.0.0.1",
-		"--port=4520",
-		"--egress-acl=testdata/sample_config.yaml",
-		"--danger-allow-access-to-private-ranges",
-		"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
-	})
+	killNonTls := startSmokescreen(t, false)
+	defer killNonTls()
+	killTls := startSmokescreen(t, true)
+	defer killTls()
+
+
+	// Generate all non-tls tests
+	overTlsDomain := []bool{true, false}
+	overConnectDomain := []bool{true, false}
+	authorizedHostsDomain := []bool{true, false}
+	actionsDomain := []smokescreen.ConfigEnforcementPolicy{
+		smokescreen.ConfigEnforcementPolicyEnforce,
+		smokescreen.ConfigEnforcementPolicyReport,
+		smokescreen.ConfigEnforcementPolicyOpen,
+	}
+
+	for _, overTls := range overTlsDomain {
+		for _, overConnect := range overConnectDomain {
+			for _, authorizedHost := range authorizedHostsDomain {
+				for _, action := range actionsDomain {
+					if overTls && !overConnect {
+						// Is a super sketchy use case, let's not do that.
+						continue
+					}
+
+					var proxyPort int
+					if overTls {
+						proxyPort = tlsSmokescreenPort
+					} else {
+						proxyPort = plainSmokescreenPort
+					}
+
+					testCase := &TestCase{
+						OverTls:        overTls,
+						OverConnect:    overConnect,
+						AuthorizedHost: authorizedHost,
+						Action:         action,
+						ProxyPort:      proxyPort,
+						TargetPort: outsideListenerPort,
+						RandomTrace: rand.Int(),
+
+					}
+					executeRequestForTest(t, testCase)
+					if t.Failed() {
+						fmt.Printf("%+v\n", testCase)
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+func startSmokescreen(t *testing.T, useTls bool) func() {
+	a := assert.New(t)
+
+	var conf *smokescreen.Config
+	var err error
+	if useTls {
+		conf, err = ConfigFromArgs([]string{
+			"--server-ip=127.0.0.1",
+			fmt.Sprintf("--port=%d", plainSmokescreenPort),
+			"--egress-acl=testdata/sample_config.yaml",
+			"--danger-allow-access-to-private-ranges",
+			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
+		})
+	} else {
+		conf, err = ConfigFromArgs([]string{
+			"--server-ip=127.0.0.1",
+			fmt.Sprintf("--port=%d", tlsSmokescreenPort),
+			"--egress-acl=testdata/sample_config.yaml",
+			"--danger-allow-access-to-private-ranges",
+			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
+			"--tls-server-pem=testdata/pki/server-bundle.pem",
+			"--tls-client-ca=testdata/pki/ca.pem",
+			"--crls=testdata/pki/crl.pem",
+		})
+	}
+
 	a.NoError(err)
 	kill := make(chan interface{})
 	go smokescreen.StartWithConfig(conf, kill)
-	defer func() {kill <- syscall.SIGHUP}()
-
-	client := http.Client{}
-
-	resp, err := client.Get("http://" + outsideListener.Addr().String())
-	a.NoError(err)
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	// Can we reach the target server?
-	a.Equal("ok", string(bodyBytes))
-	// At this point, we know that the dummy server is up
-
-	/*
-	proxyUrl, err := url.Parse("http://127.0.0.1:4520")
-	a.NoError(err)
-
-
-	client = http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyUrl),
-		},
-	}
-	*/
-
-	// Let's make a request with an unknown role
-	req, err := http.NewRequest("GET", "http://127.0.0.1:4520", nil)
-	a.NoError(err)
-	req.Host = outsideListener.Addr().String()
-	req.Header.Add("X-Smokescreen-Role", "unknown-service-111222333")
-	resp, err = client.Do(req)
-	fmt.Println(err)
-	a.NoError(err)
-	a.Equal(503, resp.StatusCode)
-
-	// Let's talk to a host we're allowed to talk with
-	req, err = http.NewRequest("GET", "http://127.0.0.1:4520", nil)
-	a.NoError(err)
-	req.Host = outsideListener.Addr().String()
-	req.Header.Add("X-Smokescreen-Role", "egressneedingservice")
-	resp, err = client.Do(req)
-	a.NoError(err)
-	a.Equal(200, resp.StatusCode)
-	bodyBytes, err = ioutil.ReadAll(resp.Body)
-	a.Equal("ok", string(bodyBytes))
-
-	// Let's talk to a host we're not allowed to talk with
-	req, err = http.NewRequest("GET", "http://127.0.0.1:4520", nil)
-	a.NoError(err)
-	req.Host = "stripe.com"
-	req.Header.Add("X-Smokescreen-Role", "egressneedingservice")
-	resp, err = client.Do(req)
-	a.NoError(err)
-	a.Equal(503, resp.StatusCode)
-
-	// Let's talk to a host we're not allowed to talk with - in reporting mode
-	req, err = http.NewRequest("GET", "http://127.0.0.1:4520", nil)
-	a.NoError(err)
-	req.Host = "stripe.com"
-	req.Header.Add("X-Smokescreen-Role", "egressneedingservice-report")
-	resp, err = client.Do(req)
-	a.NoError(err)
-	a.Equal(200, resp.StatusCode)
-
-	// Let's talk to a host we're not allowed to talk with - in open mode
-	req, err = http.NewRequest("GET", "http://127.0.0.1:4520", nil)
-	a.NoError(err)
-	req.Host = "stripe.com"
-	req.Header.Add("X-Smokescreen-Role", "egressneedingservice-open")
-	resp, err = client.Do(req)
-	a.NoError(err)
-	a.Equal(200, resp.StatusCode)
-
+	return func() { kill <- syscall.SIGHUP }
 }
