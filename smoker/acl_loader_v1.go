@@ -21,7 +21,16 @@ type EgressAclConfig struct {
 }
 
 func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
-	service, found := ew.Services[fromService]
+
+	var (
+		found bool
+		service EgressAclRule
+	)
+	if fromService == "" {
+		found = false
+	} else {
+		service, found = ew.Services[fromService]
+	}
 
 	if !found && ew.Default != nil {
 		found = true

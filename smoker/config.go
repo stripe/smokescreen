@@ -8,7 +8,6 @@ import "crypto/x509/pkix"
 import "io/ioutil"
 import "net"
 import "time"
-import "log"
 import "crypto/tls"
 import "crypto/x509"
 import "encoding/pem"
@@ -19,6 +18,10 @@ import "fmt"
 import "strings"
 import "net/http"
 import "encoding/hex"
+
+import (
+	log "github.com/sirupsen/logrus"
+)
 
 type Config struct {
 	Ip string
@@ -37,6 +40,7 @@ type Config struct {
 	RoleFromRequest         func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId map[string]*x509.Certificate
 	ErrorMessageOnDeny string
+	Log *log.Logger
 }
 
 // RFC 5280,  4.2.1.1
@@ -63,6 +67,7 @@ func NewConfig(
 
 ) (*Config, error) {
 
+
 	var err error
 	config := Config{
 		Ip: serverIp,
@@ -77,7 +82,9 @@ func NewConfig(
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		AllowPrivateRange:       allowPrivateRanges,
 		ErrorMessageOnDeny: errorMessageOnDeny,
+		Log: log.New(),
 	}
+
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
 	if len(tlsClientCasFiles) > 0 { // If client certs are set, pick the CN.

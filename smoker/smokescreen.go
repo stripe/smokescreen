@@ -13,8 +13,8 @@ import (
 
 	"github.com/armon/go-proxyproto"
 	"github.com/elazarl/goproxy"
-	log "github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
+	"github.com/sirupsen/logrus"
 )
 
 type IpType int
@@ -130,11 +130,13 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		ctx.Logf("Received HTTP proxy request: "+
-			"remote=%#v host=%#v url=%#v",
-			ctx.Req.RemoteAddr,
-			ctx.Req.Host,
-			ctx.Req.RequestURI)
+		config.Log.WithFields(
+			logrus.Fields{
+				"remote": ctx.Req.RemoteAddr,
+				"host": ctx.Req.Host,
+				"url": ctx.Req.RequestURI,
+			}).Info("received HTTP proxy request")
+
 		ctx.UserData = time.Now().Unix()
 
 		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
@@ -148,22 +150,23 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 
-		ctx.Logf("Received CONNECT proxy request: "+
-			"remote=%#v host=%#v",
-			ctx.Req.RemoteAddr,
-			host)
+		config.Log.WithFields(
+			logrus.Fields{
+				"remote": ctx.Req.RemoteAddr,
+				"host": host,
+			}).Info("received CONNECT proxy request")
 
 		// Check if requesting role is allowed to talk to remote
 		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 		if shouldProxy {
 			resolved, err := safeResolve(config, "tcp", host)
 			if err != nil {
-				fmt.Printf("Err %#v", err)
+				config.Log.Warn(err)
 				ctx.Resp = errorResponse(ctx.Req, err)
 				return goproxy.RejectConnect, ""
 			}
 			ctx.UserData = time.Now().Unix()
-			logHttpsRequest(ctx, resolved)
+			logHttpsRequest(config, ctx, resolved)
 			return goproxy.OkConnect, resolved
 		} else {
 			return goproxy.RejectConnect, ""
@@ -189,7 +192,7 @@ func extractHostname(ctx *goproxy.ProxyCtx) string {
 	return ctx.Req.Host
 }
 
-func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
+func logHttpsRequest(config *Config, ctx *goproxy.ProxyCtx, resolved string) {
 	var contentLength int64
 	if ctx.Resp != nil {
 		contentLength = ctx.Resp.ContentLength
@@ -197,21 +200,29 @@ func logHttpsRequest(ctx *goproxy.ProxyCtx, resolved string) {
 	hostname := extractHostname(ctx)
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	to_host, to_port, _ := net.SplitHostPort(resolved)
-	log.Printf("Received CONNECT request: "+
-		"proxy_type=connect src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%s start_time=%#v end_time=%d content_length=%#v\n",
-		from_host,
-		from_port,
-		hostname,
-		to_host,
-		to_port,
-		ctx.UserData,
-		time.Now().Unix(),
-		// The content length is often -1 because of HTTP chunked encoding. this is normal.
-		contentLength,
-	)
+
+	serviceName, serviceNameErr := config.RoleFromRequest(ctx.Req)
+	if serviceNameErr != nil {
+		serviceName = ""
+	}
+
+	config.Log.WithFields(
+		logrus.Fields{
+			"proxy_type": "connect",
+			"known_role": serviceNameErr == nil || serviceName != "",
+			"role": serviceName,
+			"src_host": from_host,
+			"src_port": from_port,
+			"host": hostname,
+			"dest_ip": to_host,
+			"dest_port": to_port,
+			"start_time": ctx.UserData,
+			"end_time": time.Now().Unix(),
+			"content_length": contentLength,
+		}).Info("completed response")
 }
 
-func logResponse(conf *Config, ctx *goproxy.ProxyCtx) {
+func logResponse(config *Config, ctx *goproxy.ProxyCtx) {
 	var contentLength int64
 	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
 		// Reasons this might happen:
@@ -219,7 +230,7 @@ func logResponse(conf *Config, ctx *goproxy.ProxyCtx) {
 		// 2) Destination that doesn't respond (eg. i/o timeout)
 		// 3) destination domain that doesn't resolve
 		// 4) bogus IP address (eg. 1154.218.100.183)
-		log.Println("Could not log response: missing IP address")
+		config.Log.Println("Could not log response: missing IP address")
 		return
 	}
 	if ctx.Resp != nil {
@@ -228,25 +239,25 @@ func logResponse(conf *Config, ctx *goproxy.ProxyCtx) {
 	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 	hostname := extractHostname(ctx)
 
-	serviceName, serviceNameErr := conf.RoleFromRequest(ctx.Req)
+	serviceName, serviceNameErr := config.RoleFromRequest(ctx.Req)
 	if serviceNameErr != nil {
 		serviceName = ""
 	}
 
-	log.Printf("info: Completed response: "+
-		"proxy_type=http known_role=%#v role=%#v src_host=%#v src_port=%s host=%#v dest_ip=%#v dest_port=%d start_time=%#v end_time=%d content_length=%#v\n",
-		serviceNameErr == nil,
-		serviceName,
-		from_host,
-		from_port,
-		hostname,
-		ctx.RoundTrip.TCPAddr.IP.String(),
-		ctx.RoundTrip.TCPAddr.Port,
-		ctx.UserData,
-		time.Now().Unix(),
-		// The content length is often -1 because of HTTP chunked encoding. this is normal.
-		contentLength,
-	)
+	config.Log.WithFields(
+		logrus.Fields{
+			"proxy_type": "http",
+			"known_role": serviceNameErr == nil || serviceName != "",
+			"role": serviceName,
+			"src_host": from_host,
+			"src_port": from_port,
+			"host": hostname,
+			"dest_ip": ctx.RoundTrip.TCPAddr.IP.String(),
+			"dest_port": ctx.RoundTrip.TCPAddr.Port,
+			"start_time": ctx.UserData,
+			"end_time": time.Now().Unix(),
+			"content_length": contentLength,
+		}).Info("completed response")
 }
 
 func findListener(ip string, defaultPort int) (net.Listener, error) {
@@ -265,12 +276,12 @@ func findListener(ip string, defaultPort int) (net.Listener, error) {
 }
 
 func StartWithConfig(config *Config, quit <-chan interface{}) {
-	log.Println("info: Starting Smokescreen")
+	config.Log.Println("starting")
 	proxy := buildProxy(config)
 
 	listener, err := findListener(config.Ip, config.Port)
 	if err != nil {
-		log.Fatal(err)
+		config.Log.Fatal("can't find listener", err)
 	}
 
 	if config.SupportProxyProtocol {
@@ -319,22 +330,23 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	go func() {
 		select {
 		case <- kill:
-			log.Printf("Closed socket.")
+			config.Log.Print("quitting semi-gracefully")
 
 		case <- quit:
+			config.Log.Print("quitting now")
 			semiGraceful = false
 		}
 		listener.Close()
 	}()
 	err := server.Serve(listener)
 	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-		log.Fatal(err)
+		config.Log.Fatal(err)
 	}
 
 	if semiGraceful {
 		// the program has exited normally, wait 60s in an attempt to shutdown
 		// semi-gracefully
-		log.Printf("Waiting %s before shutting down\n", config.ExitTimeout)
+		config.Log.Print("Waiting %s before shutting down", config.ExitTimeout)
 		time.Sleep(config.ExitTimeout)
 	}
 }
@@ -345,9 +357,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	}
 
 	if config.EgressAcl != nil {
-		role, err := config.RoleFromRequest(req)
-		if err != nil {
-			return fail(err)
+		role, roleErr := config.RoleFromRequest(req)
+		if roleErr != nil {
+			return fail(roleErr)
 		}
 
 		project := ""
@@ -359,15 +371,30 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}
 		switch result {
 		case EgressAclDecisionDeny:
-			log.Printf("critical: Request denied by ACL: " +
-				"proxied=false known_project=%#v project=%#v role=%#v host=%#v",
-				projectErr == nil, project, role, outboundHost)
+
+			config.Log.WithFields(
+				logrus.Fields{
+					"proxied": false,
+					"known_project": projectErr == nil,
+					"project": project,
+					"known_role": role != "",
+					"client_role": role,
+					"outbound_host": outboundHost,
+				}).Warn("request denied by acl")
 		    return false
 
 		case EgressAclDecisionAllowAndReport:
-			log.Printf("warn: Request allowed and reported by ACL: " +
-				"proxied=true known_project=%#v project=%#v role=%#v host=%#v\n",
-				projectErr == nil, project, role, outboundHost)
+
+			config.Log.WithFields(
+				logrus.Fields{
+					"proxied": true,
+					"known_project": projectErr == nil,
+					"project": project,
+					"known_role": role != "",
+					"client_role": role,
+					"outbound_host": outboundHost,
+				}).Info("unknown egress reported")
+
 		case EgressAclDecisionAllow:
 			// Well, everything is going as expected.
 		}
