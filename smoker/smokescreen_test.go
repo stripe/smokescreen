@@ -3,6 +3,7 @@
 package smoker
 
 import (
+	"github.com/stretchr/testify/assert"
 	"log"
 	"net"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"net/url"
 	"testing"
 	"time"
-	"github.com/stretchr/testify/assert"
 )
 
 var cidrBlacklistExemptionsStrings = []string{
@@ -42,7 +42,7 @@ type testCase struct {
 func TestClassifyIP(t *testing.T) {
 	a := assert.New(t)
 
-	cidrBlacklistExemptions, err:= generateCidrBlacklistExemptions()
+	cidrBlacklistExemptions, err := generateCidrBlacklistExemptions()
 	a.NoError(err)
 
 	conf, err := NewConfig(
@@ -110,7 +110,7 @@ func TestClassifyIP(t *testing.T) {
 func TestClearsErrorHeader(t *testing.T) {
 	a := assert.New(t)
 
-	cidrBlacklistExemptions, err:= generateCidrBlacklistExemptions()
+	cidrBlacklistExemptions, err := generateCidrBlacklistExemptions()
 	a.NoError(err)
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)

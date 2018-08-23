@@ -1,12 +1,11 @@
 package main
 
 import (
-
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	cmd "github.com/stripe/smokescreen/cmd"
 	smokescreen "github.com/stripe/smokescreen/smoker"
-	log "github.com/sirupsen/logrus"
 )
 
 func main() {

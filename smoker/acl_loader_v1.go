@@ -17,13 +17,13 @@ type EgressAclRule struct {
 
 type EgressAclConfig struct {
 	Services map[string]EgressAclRule
-	Default *EgressAclRule
+	Default  *EgressAclRule
 }
 
 func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
 
 	var (
-		found bool
+		found   bool
 		service EgressAclRule
 	)
 	if fromService == "" {
@@ -105,8 +105,8 @@ type ServiceRule struct {
 
 type EgressAclConfiguration struct {
 	Services []ServiceRule `yaml:"services"`
-	Default *ServiceRule `yaml:"default"`
-	Version string `yaml:"version"`
+	Default  *ServiceRule  `yaml:"default"`
+	Version  string        `yaml:"version"`
 }
 
 func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
@@ -154,7 +154,6 @@ func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 	return &acl, nil
 }
 
-
 func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
 
 	regexRegex, err := regexp.Compile("^/.*/$")
@@ -168,7 +167,7 @@ func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
 
 		// Is the entry a regex?
 		if regexRegex.MatchString(v) {
-			v = v[1:len(v)-1] // Drop both '/'
+			v = v[1 : len(v)-1] // Drop both '/'
 			expr, err := regexp.Compile(v)
 
 			if err != nil {
@@ -195,8 +194,8 @@ func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
 	}
 
 	return EgressAclRule{
-		Project:           v.Project,
-		Policy:            enforcement_policy,
+		Project: v.Project,
+		Policy:  enforcement_policy,
 		DomainExpressionsOrStrings: domainExpr,
 	}, nil
 }

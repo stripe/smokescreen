@@ -13,8 +13,8 @@ import (
 
 	"github.com/armon/go-proxyproto"
 	"github.com/elazarl/goproxy"
-	"github.com/stripe/go-einhorn/einhorn"
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/go-einhorn/einhorn"
 )
 
 type IpType int
@@ -133,8 +133,8 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 		config.Log.WithFields(
 			logrus.Fields{
 				"remote": ctx.Req.RemoteAddr,
-				"host": ctx.Req.Host,
-				"url": ctx.Req.RequestURI,
+				"host":   ctx.Req.Host,
+				"url":    ctx.Req.RequestURI,
 			}).Info("received HTTP proxy request")
 
 		ctx.UserData = time.Now().Unix()
@@ -144,7 +144,7 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 		if shouldProxy {
 			return req, nil
 		} else {
-			return req, errorResponse(req, fmt.Errorf(config.ErrorMessageOnDeny))
+			return req, errorResponse(req, fmt.Errorf("%s", config.ErrorMessageOnDeny))
 		}
 	})
 
@@ -153,7 +153,7 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 		config.Log.WithFields(
 			logrus.Fields{
 				"remote": ctx.Req.RemoteAddr,
-				"host": host,
+				"host":   host,
 			}).Info("received CONNECT proxy request")
 
 		// Check if requesting role is allowed to talk to remote
@@ -208,16 +208,16 @@ func logHttpsRequest(config *Config, ctx *goproxy.ProxyCtx, resolved string) {
 
 	config.Log.WithFields(
 		logrus.Fields{
-			"proxy_type": "connect",
-			"known_role": serviceNameErr == nil || serviceName != "",
-			"role": serviceName,
-			"src_host": from_host,
-			"src_port": from_port,
-			"host": hostname,
-			"dest_ip": to_host,
-			"dest_port": to_port,
-			"start_time": ctx.UserData,
-			"end_time": time.Now().Unix(),
+			"proxy_type":     "connect",
+			"known_role":     serviceNameErr == nil || serviceName != "",
+			"role":           serviceName,
+			"src_host":       from_host,
+			"src_port":       from_port,
+			"host":           hostname,
+			"dest_ip":        to_host,
+			"dest_port":      to_port,
+			"start_time":     ctx.UserData,
+			"end_time":       time.Now().Unix(),
 			"content_length": contentLength,
 		}).Info("completed response")
 }
@@ -246,16 +246,16 @@ func logResponse(config *Config, ctx *goproxy.ProxyCtx) {
 
 	config.Log.WithFields(
 		logrus.Fields{
-			"proxy_type": "http",
-			"known_role": serviceNameErr == nil || serviceName != "",
-			"role": serviceName,
-			"src_host": from_host,
-			"src_port": from_port,
-			"host": hostname,
-			"dest_ip": ctx.RoundTrip.TCPAddr.IP.String(),
-			"dest_port": ctx.RoundTrip.TCPAddr.Port,
-			"start_time": ctx.UserData,
-			"end_time": time.Now().Unix(),
+			"proxy_type":     "http",
+			"known_role":     serviceNameErr == nil || serviceName != "",
+			"role":           serviceName,
+			"src_host":       from_host,
+			"src_port":       from_port,
+			"host":           hostname,
+			"dest_ip":        ctx.RoundTrip.TCPAddr.IP.String(),
+			"dest_port":      ctx.RoundTrip.TCPAddr.Port,
+			"start_time":     ctx.UserData,
+			"end_time":       time.Now().Unix(),
 			"content_length": contentLength,
 		}).Info("completed response")
 }
@@ -329,10 +329,10 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		select {
-		case <- kill:
+		case <-kill:
 			config.Log.Print("quitting semi-gracefully")
 
-		case <- quit:
+		case <-quit:
 			config.Log.Print("quitting now")
 			semiGraceful = false
 		}
@@ -346,7 +346,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	if semiGraceful {
 		// the program has exited normally, wait 60s in an attempt to shutdown
 		// semi-gracefully
-		config.Log.Print("Waiting %s before shutting down", config.ExitTimeout)
+		config.Log.WithField("delay", config.ExitTimeout).Info("Waiting before shutting down")
 		time.Sleep(config.ExitTimeout)
 	}
 }
@@ -374,24 +374,24 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 
 			config.Log.WithFields(
 				logrus.Fields{
-					"proxied": false,
+					"proxied":       false,
 					"known_project": projectErr == nil,
-					"project": project,
-					"known_role": role != "",
-					"client_role": role,
+					"project":       project,
+					"known_role":    role != "",
+					"client_role":   role,
 					"outbound_host": outboundHost,
 				}).Warn("request denied by acl")
-		    return false
+			return false
 
 		case EgressAclDecisionAllowAndReport:
 
 			config.Log.WithFields(
 				logrus.Fields{
-					"proxied": true,
+					"proxied":       true,
 					"known_project": projectErr == nil,
-					"project": project,
-					"known_role": role != "",
-					"client_role": role,
+					"project":       project,
+					"known_role":    role != "",
+					"client_role":   role,
 					"outbound_host": outboundHost,
 				}).Info("unknown egress reported")
 

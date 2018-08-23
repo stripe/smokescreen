@@ -4,9 +4,9 @@ import (
 	smokescreen "github.com/stripe/smokescreen/smoker"
 	"gopkg.in/urfave/cli.v1"
 	"log"
+	"net"
 	"os"
 	"time"
-	"net"
 )
 
 func ConfigFromCli() (*smokescreen.Config, error) {
@@ -30,7 +30,7 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name: "server-ip",
+			Name:  "server-ip",
 			Usage: "Specify the server's IP",
 		},
 		cli.IntFlag{
@@ -52,7 +52,7 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 			Usage: "Enables PROXY protocol support",
 		},
 		cli.StringSliceFlag{
-			Name: "cidr-blacklist",
+			Name:  "cidr-blacklist",
 			Usage: "CIDR blocks to consider private",
 		},
 		cli.StringSliceFlag{
@@ -85,7 +85,7 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 			Usage: "WARNING: this will circumvent the check preventing client to reach hosts in private networks. It will make you vulnerable to SSRF.",
 		},
 		cli.StringFlag{
-			Name: "error-message-on-deny",
+			Name:  "error-message-on-deny",
 			Usage: "Message to return in the HTTP response if proxying request is denied",
 		},
 	}

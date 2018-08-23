@@ -18,7 +18,6 @@ func PrivateNetworks() []net.IPNet {
 	return privateNetworks
 }
 
-
 func addCidrToSlice(blocks []net.IPNet, cidrBlockString string) ([]net.IPNet, error) {
 	_, ipnet, err := net.ParseCIDR(cidrBlockString)
 	if err != nil {

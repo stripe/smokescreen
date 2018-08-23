@@ -24,7 +24,7 @@ import (
 )
 
 type Config struct {
-	Ip string
+	Ip                      string
 	Port                    int
 	CidrBlacklist           []net.IPNet
 	CidrBlacklistExemptions []net.IPNet
@@ -39,8 +39,8 @@ type Config struct {
 	CrlByAuthorityKeyId     map[string]*pkix.CertificateList
 	RoleFromRequest         func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId map[string]*x509.Certificate
-	ErrorMessageOnDeny string
-	Log *log.Logger
+	ErrorMessageOnDeny      string
+	Log                     *log.Logger
 }
 
 // RFC 5280,  4.2.1.1
@@ -67,12 +67,11 @@ func NewConfig(
 
 ) (*Config, error) {
 
-
 	var err error
 	config := Config{
-		Ip: serverIp,
+		Ip:                      serverIp,
 		Port:                    port,
-		CidrBlacklist: cidrBlacklist,
+		CidrBlacklist:           cidrBlacklist,
 		CidrBlacklistExemptions: cidrBlacklistExemptions,
 		ConnectTimeout:          connectTimeout,
 		ExitTimeout:             exitTimeout,
@@ -81,10 +80,9 @@ func NewConfig(
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		AllowPrivateRange:       allowPrivateRanges,
-		ErrorMessageOnDeny: errorMessageOnDeny,
-		Log: log.New(),
+		ErrorMessageOnDeny:      errorMessageOnDeny,
+		Log:                     log.New(),
 	}
-
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
 	if len(tlsClientCasFiles) > 0 { // If client certs are set, pick the CN.

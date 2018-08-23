@@ -4,29 +4,28 @@ package cmd
 
 import "github.com/stretchr/testify/assert"
 import (
-	"crypto/x509"
-	"testing"
-	smokescreen "github.com/stripe/smokescreen/smoker"
-	"net/http"
-	"io"
-	"net"
-	"fmt"
-	"syscall"
-	"net/url"
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"github.com/hashicorp/go-cleanhttp"
-	"strconv"
-	"math/rand"
-	"bytes"
+	smokescreen "github.com/stripe/smokescreen/smoker"
+	"io"
 	"io/ioutil"
+	"math/rand"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"syscall"
+	"testing"
 )
 
 var plainSmokescreenPort = 4520
 var tlsSmokescreenPort = 4521
 
 type DummyHandler struct{}
-
 
 func (s *DummyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	io.WriteString(rw, "ok")
@@ -45,14 +44,16 @@ type TestCase struct {
 	Action         smokescreen.ConfigEnforcementPolicy
 	ProxyPort      int
 	TargetPort     int
-	RandomTrace int
+	RandomTrace    int
 }
 
 func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error) {
 	a := assert.New(t)
 	if test.Action == smokescreen.ConfigEnforcementPolicyEnforce {
 		if test.AuthorizedHost || test.Action != smokescreen.ConfigEnforcementPolicyEnforce {
-			if !a.NoError(err) {return}
+			if !a.NoError(err) {
+				return
+			}
 			a.Equal(200, resp.StatusCode)
 		} else {
 			if test.OverConnect {
@@ -125,8 +126,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 
 					proxyTlsClientConfig := tls.Config{
 						Certificates: []tls.Certificate{cert},
-						RootCAs: caPool,
-
+						RootCAs:      caPool,
 					}
 					connRaw, err := tls.Dial("tcp", proxyUrl, &proxyTlsClientConfig)
 					a.NoError(err)
@@ -140,7 +140,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 
 				connectProxyReq, err := http.NewRequest(
 					"CONNECT",
-					 fmt.Sprintf("http://%s", addr),
+					fmt.Sprintf("http://%s", addr),
 					nil)
 
 				if !test.OverTls { // If we're not talking to the proxy over TLS, let's use headers as identifiers
@@ -218,7 +218,6 @@ func TestSmokescreenIntegration(t *testing.T) {
 	killTls := startSmokescreen(t, true)
 	defer killTls()
 
-
 	// Generate all non-tls tests
 	overTlsDomain := []bool{true, false}
 	overConnectDomain := []bool{true, false}
@@ -251,9 +250,8 @@ func TestSmokescreenIntegration(t *testing.T) {
 						AuthorizedHost: authorizedHost,
 						Action:         action,
 						ProxyPort:      proxyPort,
-						TargetPort: outsideListenerPort,
-						RandomTrace: rand.Int(),
-
+						TargetPort:     outsideListenerPort,
+						RandomTrace:    rand.Int(),
 					}
 					executeRequestForTest(t, testCase)
 					if t.Failed() {
