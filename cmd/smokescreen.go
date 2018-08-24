@@ -10,7 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-
 func ConfigFromCli(logger *log.Logger) (*smokescreen.Config, error) {
 	return configFromCli(logger, nil)
 }
@@ -96,21 +95,21 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 		var cidrBlacklistExemptions []net.IPNet
 
 		for _, cidrBlock := range smokescreen.PrivateNetworkStrings {
-			cidrBlacklist, err = addCidrToSlice(cidrBlacklist, cidrBlock)
+			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
 			if err != nil {
 				return err
 			}
 		}
 
 		for _, cidrBlock := range c.StringSlice("cidr-blacklist") {
-			cidrBlacklist, err = addCidrToSlice(cidrBlacklist, cidrBlock)
+			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
 			if err != nil {
 				return err
 			}
 		}
 
 		for _, cidrBlock := range c.StringSlice("cidr-blacklist-exemption") {
-			cidrBlacklistExemptions, err = addCidrToSlice(cidrBlacklistExemptions, cidrBlock)
+			cidrBlacklistExemptions, err = smokescreen.AddCidrToSlice(cidrBlacklistExemptions, cidrBlock)
 			if err != nil {
 				return err
 			}
@@ -152,12 +151,4 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 	}
 
 	return configToReturn, err
-}
-
-func addCidrToSlice(blocks []net.IPNet, cidrBlockString string) ([]net.IPNet, error) {
-	_, ipnet, err := net.ParseCIDR(cidrBlockString)
-	if err != nil {
-		return nil, err
-	}
-	return append(blocks, *ipnet), nil
 }

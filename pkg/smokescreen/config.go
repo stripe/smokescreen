@@ -1,23 +1,25 @@
 package smokescreen
 
-import ("errors"
-	"github.com/DataDog/datadog-go/statsd"
-	"encoding/asn1"
+import (
 	"crypto/x509/pkix"
+	"encoding/asn1"
+	"errors"
+	"github.com/DataDog/datadog-go/statsd"
 
-	"io/ioutil"
-	"net"
-	"time"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
-	"crypto"
-	"crypto/rsa"
-	"crypto/ecdsa"
 	"fmt"
-	"strings"
+	"io/ioutil"
+	"net"
 	"net/http"
-	"encoding/hex")
+	"strings"
+	"time"
+)
 
 import (
 	log "github.com/sirupsen/logrus"

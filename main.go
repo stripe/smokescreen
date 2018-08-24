@@ -15,5 +15,9 @@ func main() {
 		log.Print(err)
 		os.Exit(1)
 	}
+
+	if conf == nil {
+		os.Exit(1)
+	}
 	smokescreen.StartWithConfig(conf, nil)
 }

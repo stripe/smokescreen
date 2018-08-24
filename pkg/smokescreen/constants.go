@@ -12,16 +12,7 @@ var PrivateNetworkStrings = []string{
 func PrivateNetworks() []net.IPNet {
 	var privateNetworks []net.IPNet
 	for _, network := range PrivateNetworkStrings {
-		privateNetworks, _ = addCidrToSlice(privateNetworks, network)
+		privateNetworks, _ = AddCidrToSlice(privateNetworks, network)
 	}
-
 	return privateNetworks
-}
-
-func addCidrToSlice(blocks []net.IPNet, cidrBlockString string) ([]net.IPNet, error) {
-	_, ipnet, err := net.ParseCIDR(cidrBlockString)
-	if err != nil {
-		return nil, err
-	}
-	return append(blocks, *ipnet), nil
 }
