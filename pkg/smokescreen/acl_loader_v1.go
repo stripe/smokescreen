@@ -1,12 +1,13 @@
-package smoker
+package smokescreen
 
 import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"log"
 	"regexp"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type EgressAclRule struct {

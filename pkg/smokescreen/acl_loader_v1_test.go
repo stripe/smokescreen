@@ -1,6 +1,6 @@
 // +build !nounit
 
-package smoker
+package smokescreen
 
 import "github.com/stretchr/testify/assert"
 import "testing"

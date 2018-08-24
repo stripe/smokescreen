@@ -1,23 +1,23 @@
-package smoker
+package smokescreen
 
-import "errors"
-import "github.com/DataDog/datadog-go/statsd"
-import "encoding/asn1"
-import "crypto/x509/pkix"
+import ("errors"
+	"github.com/DataDog/datadog-go/statsd"
+	"encoding/asn1"
+	"crypto/x509/pkix"
 
-import "io/ioutil"
-import "net"
-import "time"
-import "crypto/tls"
-import "crypto/x509"
-import "encoding/pem"
-import "crypto"
-import "crypto/rsa"
-import "crypto/ecdsa"
-import "fmt"
-import "strings"
-import "net/http"
-import "encoding/hex"
+	"io/ioutil"
+	"net"
+	"time"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"crypto"
+	"crypto/rsa"
+	"crypto/ecdsa"
+	"fmt"
+	"strings"
+	"net/http"
+	"encoding/hex")
 
 import (
 	log "github.com/sirupsen/logrus"
@@ -49,6 +49,7 @@ type authKeyId struct {
 }
 
 func NewConfig(
+	logger *log.Logger,
 	serverIp string,
 	port int,
 	cidrBlacklist []net.IPNet,
@@ -81,7 +82,12 @@ func NewConfig(
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		AllowPrivateRange:       allowPrivateRanges,
 		ErrorMessageOnDeny:      errorMessageOnDeny,
-		Log:                     log.New(),
+	}
+
+	if logger == nil {
+		config.Log = log.New()
+	} else {
+		config.Log = logger
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
@@ -98,7 +104,7 @@ func NewConfig(
 			fail := func(err error) (string, error) { return "", err }
 			idHeader := req.Header["X-Smokescreen-Role"]
 			if len(idHeader) != 1 {
-				return fail(fmt.Errorf("No or multiple 'X-Smokescreen-Role' header provided"))
+				return fail(fmt.Errorf("no or multiple 'X-Smokescreen-Role' header provided"))
 			}
 			return idHeader[0], nil
 		}

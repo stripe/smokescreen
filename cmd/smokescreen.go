@@ -1,28 +1,27 @@
 package cmd
 
 import (
-	smokescreen "github.com/stripe/smokescreen/smoker"
+	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"gopkg.in/urfave/cli.v1"
-	"log"
 	"net"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
-func ConfigFromCli() (*smokescreen.Config, error) {
-	return configFromCli(nil)
+
+func ConfigFromCli(logger *log.Logger) (*smokescreen.Config, error) {
+	return configFromCli(logger, nil)
 }
 
-func ConfigFromArgs(args []string) (*smokescreen.Config, error) {
-	cwd, _ := os.Getwd()
-	return configFromCli(append([]string{cwd}, args...))
+func ConfigFromArgs(logger *log.Logger, args []string) (*smokescreen.Config, error) {
+	return configFromCli(logger, append([]string{os.Args[0]}, args...))
 }
 
-func configFromCli(args []string) (*smokescreen.Config, error) {
+func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, error) {
 
 	var configToReturn *smokescreen.Config
-
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
@@ -31,62 +30,62 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "server-ip",
-			Usage: "Specify the server's IP",
+			Usage: "Binds on interface with `ip`",
 		},
 		cli.IntFlag{
-			Name:  "port",
+			Name:  "server-port",
 			Value: 4750,
-			Usage: "Port to bind on",
+			Usage: "Binds on `port`",
 		},
 		cli.DurationFlag{
 			Name:  "timeout",
 			Value: time.Duration(10) * time.Second,
-			Usage: "Time to wait while connecting",
+			Usage: "Waits `duration` when connecting",
 		},
 		cli.StringFlag{
-			Name:  "maintenance",
-			Usage: "Flag file for maintenance. chmod to 000 to put into maintenance mode",
+			Name:  "maintenance-file",
+			Usage: "Chmod `file` to 000 to put into maintenance mode",
 		},
 		cli.BoolFlag{
 			Name:  "proxy-protocol",
-			Usage: "Enables PROXY protocol support",
+			Usage: "Enable PROXY protocol support",
 		},
 		cli.StringSliceFlag{
-			Name:  "cidr-blacklist",
-			Usage: "CIDR blocks to consider private",
+			Name:  "blacklist",
+			Usage: "`CIDR block` to consider private",
 		},
 		cli.StringSliceFlag{
-			Name:  "cidr-blacklist-exemption",
-			Usage: "CIDR block to consider public even if englobing block is found in the blacklist or if IP address is Global Unicast",
+			Name:  "blacklist-exemption",
+			Usage: "`CIDR block` to consider public even if englobing block is found in the blacklist or if IP address is Global Unicast",
 		},
 		cli.StringFlag{
-			Name:  "egress-acl",
-			Usage: "A file which contains the egress ACL",
+			Name:  "egress-acl-file",
+			Usage: "Validate egress traffic against `file`",
 		},
 		cli.StringFlag{
-			Name:  "statsd-service",
+			Name:  "statsd",
 			Value: "127.0.0.1:8200",
-			Usage: "IP and port of statsd.",
+			Usage: "`IP:port` to statsd",
 		},
 		cli.StringFlag{
-			Name:  "tls-server-pem",
-			Usage: "Certificate chain and private key used by the server",
+			Name:  "tls-server-bundle-file",
+			Usage: "Authenticate to clients using key and certs from `FILE`",
 		},
 		cli.StringSliceFlag{
-			Name:  "tls-client-ca",
-			Usage: "Root Certificate Authority used to authenticate clients",
+			Name:  "tls-client-ca-file",
+			Usage: "Validate client certificates using Certificate Authority from `FILE`",
 		},
 		cli.StringSliceFlag{
-			Name:  "crls",
-			Usage: "CRL used by the server (reloaded upon change)",
+			Name:  "tls-crl-file",
+			Usage: "Verify validity of client certificates against Certificate Revocation List from `FILE`",
 		},
 		cli.BoolFlag{
 			Name:  "danger-allow-access-to-private-ranges",
-			Usage: "WARNING: this will circumvent the check preventing client to reach hosts in private networks. It will make you vulnerable to SSRF.",
+			Usage: "WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.",
 		},
 		cli.StringFlag{
 			Name:  "error-message-on-deny",
-			Usage: "Message to return in the HTTP response if proxying request is denied",
+			Usage: "Display `MESSAGE` in the HTTP response if proxying request is denied",
 		},
 	}
 
@@ -118,19 +117,20 @@ func configFromCli(args []string) (*smokescreen.Config, error) {
 		}
 
 		conf, err := smokescreen.NewConfig(
+			logger,
 			c.String("server-ip"),
-			c.Int("port"),
+			c.Int("server-port"),
 			cidrBlacklist,
 			cidrBlacklistExemptions,
 			c.Duration("timeout"),
 			60*time.Second,
-			c.String("maintenance"),
-			c.String("statsd-service"),
-			c.String("egress-acl"),
+			c.String("maintenance-file"),
+			c.String("statsd"),
+			c.String("egress-acl-file"),
 			c.Bool("proxy-protocol"),
-			c.String("tls-server-pem"),
-			c.StringSlice("tls-client-ca"),
-			c.StringSlice("crls"),
+			c.String("tls-server-bundle-file"),
+			c.StringSlice("tls-client-ca-file"),
+			c.StringSlice("tls-crl-file"),
 			c.Bool("danger-allow-access-to-private-ranges"),
 			c.String("error-message-on-deny"),
 		)

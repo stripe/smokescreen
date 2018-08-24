@@ -10,7 +10,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/hashicorp/go-cleanhttp"
-	smokescreen "github.com/stripe/smokescreen/smoker"
+	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -270,23 +270,23 @@ func startSmokescreen(t *testing.T, useTls bool) func() {
 	var conf *smokescreen.Config
 	var err error
 	if useTls {
-		conf, err = ConfigFromArgs([]string{
+		conf, err = ConfigFromArgs(nil, []string{
 			"--server-ip=127.0.0.1",
-			fmt.Sprintf("--port=%d", plainSmokescreenPort),
-			"--egress-acl=testdata/sample_config.yaml",
+			fmt.Sprintf("--server-port=%d", plainSmokescreenPort),
+			"--egress-acl-file=testdata/sample_config.yaml",
 			"--danger-allow-access-to-private-ranges",
 			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
 		})
 	} else {
-		conf, err = ConfigFromArgs([]string{
+		conf, err = ConfigFromArgs(nil, []string{
 			"--server-ip=127.0.0.1",
-			fmt.Sprintf("--port=%d", tlsSmokescreenPort),
-			"--egress-acl=testdata/sample_config.yaml",
+			fmt.Sprintf("--server-port=%d", tlsSmokescreenPort),
+			"--egress-acl-file=testdata/sample_config.yaml",
 			"--danger-allow-access-to-private-ranges",
 			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
-			"--tls-server-pem=testdata/pki/server-bundle.pem",
-			"--tls-client-ca=testdata/pki/ca.pem",
-			"--crls=testdata/pki/crl.pem",
+			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
+			"--tls-client-ca-file=testdata/pki/ca.pem",
+			"--tls-crl-file=testdata/pki/crl.pem",
 		})
 	}
 

@@ -1,4 +1,4 @@
-package smoker
+package smokescreen
 
 // A `EgressAclDecision` represents the result of checking the ACL.
 type EgressAclDecision int

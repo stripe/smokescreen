@@ -1,6 +1,6 @@
 // +build !nounit
 
-package smoker
+package smokescreen
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -46,6 +46,7 @@ func TestClassifyIP(t *testing.T) {
 	a.NoError(err)
 
 	conf, err := NewConfig(
+		nil,
 		"",
 		int(0),
 		PrivateNetworks(),
@@ -115,6 +116,7 @@ func TestClearsErrorHeader(t *testing.T) {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conf, err := NewConfig(
+		nil,
 		"",
 		int(39381),
 		PrivateNetworks(),

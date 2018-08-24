@@ -1,4 +1,4 @@
-package smoker
+package smokescreen
 
 import (
 	"log"
