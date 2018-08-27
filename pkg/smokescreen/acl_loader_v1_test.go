@@ -13,7 +13,7 @@ func TestLoadFromYaml(t *testing.T) {
 		acl, err := LoadFromYamlFile("testdata/sample_config.yaml")
 		a.Nil(err)
 		a.NotNil(acl)
-		a.Equal(3, len(acl.Services))
+		a.Equal(4, len(acl.Services))
 	}
 
 	// Load a broken config
@@ -102,6 +102,11 @@ func TestLoadYamlWithInvalidGlob(t *testing.T) {
 
 	_, err := LoadFromYamlFile("testdata/contains_invalid_glob.yaml")
 	a.Error(err)
+}
 
+func TestLoadYamlWithInvalidMiddleGlob(t *testing.T) {
+	a := assert.New(t)
 
+	_, err := LoadFromYamlFile("testdata/contains_middle_glob.yaml")
+	a.Error(err)
 }

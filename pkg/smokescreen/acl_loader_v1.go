@@ -3,9 +3,9 @@ package smokescreen
 import (
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	log "github.com/sirupsen/logrus"
 	"strings"
 )
 
@@ -160,7 +160,16 @@ func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
 
 	for _, host := range v.AllowedHosts {
 		if !strings.HasPrefix(host, "*.") && strings.HasPrefix(host, "*") {
-			return EgressAclRule{}, fmt.Errorf("glob must represent a full (sub)domain")
+			return EgressAclRule{}, fmt.Errorf("glob must represent a full prefxi (sub)domain")
+		}
+
+		// Check for stars elsewhere
+		hostToCheck := host
+		if strings.HasPrefix(hostToCheck, "*") {
+			hostToCheck = hostToCheck[1:]
+		}
+		if strings.Contains(hostToCheck, "*") {
+			return EgressAclRule{}, fmt.Errorf("globs are only supported as prefix")
 		}
 	}
 
