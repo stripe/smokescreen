@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/cmd"
 	"github.com/stripe/smokescreen/pkg/smokescreen"
@@ -10,14 +8,13 @@ import (
 
 func main() {
 
-	conf, err := cmd.ConfigFromCli(nil)
+	conf, err := cmd.Configure(nil, nil)
 	if err != nil {
-		log.Print(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	if conf == nil {
-		os.Exit(1)
+		log.Fatal("No config")
 	}
 	smokescreen.StartWithConfig(conf, nil)
 }
