@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"gopkg.in/urfave/cli.v1"
 	"net"
@@ -10,61 +11,71 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ConfigFromCli(logger *log.Logger) (*smokescreen.Config, error) {
-	return configFromCli(logger, nil)
-}
-
-func ConfigFromArgs(logger *log.Logger, args []string) (*smokescreen.Config, error) {
-	return configFromCli(logger, append([]string{os.Args[0]}, args...))
-}
-
-func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, error) {
+// Process command line args into a configuration object.
+// As a side-effect, processing the "--help" argument will cause the program to
+// print the the help message and exit.  If args is nil, os.Args will be used.
+// If logger is nil, a default logger will be created and included in the
+// returned configuration.
+func Configure(args []string, logger *log.Logger) (*smokescreen.Config, error) {
+	if args == nil {
+		args = os.Args
+	}
 
 	var configToReturn *smokescreen.Config
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
+	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
+
+	// Suppress "help" subcommand, as we have no other subcommands.
+	// Unfortunately, this also suppresses "--help", so we'll add it back in
+	// manually below.  See https://github.com/urfave/cli/issues/523
+	app.HideHelp = true
 
 	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name: "help",
+			Usage: "Show this help text.",
+		},
 		cli.StringFlag{
-			Name:  "server-ip",
-			Usage: "Binds on interface with `ip`",
+			Name:  "listen-ip",
+			Usage: "listen on interface with address `IP`.\n\t\tThis argument is ignored when running under Einhorn. (default: any)",
 		},
 		cli.IntFlag{
-			Name:  "server-port",
+			Name:  "listen-port",
 			Value: 4750,
-			Usage: "Binds on `port`",
+			Usage: "listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
 		},
 		cli.DurationFlag{
 			Name:  "timeout",
 			Value: time.Duration(10) * time.Second,
-			Usage: "Waits `duration` when connecting",
+			Usage: "Time out after `DURATION` when connecting.",
 		},
 		cli.StringFlag{
 			Name:  "maintenance-file",
-			Usage: "Chmod `file` to 000 to put into maintenance mode",
+			Usage: "Watch `FILE` for maintenance mode.\n\t\tHTTP(S) requests to /healthcheck return 404 if the file's permissions are set to 000.",
 		},
 		cli.BoolFlag{
 			Name:  "proxy-protocol",
-			Usage: "Enable PROXY protocol support",
+			Usage: "Enable PROXY protocol support.",
 		},
 		cli.StringSliceFlag{
-			Name:  "blacklist",
-			Usage: "`CIDR block` to consider private",
+			Name:  "deny-range",
+			Usage: "Add `RANGE`(in CIDR notation) to list of blocked IP ranges.  Repeatable.",
 		},
 		cli.StringSliceFlag{
-			Name:  "blacklist-exemption",
-			Usage: "`CIDR block` to consider public even if englobing block is found in the blacklist or if IP address is Global Unicast",
+			Name:  "allow-range",
+			Usage: "Add `RANGE` (in CIDR notation) to list of allowed IP ranges.  Repeatable.",
 		},
 		cli.StringFlag{
 			Name:  "egress-acl-file",
-			Usage: "Validate egress traffic against `file`",
+			Usage: "Validate egress traffic against `FILE`",
 		},
 		cli.StringFlag{
-			Name:  "statsd",
+			Name:  "statsd-address",
 			Value: "127.0.0.1:8200",
-			Usage: "`IP:port` to statsd",
+			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
 		},
 		cli.StringFlag{
 			Name:  "tls-server-bundle-file",
@@ -89,6 +100,12 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 	}
 
 	app.Action = func(c *cli.Context) error {
+		if c.Bool("help") {
+			cli.ShowAppHelpAndExit(c, 0)
+		}
+		if len(c.Args()) > 0 {
+			return errors.New("Received unexpected non-option argument(s)")
+		}
 
 		var err error
 		var cidrBlacklist []net.IPNet
@@ -101,14 +118,14 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 			}
 		}
 
-		for _, cidrBlock := range c.StringSlice("cidr-blacklist") {
+		for _, cidrBlock := range c.StringSlice("deny-range") {
 			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
 			if err != nil {
 				return err
 			}
 		}
 
-		for _, cidrBlock := range c.StringSlice("cidr-blacklist-exemption") {
+		for _, cidrBlock := range c.StringSlice("allow-range") {
 			cidrBlacklistExemptions, err = smokescreen.AddCidrToSlice(cidrBlacklistExemptions, cidrBlock)
 			if err != nil {
 				return err
@@ -117,14 +134,14 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 
 		conf, err := smokescreen.NewConfig(
 			logger,
-			c.String("server-ip"),
-			c.Int("server-port"),
+			c.String("listen-ip"),
+			c.Int("listen-port"),
 			cidrBlacklist,
 			cidrBlacklistExemptions,
 			c.Duration("timeout"),
 			60*time.Second,
 			c.String("maintenance-file"),
-			c.String("statsd"),
+			c.String("statsd-address"),
 			c.String("egress-acl-file"),
 			c.Bool("proxy-protocol"),
 			c.String("tls-server-bundle-file"),
@@ -143,12 +160,7 @@ func configFromCli(logger *log.Logger, args []string) (*smokescreen.Config, erro
 		return nil
 	}
 
-	var err error
-	if args == nil {
-		err = app.Run(os.Args)
-	} else {
-		err = app.Run(args)
-	}
+	err := app.Run(args)
 
 	return configToReturn, err
 }
