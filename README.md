@@ -113,6 +113,7 @@ An ACL can be described in a YAML formatted file. The ACL, at its top-level, con
 Three policies are supported:
 
 | Policy | Behavior |
+| --- | --- |
 | Open | Allows all traffic for this service |
 | Report | Allows all traffic for this service and warns if client accesses a remote host which is not in the list | 
 | Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
