@@ -270,7 +270,7 @@ func startSmokescreen(t *testing.T, useTls bool) func() {
 	var conf *smokescreen.Config
 	var err error
 	if useTls {
-		conf, err = Configure([]string{
+		conf, err = NewConfiguration([]string{
 			"smokescreen",
 			"--listen-ip=127.0.0.1",
 			fmt.Sprintf("--listen-port=%d", plainSmokescreenPort),
@@ -279,7 +279,7 @@ func startSmokescreen(t *testing.T, useTls bool) func() {
 			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
 		}, nil)
 	} else {
-		conf, err = Configure([]string{
+		conf, err = NewConfiguration([]string{
 			"smokescreen",
 			"--listen-ip=127.0.0.1",
 			fmt.Sprintf("--listen-port=%d", tlsSmokescreenPort),

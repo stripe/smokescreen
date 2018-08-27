@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	conf, err := cmd.Configure(nil, nil)
+	conf, err := cmd.NewConfiguration(nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

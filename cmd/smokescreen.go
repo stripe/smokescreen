@@ -16,7 +16,7 @@ import (
 // print the the help message and exit.  If args is nil, os.Args will be used.
 // If logger is nil, a default logger will be created and included in the
 // returned configuration.
-func Configure(args []string, logger *log.Logger) (*smokescreen.Config, error) {
+func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, error) {
 	if args == nil {
 		args = os.Args
 	}
