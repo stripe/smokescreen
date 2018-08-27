@@ -78,13 +78,13 @@ In order to override how Smokescreen identifies its clients, you must:
 - Build your new project and use the resulting executable through its CLI
 
 Here is a fictional example that would split a client certificate's `OrganizationalUnit` on commas and use the first particle as the service name.
-```
+```go
 package main
 
 import (...)
 
 func main() {
-    // Here is an opportunity to pass your logger
+	// Here is an opportunity to pass your logger
 	conf, err := cmd.NewConfiguration(nil, nil)
 	if err != nil {
 		log.Fatal(err)
