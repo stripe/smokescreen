@@ -70,6 +70,7 @@ func NewConfig(
 	crlFiles []string,
 	allowPrivateRanges bool,
 	errorMessageOnDeny string,
+	disabledAclPolicyActions []string,
 
 ) (*Config, error) {
 
@@ -125,7 +126,7 @@ func NewConfig(
 		return nil, err
 	}
 
-	err = config.setupEgressAcl(egressAclFile)
+	err = config.setupEgressAcl(egressAclFile, disabledAclPolicyActions)
 	if err != nil {
 		return nil, err
 	}
@@ -219,10 +220,10 @@ func (config *Config) setupStatsd(statsdAddr string) error {
 	return nil
 }
 
-func (config *Config) setupEgressAcl(aclFile string) error {
+func (config *Config) setupEgressAcl(aclFile string, disabledAclPolicyActions []string) error {
 	if aclFile != "" {
 		log.Printf("Loading egress ACL from %s", aclFile)
-		egressAcl, err := LoadFromYamlFile(aclFile)
+		egressAcl, err := LoadFromYamlFile(config, aclFile, disabledAclPolicyActions)
 		if err != nil {
 			log.Print(err)
 			return err
