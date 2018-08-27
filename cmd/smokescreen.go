@@ -35,7 +35,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
-			Name: "help",
+			Name:  "help",
 			Usage: "Show this help text.",
 		},
 		cli.StringFlag{
@@ -97,6 +97,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "error-message-on-deny",
 			Usage: "Display `MESSAGE` in the HTTP response if proxying request is denied",
 		},
+		cli.StringSliceFlag{
+			Name:  "disable-acl-policy-action",
+			Usage: "Disable usage of a `POLICY ACTION` such as \"open\" in the egress ACL",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -149,6 +153,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			c.StringSlice("tls-crl-file"),
 			c.Bool("danger-allow-access-to-private-ranges"),
 			c.String("error-message-on-deny"),
+			c.StringSlice("disable-acl-policy-action"),
 		)
 		if err != nil {
 			return err

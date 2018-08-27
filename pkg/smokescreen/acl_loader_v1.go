@@ -108,14 +108,14 @@ type EgressAclConfiguration struct {
 	Version  string        `yaml:"version"`
 }
 
-func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
+func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
 	yamlConfig := EgressAclConfiguration{}
 
-	yamlFile, err := ioutil.ReadFile(configPath)
+	yamlFile, err := ioutil.ReadFile(aclPath)
 	if err != nil {
-		log.Fatalf("Could not load whitelist configuration at '%s': #%v", configPath, err)
+		log.Fatalf("Could not load whitelist configuration at '%s': #%v", aclPath, err)
 		return nil, err
 	}
 
@@ -136,25 +136,34 @@ func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 	}
 
 	for _, v := range yamlConfig.Services {
-		res, err := aclConfigToRule(&v)
+		res, err := aclConfigToRule(&v, disabledAclPolicyActions)
 		if err != nil {
-			return fail(err)
+			config.Log.Error("gnored policy", err)
+		} else {
+			acl.Services[v.Name] = res
 		}
-		acl.Services[v.Name] = res
 	}
 
 	if yamlConfig.Default != nil {
-		res, err := aclConfigToRule(yamlConfig.Default)
+		res, err := aclConfigToRule(yamlConfig.Default, disabledAclPolicyActions)
 		if err != nil {
-			return fail(err)
+			config.Log.Error("gnored policy", err)
+		} else {
+			acl.Default = &res
 		}
-		acl.Default = &res
 	}
 	return &acl, nil
 }
 
-func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
+func aclConfigToRule(v *ServiceRule, disabledAclPolicyAction []string) (EgressAclRule, error) {
 	var enforcementPolicy ConfigEnforcementPolicy
+
+	// Validate policy action
+	for _, disabledAction := range disabledAclPolicyAction {
+		if disabledAction == v.Action {
+			return EgressAclRule{}, fmt.Errorf("policy action %#v has been disabled but is used in rule for service %#v", disabledAction, v.Name)
+		}
+	}
 
 	// Validate hosts
 

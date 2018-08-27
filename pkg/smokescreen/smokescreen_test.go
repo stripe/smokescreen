@@ -62,6 +62,7 @@ func TestClassifyIP(t *testing.T) {
 		nil,
 		false,
 		"Proxy denied",
+		[]string{},
 	)
 	a.NoError(err)
 
@@ -132,6 +133,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		nil,
 		false,
 		"Proxy denied",
+		[]string{},
 	)
 	if err != nil {
 		log.Fatal(err)

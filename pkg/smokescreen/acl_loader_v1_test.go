@@ -3,14 +3,21 @@
 package smokescreen
 
 import "github.com/stretchr/testify/assert"
-import "testing"
+import (
+	log "github.com/sirupsen/logrus"
+	"testing"
+)
+
+var dummyConf = &Config{
+	Log: log.New(),
+}
 
 func TestLoadFromYaml(t *testing.T) {
 	a := assert.New(t)
 
 	// Load a sane config
 	{
-		acl, err := LoadFromYamlFile("testdata/sample_config.yaml")
+		acl, err := LoadFromYamlFile(dummyConf, "testdata/sample_config.yaml", []string{})
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Services))
@@ -18,23 +25,23 @@ func TestLoadFromYaml(t *testing.T) {
 
 	// Load a broken config
 	{
-		acl, err := LoadFromYamlFile("testdata/broken_config.yaml")
+		acl, err := LoadFromYamlFile(dummyConf, "testdata/broken_config.yaml", []string{})
 		a.NotNil(err)
 		a.Nil(acl)
 	}
 
 	// Load a config that contains an unknown action
 	{
-		acl, err := LoadFromYamlFile("testdata/unknown_action.yaml")
-		a.NotNil(err)
-		a.Nil(acl)
+		acl, err := LoadFromYamlFile(dummyConf, "testdata/unknown_action.yaml", []string{})
+		a.Nil(err)
+		a.NotNil(acl)
 	}
 }
 
 func TestDecide(t *testing.T) {
 	a := assert.New(t)
 
-	acl, _ := LoadFromYamlFile("testdata/sample_config.yaml")
+	acl, _ := LoadFromYamlFile(dummyConf, "testdata/sample_config.yaml", []string{})
 
 	// Test allowed domain for enforcing service
 	{
@@ -100,13 +107,24 @@ func TestDecide(t *testing.T) {
 func TestLoadYamlWithInvalidGlob(t *testing.T) {
 	a := assert.New(t)
 
-	_, err := LoadFromYamlFile("testdata/contains_invalid_glob.yaml")
-	a.Error(err)
+	acl, err := LoadFromYamlFile(dummyConf, "testdata/contains_invalid_glob.yaml", []string{})
+	a.Nil(err)
+	a.Equal(0, len(acl.Services))
 }
 
 func TestLoadYamlWithInvalidMiddleGlob(t *testing.T) {
 	a := assert.New(t)
 
-	_, err := LoadFromYamlFile("testdata/contains_middle_glob.yaml")
-	a.Error(err)
+	acl, err := LoadFromYamlFile(dummyConf, "testdata/contains_middle_glob.yaml", []string{})
+	a.Nil(err)
+	a.Equal(0, len(acl.Services))
+}
+
+func TestLoadYamlWithDisabledAclAction(t *testing.T) {
+	a := assert.New(t)
+	acl, err := LoadFromYamlFile(dummyConf, "testdata/sample_config.yaml", []string{"enforce"})
+	a.Nil(err)
+	a.NotNil(acl)
+	a.Equal(2, len(acl.Services))
+	a.Nil(acl.Default)
 }

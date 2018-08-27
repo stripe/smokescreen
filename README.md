@@ -46,25 +46,26 @@ Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy t
 ### CLI
 Here are the options you can give Smokescreen:
 ```
-   --help                                   Show this help text.
-   --listen-ip IP                           listen on interface with address IP.
-                                              This argument is ignored when running under Einhorn. (default: any)
-   --listen-port PORT                       listen on port PORT.
-                                              This argument is ignored when running under Einhorn. (default: 4750)
-   --timeout DURATION                       Time out after DURATION when connecting. (default: 10s)
-   --maintenance-file FILE                  Watch FILE for maintenance mode.
-                                              HTTP(S) requests to /healthcheck return 404 if the file's permissions are set to 000.
-   --proxy-protocol                         Enable PROXY protocol support.
-   --deny-range RANGE                       Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
-   --allow-range RANGE                      Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
-   --egress-acl-file FILE                   Validate egress traffic against FILE
-   --statsd-address ADDRESS                 Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
-   --tls-server-bundle-file FILE            Authenticate to clients using key and certs from FILE
-   --tls-client-ca-file FILE                Validate client certificates using Certificate Authority from FILE
-   --tls-crl-file FILE                      Verify validity of client certificates against Certificate Revocation List from FILE
-   --danger-allow-access-to-private-ranges  WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.
-   --error-message-on-deny MESSAGE          Display MESSAGE in the HTTP response if proxying request is denied
-   --version, -v                            print the version
+   --help                                     Show this help text.
+   --listen-ip IP                             listen on interface with address IP.
+                                                This argument is ignored when running under Einhorn. (default: any)
+   --listen-port PORT                         listen on port PORT.
+                                                This argument is ignored when running under Einhorn. (default: 4750)
+   --timeout DURATION                         Time out after DURATION when connecting. (default: 10s)
+   --maintenance-file FILE                    Watch FILE for maintenance mode.
+                                                HTTP(S) requests to /healthcheck return 404 if the file's permissions are set to 000.
+   --proxy-protocol                           Enable PROXY protocol support.
+   --deny-range RANGE                         Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
+   --allow-range RANGE                        Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
+   --egress-acl-file FILE                     Validate egress traffic against FILE
+   --statsd-address ADDRESS                   Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
+   --tls-server-bundle-file FILE              Authenticate to clients using key and certs from FILE
+   --tls-client-ca-file FILE                  Validate client certificates using Certificate Authority from FILE
+   --tls-crl-file FILE                        Verify validity of client certificates against Certificate Revocation List from FILE
+   --danger-allow-access-to-private-ranges    WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.
+   --error-message-on-deny MESSAGE            Display MESSAGE in the HTTP response if proxying request is denied
+   --disable-acl-policy-action POLICY ACTION  Disable usage of a POLICY ACTION such as "open" in the egress ACL
+   --version, -v                              print the version
 ```
 
 ### Importing
