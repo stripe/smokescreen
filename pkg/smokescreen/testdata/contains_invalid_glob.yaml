@@ -10,10 +10,21 @@ services:
 
   - name: report-dummy-srv
     project: security
-    action: purposely_unknown_action # entering an unknown action should not be accepted
+    action: report
     allowed_domains:
       - example3.com
       
   - name: open-dummy-srv
     project: automation
     action: open
+
+  - name: dummy-glob
+    project: phony
+    action: enforce
+    allowed_domains:
+      - "*bob.example.com"
+
+
+default:
+    project: security
+    action: enforce

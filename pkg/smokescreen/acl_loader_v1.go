@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"regexp"
-
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
 type EgressAclRule struct {
-	Project                    string
-	Policy                     ConfigEnforcementPolicy
-	DomainExpressionsOrStrings []interface{}
+	Project    string
+	Policy     ConfigEnforcementPolicy
+	DomainGlob []string
 }
 
 type EgressAclConfig struct {
@@ -47,16 +46,15 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	}
 
 	matches := false
-	for _, exp := range service.DomainExpressionsOrStrings {
-
-		switch v := exp.(type) {
-		case *regexp.Regexp:
-			if v.Match([]byte(toHost)) {
+	for _, host := range service.DomainGlob {
+		if len(host) > 0 && host[0] == '*' {
+			postfix := host[1:]
+			if strings.HasSuffix(toHost, postfix) {
 				matches = true
 				break
 			}
-		case *string:
-			if *v == toHost {
+		} else {
+			if host == toHost {
 				matches = true
 				break
 			}
@@ -98,10 +96,10 @@ func (ew *EgressAclConfig) Project(fromService string) (string, error) {
 // Configuration
 
 type ServiceRule struct {
-	Name           string   `yaml:"name"`
-	Project        string   `yaml:"project"`
-	Action         string   `yaml:"action"`
-	AllowedDomains []string `yaml:"allowed_domains"`
+	Name         string   `yaml:"name"`
+	Project      string   `yaml:"project"`
+	Action       string   `yaml:"action"`
+	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
 type EgressAclConfiguration struct {
@@ -156,47 +154,31 @@ func LoadFromYamlFile(configPath string) (*EgressAclConfig, error) {
 }
 
 func aclConfigToRule(v *ServiceRule) (EgressAclRule, error) {
+	var enforcementPolicy ConfigEnforcementPolicy
 
-	regexRegex, err := regexp.Compile("^/.*/$")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Validate hosts
 
-	domainExpr := make([]interface{}, len(v.AllowedDomains))
-
-	for i, v := range v.AllowedDomains {
-
-		// Is the entry a regex?
-		if regexRegex.MatchString(v) {
-			v = v[1 : len(v)-1] // Drop both '/'
-			expr, err := regexp.Compile(v)
-
-			if err != nil {
-				return EgressAclRule{}, err
-			}
-			domainExpr[i] = expr
-		} else {
-			domainExpr[i] = &v
+	for _, host := range v.AllowedHosts {
+		if !strings.HasPrefix(host, "*.") && strings.HasPrefix(host, "*") {
+			return EgressAclRule{}, fmt.Errorf("glob must represent a full (sub)domain")
 		}
 	}
 
-	var enforcement_policy ConfigEnforcementPolicy
-
 	switch v.Action {
 	case "open":
-		enforcement_policy = ConfigEnforcementPolicyOpen
+		enforcementPolicy = ConfigEnforcementPolicyOpen
 	case "report":
-		enforcement_policy = ConfigEnforcementPolicyReport
+		enforcementPolicy = ConfigEnforcementPolicyReport
 	case "enforce":
-		enforcement_policy = ConfigEnforcementPolicyEnforce
+		enforcementPolicy = ConfigEnforcementPolicyEnforce
 	default:
-		enforcement_policy = 0
+		enforcementPolicy = 0
 		return EgressAclRule{}, errors.New(fmt.Sprintf("Unknown action '%s' under '%s'.", v.Action, v.Name))
 	}
 
 	return EgressAclRule{
-		Project: v.Project,
-		Policy:  enforcement_policy,
-		DomainExpressionsOrStrings: domainExpr,
+		Project:    v.Project,
+		Policy:     enforcementPolicy,
+		DomainGlob: v.AllowedHosts,
 	}, nil
 }

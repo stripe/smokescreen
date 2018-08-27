@@ -5,18 +5,25 @@ services:
     project: usersec
     action: enforce
     allowed_domains:
-      - /^example1\.com$/
-      - /^([^.]*\.)?example2\.com$/
+      - example1.com
+      - example2.com
 
   - name: report-dummy-srv
     project: security
     action: report
     allowed_domains:
-      - /^example3\.com$/
+      - example3.com
       
   - name: open-dummy-srv
     project: automation
     action: open
+
+  - name: dummy-glob
+    project: phony
+    action: enforce
+    allowed_domains:
+      - "*.example.com"
+
 
 default:
     project: security

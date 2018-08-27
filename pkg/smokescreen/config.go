@@ -23,6 +23,7 @@ import (
 
 import (
 	log "github.com/sirupsen/logrus"
+	"regexp"
 )
 
 type Config struct {
@@ -43,6 +44,8 @@ type Config struct {
 	clientCasBySubjectKeyId map[string]*x509.Certificate
 	ErrorMessageOnDeny      string
 	Log                     *log.Logger
+
+	hostExtractExpr *regexp.Regexp
 }
 
 // RFC 5280,  4.2.1.1
@@ -90,6 +93,11 @@ func NewConfig(
 		config.Log = log.New()
 	} else {
 		config.Log = logger
+	}
+
+	config.hostExtractExpr, err = regexp.Compile("^([^:]*)(:\\d+)?$")
+	if err != nil {
+		return nil, err
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.

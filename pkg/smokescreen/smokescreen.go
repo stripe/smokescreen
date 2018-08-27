@@ -365,10 +365,13 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		project := ""
 		project, projectErr := config.EgressAcl.Project(role)
 
-		result, err := config.EgressAcl.Decide(role, outboundHost)
+		submatch := config.hostExtractExpr.FindStringSubmatch(outboundHost)
+
+		result, err := config.EgressAcl.Decide(role, submatch[1])
 		if err != nil {
 			return fail(err)
 		}
+
 		switch result {
 		case EgressAclDecisionDeny:
 

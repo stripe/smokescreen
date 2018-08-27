@@ -45,7 +45,7 @@ func TestDecide(t *testing.T) {
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "www.example2.com")
 		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
+		a.Equal(EgressAclDecisionDeny, res)
 	}
 	{
 		res, err := acl.Decide("enforce-dummy-srv", "example2.com")
@@ -78,4 +78,30 @@ func TestDecide(t *testing.T) {
 		a.Nil(err)
 		a.Equal(EgressAclDecisionAllow, res)
 	}
+
+	// Globbing
+	{
+		res, err := acl.Decide("dummy-glob", "shouldbreak.com")
+		a.Nil(err)
+		a.Equal(EgressAclDecisionDeny, res)
+	}
+	{
+		res, err := acl.Decide("dummy-glob", "example.com")
+		a.Nil(err)
+		a.Equal(EgressAclDecisionDeny, res)
+	}
+	{
+		res, err := acl.Decide("dummy-glob", "api.example.com")
+		a.Nil(err)
+		a.Equal(EgressAclDecisionAllow, res)
+	}
+}
+
+func TestLoadYamlWithInvalidGlob(t *testing.T) {
+	a := assert.New(t)
+
+	_, err := LoadFromYamlFile("testdata/contains_invalid_glob.yaml")
+	a.Error(err)
+
+
 }
