@@ -18,6 +18,7 @@ Smokescreen can be provided with an ACL to determine which remote hosts a servic
 By default, Smokescreen will identify the clients in the following manner:
 
 | client ca provided? | method |
+| --- | --- |
 | yes | client cert's `common name` |
 | no | `X-Smokescreen-Role` header |
 
@@ -119,6 +120,7 @@ Three policies are supported:
 A host can be specified with or without a globbing prefix
 
 | host | valid |
+| --- | --- |
 | `example.com` | yes |
 | `*.example.com` | yes |
 | `api.*.example.com` | no | 
