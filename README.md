@@ -84,7 +84,7 @@ import (...)
 
 func main() {
     // Here is an opportunity to pass your logger
-	conf, err := cmd.ConfigFromCli(nil)
+	conf, err := cmd.NewConfiguration(nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
