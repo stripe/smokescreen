@@ -3,7 +3,6 @@
 package smokescreen
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var cidrBlacklistExemptionsStrings = []string{
@@ -45,25 +46,14 @@ func TestClassifyIP(t *testing.T) {
 	cidrBlacklistExemptions, err := generateCidrBlacklistExemptions()
 	a.NoError(err)
 
-	conf, err := NewConfig(
-		nil,
-		"",
-		int(0),
-		PrivateNetworks(),
-		cidrBlacklistExemptions,
-		10*time.Second,
-		10*time.Second,
-		"",
-		"",
-		"",
-		false,
-		"",
-		nil,
-		nil,
-		false,
-		"Proxy denied",
-		[]string{},
-	)
+	conf := &Config{
+		CidrBlacklist:           PrivateNetworks(),
+		CidrBlacklistExemptions: cidrBlacklistExemptions,
+		ConnectTimeout:          10 * time.Second,
+		ExitTimeout:             10 * time.Second,
+		ErrorMessageOnDeny:      "Proxy denied",
+	}
+	err = conf.Init()
 	a.NoError(err)
 
 	testIPs := []testCase{
@@ -116,28 +106,17 @@ func TestClearsErrorHeader(t *testing.T) {
 	a.NoError(err)
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	conf, err := NewConfig(
-		nil,
-		"",
-		int(39381),
-		PrivateNetworks(),
-		cidrBlacklistExemptions,
-		10*time.Second,
-		10*time.Second,
-		"",
-		"",
-		"",
-		false,
-		"",
-		nil,
-		nil,
-		false,
-		"Proxy denied",
-		[]string{},
-	)
-	if err != nil {
-		log.Fatal(err)
+	conf := &Config{
+		Port:                    39381,
+		CidrBlacklist:           PrivateNetworks(),
+		CidrBlacklistExemptions: cidrBlacklistExemptions,
+		ConnectTimeout:          10 * time.Second,
+		ExitTimeout:             10 * time.Second,
+		ErrorMessageOnDeny:      "Proxy denied",
 	}
+
+	err = conf.Init()
+	a.NoError(err)
 
 	proxy := buildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)

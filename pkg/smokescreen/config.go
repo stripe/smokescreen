@@ -1,29 +1,26 @@
 package smokescreen
 
 import (
-	"crypto/x509/pkix"
-	"encoding/asn1"
-	"errors"
-	"github.com/DataDog/datadog-go/statsd"
-
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
-)
 
-import (
+	"github.com/DataDog/datadog-go/statsd"
 	log "github.com/sirupsen/logrus"
-	"regexp"
 )
 
 type Config struct {
@@ -53,56 +50,26 @@ type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
 }
 
-func NewConfig(
-	logger *log.Logger,
-	serverIp string,
-	port int,
-	cidrBlacklist []net.IPNet,
-	cidrBlacklistExemptions []net.IPNet, // Formerly conceptually called networkWhitelist
-	connectTimeout time.Duration,
-	exitTimeout time.Duration,
-	maintenanceFile string,
-	statsdAddr string,
-	egressAclFile string,
-	supportProxyProtocol bool,
-	tlsServerPemFile string,
-	tlsClientCasFiles []string,
-	crlFiles []string,
-	allowPrivateRanges bool,
-	errorMessageOnDeny string,
-	disabledAclPolicyActions []string,
-
-) (*Config, error) {
-
+func (config *Config) Init() error {
 	var err error
-	config := Config{
-		Ip:                      serverIp,
-		Port:                    port,
-		CidrBlacklist:           cidrBlacklist,
-		CidrBlacklistExemptions: cidrBlacklistExemptions,
-		ConnectTimeout:          connectTimeout,
-		ExitTimeout:             exitTimeout,
-		MaintenanceFile:         maintenanceFile,
-		SupportProxyProtocol:    supportProxyProtocol,
-		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
-		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
-		AllowPrivateRange:       allowPrivateRanges,
-		ErrorMessageOnDeny:      errorMessageOnDeny,
-	}
 
-	if logger == nil {
+	if config.CrlByAuthorityKeyId == nil {
+		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
+	}
+	if config.clientCasBySubjectKeyId == nil {
+		config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
+	}
+	if config.Log == nil {
 		config.Log = log.New()
-	} else {
-		config.Log = logger
 	}
 
 	config.hostExtractExpr, err = regexp.Compile("^([^:]*)(:\\d+)?$")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
-	if len(tlsClientCasFiles) > 0 { // If client certs are set, pick the CN.
+	if config.TlsConfig != nil && config.TlsConfig.ClientCAs != nil { // If client certs are set, pick the CN.
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
 			if len(req.TLS.PeerCertificates) == 0 { // This should be impossible as long as ClientAuth is RequireAndVerifyClientCert
@@ -121,31 +88,15 @@ func NewConfig(
 		}
 	}
 
-	err = config.setupStatsd(statsdAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	err = config.setupEgressAcl(egressAclFile, disabledAclPolicyActions)
-	if err != nil {
-		return nil, err
-	}
-
-	err = config.setupTls(tlsServerPemFile, tlsClientCasFiles)
-	if err != nil {
-		return nil, err
-	}
-
-	err = config.setupCrls(crlFiles)
-	if err != nil {
-		return nil, err
-	}
-
-	return &config, nil
+	return nil
 }
 
-func (config *Config) setupCrls(crlFiles []string) error {
+func (config *Config) SetupCrls(crlFiles []string) error {
 	fail := func(err error) error { fmt.Print(err); return err }
+
+	config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
+	config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
+
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
 		if err != nil {
@@ -209,31 +160,41 @@ func (config *Config) setupCrls(crlFiles []string) error {
 	return nil
 }
 
-func (config *Config) setupStatsd(statsdAddr string) error {
-	if statsdAddr != "" {
-		track, err := statsd.New(statsdAddr)
-		if err != nil {
-			return err
-		}
-		config.StatsdClient = track
+func (config *Config) SetupStatsd(addr, namespace string) error {
+	if addr == "" {
+		config.StatsdClient = nil
+		return nil
 	}
+
+	track, err := statsd.New(addr)
+	if err != nil {
+		return err
+	}
+	config.StatsdClient = track
+
+	config.StatsdClient.Namespace = namespace
+
 	return nil
 }
 
-func (config *Config) setupEgressAcl(aclFile string, disabledAclPolicyActions []string) error {
-	if aclFile != "" {
-		log.Printf("Loading egress ACL from %s", aclFile)
-		egressAcl, err := LoadFromYamlFile(config, aclFile, disabledAclPolicyActions)
-		if err != nil {
-			log.Print(err)
-			return err
-		}
-		config.EgressAcl = egressAcl
+func (config *Config) SetupEgressAcl(aclFile string, disabledAclPolicyActions []string) error {
+	if aclFile == "" {
+		config.EgressAcl = nil
+		return nil
 	}
+
+	log.Printf("Loading egress ACL from %s", aclFile)
+	egressAcl, err := LoadFromYamlFile(config, aclFile, disabledAclPolicyActions)
+	if err != nil {
+		log.Print(err)
+		return err
+	}
+	config.EgressAcl = egressAcl
+
 	return nil
 }
 
-func (config *Config) setupTls(tlsServerPemFile string, tlsClientCasFiles []string) error {
+func (config *Config) SetupTls(tlsServerPemFile string, tlsClientCasFiles []string) error {
 	fail := func(err error) error { return err }
 
 	if tlsServerPemFile != "" {
@@ -277,6 +238,7 @@ func (config *Config) setupTls(tlsServerPemFile string, tlsClientCasFiles []stri
 		if len(tlsClientCasFiles) != 0 {
 			return fail(fmt.Errorf("It is pointless to set client CAs without setting the server's cert/key."))
 		}
+		config.TlsConfig = nil
 	}
 	return nil
 }

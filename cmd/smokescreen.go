@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"errors"
-	"github.com/stripe/smokescreen/pkg/smokescreen"
-	"gopkg.in/urfave/cli.v1"
 	"net"
 	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/urfave/cli.v1"
+
+	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
 
 // Process command line args into a configuration object.
@@ -136,30 +137,35 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
-		conf, err := smokescreen.NewConfig(
-			logger,
-			c.String("listen-ip"),
-			c.Int("listen-port"),
-			cidrBlacklist,
-			cidrBlacklistExemptions,
-			c.Duration("timeout"),
-			60*time.Second,
-			c.String("maintenance-file"),
-			c.String("statsd-address"),
-			c.String("egress-acl-file"),
-			c.Bool("proxy-protocol"),
-			c.String("tls-server-bundle-file"),
-			c.StringSlice("tls-client-ca-file"),
-			c.StringSlice("tls-crl-file"),
-			c.Bool("danger-allow-access-to-private-ranges"),
-			c.String("error-message-on-deny"),
-			c.StringSlice("disable-acl-policy-action"),
-		)
-		if err != nil {
-			return err
+		conf := &smokescreen.Config{
+			Log:                     logger,
+			Ip:                      c.String("listen-ip"),
+			Port:                    c.Int("listen-port"),
+			CidrBlacklist:           cidrBlacklist,
+			CidrBlacklistExemptions: cidrBlacklistExemptions,
+			ConnectTimeout:          c.Duration("timeout"),
+			ExitTimeout:             60 * time.Second,
+			MaintenanceFile:         c.String("maintenance-file"),
+			SupportProxyProtocol:    c.Bool("proxy-protocol"),
+			AllowPrivateRange:       c.Bool("danger-allow-access-to-private-ranges"),
+			ErrorMessageOnDeny:      c.String("error-message-on-deny"),
 		}
 
-		conf.StatsdClient.Namespace = "smokescreen."
+		if err := conf.SetupStatsd(c.String("statsd-address"), "smokescreen."); err != nil {
+			return err
+		}
+		if err := conf.SetupEgressAcl(c.String("egress-acl-file"), c.StringSlice("disable-acl-policy-action")); err != nil {
+			return err
+		}
+		if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
+			return err
+		}
+		if err := conf.SetupTls(c.String("tls-server-bundle-file"), c.StringSlice("tls-client-ca-file")); err != nil {
+			return err
+		}
+		if err := conf.Init(); err != nil {
+			return err
+		}
 
 		configToReturn = conf
 		return nil
