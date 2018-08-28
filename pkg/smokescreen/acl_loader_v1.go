@@ -3,10 +3,11 @@ package smokescreen
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 )
 
 type EgressAclRule struct {
@@ -38,7 +39,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	}
 
 	if !found {
-		return 0, fmt.Errorf("unknown role role=%#v", fromService)
+		return 0, UnknownRoleError{fromService}
 	}
 
 	if service.Policy == ConfigEnforcementPolicyOpen {

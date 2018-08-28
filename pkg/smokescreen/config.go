@@ -24,26 +24,28 @@ import (
 )
 
 type Config struct {
-	Ip                      string
-	Port                    int
-	CidrBlacklist           []net.IPNet
-	CidrBlacklistExemptions []net.IPNet
-	ConnectTimeout          time.Duration
-	ExitTimeout             time.Duration
-	MaintenanceFile         string
-	StatsdClient            *statsd.Client
-	AllowPrivateRange       bool
-	EgressAcl               EgressAcl
-	SupportProxyProtocol    bool
-	TlsConfig               *tls.Config
-	CrlByAuthorityKeyId     map[string]*pkix.CertificateList
-	RoleFromRequest         func(subject *http.Request) (string, error)
-	clientCasBySubjectKeyId map[string]*x509.Certificate
-	ErrorMessageOnDeny      string
-	Log                     *log.Logger
+	Ip                           string
+	Port                         int
+	CidrBlacklist                []net.IPNet
+	CidrBlacklistExemptions      []net.IPNet
+	ConnectTimeout               time.Duration
+	ExitTimeout                  time.Duration
+	MaintenanceFile              string
+	StatsdClient                 *statsd.Client
+	AllowPrivateRange            bool
+	EgressAcl                    EgressAcl
+	SupportProxyProtocol         bool
+	TlsConfig                    *tls.Config
+	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
+	RoleFromRequest              func(subject *http.Request) (string, error)
+	clientCasBySubjectKeyId      map[string]*x509.Certificate
+	AdditionalErrorMessageOnDeny string
+	Log                          *log.Logger
 
 	hostExtractExpr *regexp.Regexp
 }
+
+type MissingRoleError error
 
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
@@ -73,7 +75,7 @@ func (config *Config) Init() error {
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
 			if len(req.TLS.PeerCertificates) == 0 { // This should be impossible as long as ClientAuth is RequireAndVerifyClientCert
-				fail(fmt.Errorf("fatal: No PeerCertificates"))
+				fail(MissingRoleError(fmt.Errorf("fatal: No PeerCertificates")))
 			}
 			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 		}
@@ -82,7 +84,7 @@ func (config *Config) Init() error {
 			fail := func(err error) (string, error) { return "", err }
 			idHeader := req.Header["X-Smokescreen-Role"]
 			if len(idHeader) != 1 {
-				return fail(fmt.Errorf("no or multiple 'X-Smokescreen-Role' header provided"))
+				return fail(MissingRoleError(fmt.Errorf("no or multiple 'X-Smokescreen-Role' header provided")))
 			}
 			return idHeader[0], nil
 		}
