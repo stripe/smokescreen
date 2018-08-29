@@ -1,4 +1,4 @@
-// +build integration
+// +build !nointegration
 
 package cmd
 
@@ -39,57 +39,39 @@ func NewDummyServer() *http.Server {
 }
 
 type TestCase struct {
-	AuthorizedHost bool
-	OverTls        bool
-	OverConnect    bool
-	Action         smokescreen.ConfigEnforcementPolicy
-	ProxyPort      int
-	TargetPort     int
-	RandomTrace    int
+	ExpectAllow bool
+	OverTls     bool
+	OverConnect bool
+	ProxyPort   int
+	TargetPort  int
+	RandomTrace int
+	Host        string
+	RoleName    string
 }
 
 func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error) {
 	a := assert.New(t)
-	if test.Action == smokescreen.ConfigEnforcementPolicyEnforce {
-		if test.AuthorizedHost || test.Action != smokescreen.ConfigEnforcementPolicyEnforce {
-			if !a.NoError(err) {
-				return
-			}
-			a.Equal(200, resp.StatusCode)
-		} else {
-			if !a.NoError(err) {
-				return
-			}
-			a.Equal(503, resp.StatusCode)
-			body, err := ioutil.ReadAll(resp.Body)
-			if !a.NoError(err) {
-				return
-			}
-			a.Contains(string(body), "egress proxying denied to host")
-			a.Contains(string(body), "moar ctx")
-		}
-	} else {
+	if test.ExpectAllow {
 		if !a.NoError(err) {
 			return
 		}
 		a.Equal(200, resp.StatusCode)
+	} else {
+		if !a.NoError(err) {
+			return
+		}
+		a.Equal(503, resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if !a.NoError(err) {
+			return
+		}
+		a.Contains(string(body), "egress proxying denied to host")
+		a.Contains(string(body), "moar ctx")
 	}
 }
 
-func generateRoleForTest(test *TestCase) string {
-	switch test.Action {
-	case smokescreen.ConfigEnforcementPolicyOpen:
-		return "egressneedingservice-open"
-	case smokescreen.ConfigEnforcementPolicyReport:
-		return "egressneedingservice-report"
-	case smokescreen.ConfigEnforcementPolicyEnforce:
-		return "egressneedingservice-enforce"
-	}
-	return "unknown-mode"
-}
-
-func actionStringForTest(test *TestCase) string {
-	switch test.Action {
+func generateRoleForAction(action smokescreen.ConfigEnforcementPolicy) string {
+	switch action {
 	case smokescreen.ConfigEnforcementPolicyOpen:
 		return "open"
 	case smokescreen.ConfigEnforcementPolicyReport:
@@ -97,7 +79,7 @@ func actionStringForTest(test *TestCase) string {
 	case smokescreen.ConfigEnforcementPolicyEnforce:
 		return "enforce"
 	}
-	return ""
+	panic("unknown-mode")
 }
 
 func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
@@ -112,15 +94,24 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 
 				var conn net.Conn
 
+				connectProxyReq, err := http.NewRequest(
+					"CONNECT",
+					fmt.Sprintf("http://%s", addr),
+					nil)
+
 				proxyUrl := fmt.Sprintf("localhost:%d", test.ProxyPort)
 				if test.OverTls {
+					var certs []tls.Certificate
 
-					// Client certs
-					actionString := actionStringForTest(test)
-					certPath := fmt.Sprintf("testdata/pki/%s-client.pem", actionString)
-					keyPath := fmt.Sprintf("testdata/pki/%s-client-key.pem", actionString)
-					cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-					a.NoError(err)
+					if test.RoleName != "" {
+						// Client certs
+						certPath := fmt.Sprintf("testdata/pki/%s-client.pem", test.RoleName)
+						keyPath := fmt.Sprintf("testdata/pki/%s-client-key.pem", test.RoleName)
+						cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+						a.NoError(err)
+
+						certs = append(certs, cert)
+					}
 
 					caBytes, err := ioutil.ReadFile("testdata/pki/ca.pem")
 					a.NoError(err)
@@ -128,7 +119,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					a.True(caPool.AppendCertsFromPEM(caBytes))
 
 					proxyTlsClientConfig := tls.Config{
-						Certificates: []tls.Certificate{cert},
+						Certificates: certs,
 						RootCAs:      caPool,
 					}
 					connRaw, err := tls.Dial("tcp", proxyUrl, &proxyTlsClientConfig)
@@ -139,15 +130,11 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					connRaw, err := net.Dial(network, proxyUrl)
 					a.NoError(err)
 					conn = connRaw
-				}
 
-				connectProxyReq, err := http.NewRequest(
-					"CONNECT",
-					fmt.Sprintf("http://%s", addr),
-					nil)
-
-				if !test.OverTls { // If we're not talking to the proxy over TLS, let's use headers as identifiers
-					connectProxyReq.Header.Add("X-Smokescreen-Role", generateRoleForTest(test))
+					// If we're not talking to the proxy over TLS, let's use headers as identifiers
+					if test.RoleName != "" {
+						connectProxyReq.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
+					}
 					connectProxyReq.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 				}
 
@@ -167,29 +154,22 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 	a := assert.New(t)
 
-	var host string
-	if test.AuthorizedHost {
-		host = "127.0.0.1"
-	} else { // localhost is not in the list of authorised targets
-		host = "localhost"
-	}
-
 	var req *http.Request
 	var err error
 	if test.OverConnect {
 		// Target the external destination
-		target := fmt.Sprintf("http://%s:%d", host, test.TargetPort)
+		target := fmt.Sprintf("http://%s:%d", test.Host, test.TargetPort)
 		req, err = http.NewRequest("GET", target, nil)
 	} else {
 		// Target the proxy
 		target := fmt.Sprintf("http://%s:%d", "127.0.0.1", test.ProxyPort)
 		req, err = http.NewRequest("GET", target, nil)
-		req.Host = fmt.Sprintf("%s:%d", host, test.TargetPort)
+		req.Host = fmt.Sprintf("%s:%d", test.Host, test.TargetPort)
 	}
 	a.NoError(err)
 
 	if !test.OverTls && !test.OverConnect { // If we're not talking to the proxy over TLS, let's use headers as identifiers
-		req.Header.Add("X-Smokescreen-Role", generateRoleForTest(test))
+		req.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
 		req.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 	}
 	return req
@@ -231,39 +211,74 @@ func TestSmokescreenIntegration(t *testing.T) {
 		smokescreen.ConfigEnforcementPolicyOpen,
 	}
 
-	for _, overTls := range overTlsDomain {
-		for _, overConnect := range overConnectDomain {
+	var testCases []*TestCase
+
+	for _, overConnect := range overConnectDomain {
+		for _, overTls := range overTlsDomain {
+			if overTls && !overConnect {
+				// Is a super sketchy use case, let's not do that.
+				continue
+			}
+
+			var proxyPort int
+			if overTls {
+				proxyPort = tlsSmokescreenPort
+			} else {
+				proxyPort = plainSmokescreenPort
+			}
+
 			for _, authorizedHost := range authorizedHostsDomain {
+				var host string
+				if authorizedHost {
+					host = "127.0.0.1"
+				} else { // localhost is not in the list of authorized targets
+					host = "localhost"
+				}
+
 				for _, action := range actionsDomain {
-					if overTls && !overConnect {
-						// Is a super sketchy use case, let's not do that.
-						continue
-					}
-
-					var proxyPort int
-					if overTls {
-						proxyPort = tlsSmokescreenPort
-					} else {
-						proxyPort = plainSmokescreenPort
-					}
-
 					testCase := &TestCase{
-						OverTls:        overTls,
-						OverConnect:    overConnect,
-						AuthorizedHost: authorizedHost,
-						Action:         action,
-						ProxyPort:      proxyPort,
-						TargetPort:     outsideListenerPort,
-						RandomTrace:    rand.Int(),
+						ExpectAllow: authorizedHost || action != smokescreen.ConfigEnforcementPolicyEnforce,
+						OverTls:     overTls,
+						OverConnect: overConnect,
+						ProxyPort:   proxyPort,
+						TargetPort:  outsideListenerPort,
+						Host:        host,
+						RoleName:    generateRoleForAction(action),
 					}
-					fmt.Printf("%+v\n", testCase)
-					executeRequestForTest(t, testCase)
-					if t.Failed() {
-						fmt.Printf("%+v\n", testCase)
-						return
-					}
+					testCases = append(testCases, testCase)
 				}
 			}
+		}
+
+		baseDefaultCase := TestCase{
+			OverConnect: overConnect,
+			ProxyPort:   plainSmokescreenPort,
+			TargetPort:  outsideListenerPort,
+		}
+
+		noRoleDenyCase := baseDefaultCase
+		noRoleDenyCase.Host = "127.0.0.1"
+		noRoleDenyCase.ExpectAllow = false
+
+		noRoleAllowCase := baseDefaultCase
+		noRoleAllowCase.Host = "localhost"
+		noRoleAllowCase.ExpectAllow = true
+
+		unknownRoleDenyCase := noRoleDenyCase
+		unknownRoleDenyCase.RoleName = "unknown"
+
+		unknownRoleAllowCase := noRoleAllowCase
+		unknownRoleAllowCase.RoleName = "unknown"
+
+		testCases = append(testCases, &unknownRoleAllowCase, &unknownRoleDenyCase, &noRoleAllowCase, &noRoleDenyCase)
+	}
+
+	for _, testCase := range testCases {
+		testCase.RandomTrace = rand.Int()
+		executeRequestForTest(t, testCase)
+		if t.Failed() {
+			fmt.Printf("%+v\n", testCase)
+			return
 		}
 	}
 }
