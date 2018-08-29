@@ -3,11 +3,11 @@ package smokescreen
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"strings"
-
-	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
+	"io"
+	"io/ioutil"
+	"os"
+	"strings"
 )
 
 type EgressAclRule struct {
@@ -103,24 +103,45 @@ type ServiceRule struct {
 	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
-type EgressAclConfiguration struct {
+type YamlEgressAclConfiguration struct {
 	Services []ServiceRule `yaml:"services"`
 	Default  *ServiceRule  `yaml:"default"`
 	Version  string        `yaml:"version"`
 }
 
-func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+func (yamlConf *YamlEgressAclConfiguration) ValidateConfig() error {
+	return nil
+}
+
+func LoadYamlAclFromFilePath(config *Config, aclPath string) (*EgressAclConfig, error) {
+	file, err := os.Open(aclPath)
+
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return LoadYamlAclFromReader(config, file)
+}
+
+func LoadYamlAclFromReader(config *Config, aclReader io.Reader) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
-	yamlConfig := EgressAclConfiguration{}
+	yamlConfig := YamlEgressAclConfiguration{}
 
-	yamlFile, err := ioutil.ReadFile(aclPath)
+	yamlFile, err := ioutil.ReadAll(aclReader)
 	if err != nil {
-		log.Fatalf("Could not load whitelist configuration at '%s': #%v", aclPath, err)
-		return nil, err
+		return fail(fmt.Errorf("could not load acl configuration"))
 	}
 
 	err = yaml.Unmarshal(yamlFile, &yamlConfig)
+
+	return BuildAclFromYamlConfig(config, &yamlConfig)
+}
+
+func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfiguration) (*EgressAclConfig, error) {
+	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
+
+	var err error
 
 	if yamlConfig.Version != "v1" {
 		return fail(fmt.Errorf("Expected version \"v1\" got %#v\n", yamlConfig.Version))
@@ -137,7 +158,7 @@ func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions [
 	}
 
 	for _, v := range yamlConfig.Services {
-		res, err := aclConfigToRule(&v, disabledAclPolicyActions)
+		res, err := aclConfigToRule(&v, config.DisabledAclPolicyActions)
 		if err != nil {
 			config.Log.Error("gnored policy", err)
 		} else {
@@ -146,7 +167,7 @@ func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions [
 	}
 
 	if yamlConfig.Default != nil {
-		res, err := aclConfigToRule(yamlConfig.Default, disabledAclPolicyActions)
+		res, err := aclConfigToRule(yamlConfig.Default, config.DisabledAclPolicyActions)
 		if err != nil {
 			config.Log.Error("gnored policy", err)
 		} else {

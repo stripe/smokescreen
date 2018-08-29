@@ -41,6 +41,7 @@ type Config struct {
 	clientCasBySubjectKeyId      map[string]*x509.Certificate
 	AdditionalErrorMessageOnDeny string
 	Log                          *log.Logger
+	DisabledAclPolicyActions     []string
 
 	hostExtractExpr *regexp.Regexp
 }
@@ -179,14 +180,14 @@ func (config *Config) SetupStatsd(addr, namespace string) error {
 	return nil
 }
 
-func (config *Config) SetupEgressAcl(aclFile string, disabledAclPolicyActions []string) error {
+func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
 		config.EgressAcl = nil
 		return nil
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
-	egressAcl, err := LoadFromYamlFile(config, aclFile, disabledAclPolicyActions)
+	egressAcl, err := LoadYamlAclFromFilePath(config, aclFile)
 	if err != nil {
 		log.Print(err)
 		return err
