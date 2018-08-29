@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"strings"
 	"io"
+	"io/ioutil"
 	"os"
+	"strings"
 )
 
 type EgressAclRule struct {
@@ -109,17 +109,17 @@ type EgressAclConfiguration struct {
 	Version  string        `yaml:"version"`
 }
 
-func LoadYamlAclFromFilePath(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+func LoadYamlAclFromFilePath(config *Config, aclPath string) (*EgressAclConfig, error) {
 	file, err := os.Open(aclPath)
 
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	return LoadYamlAclFromReader(config, file, disabledAclPolicyActions)
+	return LoadYamlAclFromReader(config, file)
 }
 
-func LoadYamlAclFromReader(config *Config, aclReader io.Reader, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+func LoadYamlAclFromReader(config *Config, aclReader io.Reader) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
 	yamlConfig := EgressAclConfiguration{}
@@ -146,7 +146,7 @@ func LoadYamlAclFromReader(config *Config, aclReader io.Reader, disabledAclPolic
 	}
 
 	for _, v := range yamlConfig.Services {
-		res, err := aclConfigToRule(&v, disabledAclPolicyActions)
+		res, err := aclConfigToRule(&v, config.DisabledAclPolicyActions)
 		if err != nil {
 			config.Log.Error("gnored policy", err)
 		} else {
@@ -155,7 +155,7 @@ func LoadYamlAclFromReader(config *Config, aclReader io.Reader, disabledAclPolic
 	}
 
 	if yamlConfig.Default != nil {
-		res, err := aclConfigToRule(yamlConfig.Default, disabledAclPolicyActions)
+		res, err := aclConfigToRule(yamlConfig.Default, config.DisabledAclPolicyActions)
 		if err != nil {
 			config.Log.Error("gnored policy", err)
 		} else {

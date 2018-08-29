@@ -138,23 +138,24 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		conf := &smokescreen.Config{
-			Log:                     logger,
-			Ip:                      c.String("listen-ip"),
-			Port:                    c.Int("listen-port"),
-			CidrBlacklist:           cidrBlacklist,
-			CidrBlacklistExemptions: cidrBlacklistExemptions,
-			ConnectTimeout:          c.Duration("timeout"),
-			ExitTimeout:             60 * time.Second,
-			MaintenanceFile:         c.String("maintenance-file"),
-			SupportProxyProtocol:    c.Bool("proxy-protocol"),
-			AllowPrivateRange:       c.Bool("danger-allow-access-to-private-ranges"),
-			ErrorMessageOnDeny:      c.String("error-message-on-deny"),
+			Log:                      logger,
+			Ip:                       c.String("listen-ip"),
+			Port:                     c.Int("listen-port"),
+			CidrBlacklist:            cidrBlacklist,
+			CidrBlacklistExemptions:  cidrBlacklistExemptions,
+			ConnectTimeout:           c.Duration("timeout"),
+			ExitTimeout:              60 * time.Second,
+			MaintenanceFile:          c.String("maintenance-file"),
+			SupportProxyProtocol:     c.Bool("proxy-protocol"),
+			AllowPrivateRange:        c.Bool("danger-allow-access-to-private-ranges"),
+			ErrorMessageOnDeny:       c.String("error-message-on-deny"),
+			DisabledAclPolicyActions: c.StringSlice("disable-acl-policy-action"),
 		}
 
 		if err := conf.SetupStatsd(c.String("statsd-address"), "smokescreen."); err != nil {
 			return err
 		}
-		if err := conf.SetupEgressAcl(c.String("egress-acl-file"), c.StringSlice("disable-acl-policy-action")); err != nil {
+		if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {
 			return err
 		}
 		if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {

@@ -24,23 +24,24 @@ import (
 )
 
 type Config struct {
-	Ip                      string
-	Port                    int
-	CidrBlacklist           []net.IPNet
-	CidrBlacklistExemptions []net.IPNet
-	ConnectTimeout          time.Duration
-	ExitTimeout             time.Duration
-	MaintenanceFile         string
-	StatsdClient            *statsd.Client
-	AllowPrivateRange       bool
-	EgressAcl               EgressAcl
-	SupportProxyProtocol    bool
-	TlsConfig               *tls.Config
-	CrlByAuthorityKeyId     map[string]*pkix.CertificateList
-	RoleFromRequest         func(subject *http.Request) (string, error)
-	clientCasBySubjectKeyId map[string]*x509.Certificate
-	ErrorMessageOnDeny      string
-	Log                     *log.Logger
+	Ip                       string
+	Port                     int
+	CidrBlacklist            []net.IPNet
+	CidrBlacklistExemptions  []net.IPNet
+	ConnectTimeout           time.Duration
+	ExitTimeout              time.Duration
+	MaintenanceFile          string
+	StatsdClient             *statsd.Client
+	AllowPrivateRange        bool
+	EgressAcl                EgressAcl
+	SupportProxyProtocol     bool
+	TlsConfig                *tls.Config
+	CrlByAuthorityKeyId      map[string]*pkix.CertificateList
+	RoleFromRequest          func(subject *http.Request) (string, error)
+	clientCasBySubjectKeyId  map[string]*x509.Certificate
+	ErrorMessageOnDeny       string
+	Log                      *log.Logger
+	DisabledAclPolicyActions []string
 
 	hostExtractExpr *regexp.Regexp
 }
@@ -177,14 +178,14 @@ func (config *Config) SetupStatsd(addr, namespace string) error {
 	return nil
 }
 
-func (config *Config) SetupEgressAcl(aclFile string, disabledAclPolicyActions []string) error {
+func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
 		config.EgressAcl = nil
 		return nil
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
-	egressAcl, err := LoadYamlAclFromFilePath(config, aclFile, disabledAclPolicyActions)
+	egressAcl, err := LoadYamlAclFromFilePath(config, aclFile)
 	if err != nil {
 		log.Print(err)
 		return err
