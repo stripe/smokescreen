@@ -3,10 +3,11 @@ package smokescreen
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"strings"
+	"io"
+	"os"
 )
 
 type EgressAclRule struct {
@@ -109,14 +110,22 @@ type EgressAclConfiguration struct {
 }
 
 func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+	file, err := os.Open(aclPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return LoadFromReader(config, file, disabledAclPolicyActions)
+}
+
+func LoadFromReader(config *Config, aclReader io.Reader, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
 	yamlConfig := EgressAclConfiguration{}
 
-	yamlFile, err := ioutil.ReadFile(aclPath)
+	yamlFile, err := ioutil.ReadAll(aclReader)
 	if err != nil {
-		log.Fatalf("Could not load whitelist configuration at '%s': #%v", aclPath, err)
-		return nil, err
+		return nil, fmt.Errorf("could not load acl configuration")
 	}
 
 	err = yaml.Unmarshal(yamlFile, &yamlConfig)
