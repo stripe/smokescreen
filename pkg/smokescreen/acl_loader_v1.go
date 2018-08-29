@@ -39,7 +39,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	}
 
 	if !found {
-		return 0, fmt.Errorf("unknown role role=%#v", fromService)
+		return 0, UnknownRoleError{fromService}
 	}
 
 	if service.Policy == ConfigEnforcementPolicyOpen {

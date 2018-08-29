@@ -63,7 +63,7 @@ Here are the options you can give Smokescreen:
    --tls-client-ca-file FILE                  Validate client certificates using Certificate Authority from FILE
    --tls-crl-file FILE                        Verify validity of client certificates against Certificate Revocation List from FILE
    --danger-allow-access-to-private-ranges    WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.
-   --error-message-on-deny MESSAGE            Display MESSAGE in the HTTP response if proxying request is denied
+   --additional-error-message-on-deny MESSAGE Display MESSAGE in the HTTP response if proxying request is denied
    --disable-acl-policy-action POLICY ACTION  Disable usage of a POLICY ACTION such as "open" in the egress ACL
    --version, -v                              print the version
 ```

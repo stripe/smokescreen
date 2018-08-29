@@ -17,13 +17,25 @@ import (
 	"github.com/stripe/go-einhorn/einhorn"
 )
 
-type IpType int
-
 const (
 	IpTypePublic IpType = iota
 	IpTypePrivate
 	IpTypeBlacklistExempted
+
+	denyMsgTmpl = "egress proxying denied to host '%s' because %s. " +
+		"If you didn't intend for your request to be proxied, you may want a 'no_proxy' environment variable."
 )
+
+type IpType int
+
+type denyError struct {
+	host   string
+	reason string
+}
+
+func (d denyError) Error() string {
+	return fmt.Sprintf(denyMsgTmpl, d.host, d.reason)
+}
 
 func (t IpType) String() string {
 	switch t {
@@ -96,8 +108,7 @@ func safeResolve(config *Config, network, addr string) (string, error) {
 		return resolved.String(), nil
 	default:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return "", fmt.Errorf("host %s resolves to illegal IP %s",
-			addr, resolved.IP)
+		return "", denyError{addr, fmt.Sprintf("resolves to %s", resolved.IP)}
 	}
 }
 
@@ -110,14 +121,32 @@ func dial(config *Config, network, addr string) (net.Conn, error) {
 	return net.DialTimeout(network, resolved, config.ConnectTimeout)
 }
 
-func errorResponse(req *http.Request, err error) *http.Response {
+func connectErrorResult(config *Config, ctx *goproxy.ProxyCtx, err error) (*goproxy.ConnectAction, string) {
+	config.Log.Warn(err)
+	ctx.Resp = errorResponse(ctx.Req, config, err)
+	return goproxy.RejectConnect, ""
+}
+
+func errorResponse(req *http.Request, config *Config, err error) *http.Response {
+	var msg string
+	if _, ok := err.(denyError); ok {
+		msg = err.Error()
+	} else {
+		msg = "unexpected error occurred"
+	}
+
+	if config.AdditionalErrorMessageOnDeny != "" {
+		msg += " "
+		msg += config.AdditionalErrorMessageOnDeny
+	}
+
 	resp := goproxy.NewResponse(req,
 		goproxy.ContentTypeText,
 		http.StatusServiceUnavailable,
-		err.Error()+"\n")
+		msg+"\n")
 	resp.ProtoMajor = req.ProtoMajor
 	resp.ProtoMinor = req.ProtoMinor
-	resp.Header.Set(errorHeader, err.Error())
+	resp.Header.Set(errorHeader, msg)
 	return resp
 }
 
@@ -139,17 +168,16 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		ctx.UserData = time.Now().Unix()
 
-		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 		req.Header.Del(roleHeader)
-		if shouldProxy {
-			return req, nil
-		} else {
-			return req, errorResponse(req, fmt.Errorf("%s", config.ErrorMessageOnDeny))
+		if err != nil {
+			return req, errorResponse(req, config, err)
 		}
+
+		return req, nil
 	})
 
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-
 		config.Log.WithFields(
 			logrus.Fields{
 				"remote": ctx.Req.RemoteAddr,
@@ -157,20 +185,20 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 			}).Info("received CONNECT proxy request")
 
 		// Check if requesting role is allowed to talk to remote
-		shouldProxy := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
-		if shouldProxy {
-			resolved, err := safeResolve(config, "tcp", host)
-			if err != nil {
-				config.Log.Warn(err)
-				ctx.Resp = errorResponse(ctx.Req, err)
-				return goproxy.RejectConnect, ""
-			}
-			ctx.UserData = time.Now().Unix()
-			logHttpsRequest(config, ctx, resolved)
-			return goproxy.OkConnect, resolved
-		} else {
-			return goproxy.RejectConnect, ""
+		var resolved string
+		err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		if err != nil {
+			return connectErrorResult(config, ctx, err)
 		}
+
+		resolved, err = safeResolve(config, "tcp", host)
+		if err != nil {
+			return connectErrorResult(config, ctx, err)
+		}
+
+		ctx.UserData = time.Now().Unix()
+		logHttpsRequest(config, ctx, resolved)
+		return goproxy.OkConnect, resolved
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -181,7 +209,7 @@ func buildProxy(config *Config) *goproxy.ProxyHttpServer {
 			resp.Header.Del(errorHeader)
 		}
 		if resp == nil && ctx.Error != nil {
-			resp = errorResponse(ctx.Req, ctx.Error)
+			resp = errorResponse(ctx.Req, config, ctx.Error)
 		}
 		return resp
 	})
@@ -351,15 +379,17 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) bool {
-	fail := func(err error) bool {
-		return false
-	}
-
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) error {
 	if config.EgressAcl != nil {
-		role, roleErr := config.RoleFromRequest(req)
-		if roleErr != nil {
-			return fail(roleErr)
+		role, err := config.RoleFromRequest(req)
+		if err != nil {
+			if _, ok := err.(MissingRoleError); ok {
+				return denyError{
+					outboundHost,
+					fmt.Sprintf("unable to extract a role from your request (%s)", err.Error()),
+				}
+			}
+			return err
 		}
 
 		project := ""
@@ -369,12 +399,17 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 
 		result, err := config.EgressAcl.Decide(role, submatch[1])
 		if err != nil {
-			return fail(err)
+			if rerr, ok := err.(UnknownRoleError); ok {
+				return denyError{
+					outboundHost,
+					fmt.Sprintf("you passed an unknown role '%s'", rerr.Role),
+				}
+			}
+			return err
 		}
 
 		switch result {
 		case EgressAclDecisionDeny:
-
 			config.Log.WithFields(
 				logrus.Fields{
 					"proxied":       false,
@@ -384,7 +419,10 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 					"client_role":   role,
 					"outbound_host": outboundHost,
 				}).Warn("request denied by acl")
-			return false
+			return denyError{
+				outboundHost,
+				fmt.Sprintf("your role '%s' is not allowed to access this host", role),
+			}
 
 		case EgressAclDecisionAllowAndReport:
 
@@ -402,5 +440,5 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 			// Well, everything is going as expected.
 		}
 	}
-	return true
+	return nil
 }

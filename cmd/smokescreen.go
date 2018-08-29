@@ -95,7 +95,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.",
 		},
 		cli.StringFlag{
-			Name:  "error-message-on-deny",
+			Name:  "additional-error-message-on-deny",
 			Usage: "Display `MESSAGE` in the HTTP response if proxying request is denied",
 		},
 		cli.StringSliceFlag{
@@ -138,18 +138,18 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		conf := &smokescreen.Config{
-			Log:                      logger,
-			Ip:                       c.String("listen-ip"),
-			Port:                     c.Int("listen-port"),
-			CidrBlacklist:            cidrBlacklist,
-			CidrBlacklistExemptions:  cidrBlacklistExemptions,
-			ConnectTimeout:           c.Duration("timeout"),
-			ExitTimeout:              60 * time.Second,
-			MaintenanceFile:          c.String("maintenance-file"),
-			SupportProxyProtocol:     c.Bool("proxy-protocol"),
-			AllowPrivateRange:        c.Bool("danger-allow-access-to-private-ranges"),
-			ErrorMessageOnDeny:       c.String("error-message-on-deny"),
-			DisabledAclPolicyActions: c.StringSlice("disable-acl-policy-action"),
+			Log:                          logger,
+			Ip:                           c.String("listen-ip"),
+			Port:                         c.Int("listen-port"),
+			CidrBlacklist:                cidrBlacklist,
+			CidrBlacklistExemptions:      cidrBlacklistExemptions,
+			ConnectTimeout:               c.Duration("timeout"),
+			ExitTimeout:                  60 * time.Second,
+			MaintenanceFile:              c.String("maintenance-file"),
+			SupportProxyProtocol:         c.Bool("proxy-protocol"),
+			AllowPrivateRange:            c.Bool("danger-allow-access-to-private-ranges"),
+			AdditionalErrorMessageOnDeny: c.String("additional-error-message-on-deny"),
+			DisabledAclPolicyActions:     c.StringSlice("disable-acl-policy-action"),
 		}
 
 		if err := conf.SetupStatsd(c.String("statsd-address"), "smokescreen."); err != nil {

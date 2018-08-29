@@ -47,11 +47,11 @@ func TestClassifyIP(t *testing.T) {
 	a.NoError(err)
 
 	conf := &Config{
-		CidrBlacklist:           PrivateNetworks(),
-		CidrBlacklistExemptions: cidrBlacklistExemptions,
-		ConnectTimeout:          10 * time.Second,
-		ExitTimeout:             10 * time.Second,
-		ErrorMessageOnDeny:      "Proxy denied",
+		CidrBlacklist:                PrivateNetworks(),
+		CidrBlacklistExemptions:      cidrBlacklistExemptions,
+		ConnectTimeout:               10 * time.Second,
+		ExitTimeout:                  10 * time.Second,
+		AdditionalErrorMessageOnDeny: "Proxy denied",
 	}
 	err = conf.Init()
 	a.NoError(err)
@@ -107,12 +107,12 @@ func TestClearsErrorHeader(t *testing.T) {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conf := &Config{
-		Port:                    39381,
-		CidrBlacklist:           PrivateNetworks(),
-		CidrBlacklistExemptions: cidrBlacklistExemptions,
-		ConnectTimeout:          10 * time.Second,
-		ExitTimeout:             10 * time.Second,
-		ErrorMessageOnDeny:      "Proxy denied",
+		Port:                         39381,
+		CidrBlacklist:                PrivateNetworks(),
+		CidrBlacklistExemptions:      cidrBlacklistExemptions,
+		ConnectTimeout:               10 * time.Second,
+		ExitTimeout:                  10 * time.Second,
+		AdditionalErrorMessageOnDeny: "Proxy denied",
 	}
 
 	err = conf.Init()

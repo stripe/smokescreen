@@ -9,8 +9,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/hashicorp/go-cleanhttp"
-	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -20,6 +18,9 @@ import (
 	"strconv"
 	"syscall"
 	"testing"
+
+	"github.com/hashicorp/go-cleanhttp"
+	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
 
 var plainSmokescreenPort = 4520
@@ -56,14 +57,16 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error)
 			}
 			a.Equal(200, resp.StatusCode)
 		} else {
-			if test.OverConnect {
-				a.Error(err)
-			} else {
-				if !a.NoError(err) {
-					return
-				}
-				a.Equal(503, resp.StatusCode)
+			if !a.NoError(err) {
+				return
 			}
+			a.Equal(503, resp.StatusCode)
+			body, err := ioutil.ReadAll(resp.Body)
+			if !a.NoError(err) {
+				return
+			}
+			a.Contains(string(body), "egress proxying denied to host")
+			a.Contains(string(body), "moar ctx")
 		}
 	} else {
 		if !a.NoError(err) {
@@ -253,6 +256,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 						TargetPort:     outsideListenerPort,
 						RandomTrace:    rand.Int(),
 					}
+					fmt.Printf("%+v\n", testCase)
 					executeRequestForTest(t, testCase)
 					if t.Failed() {
 						fmt.Printf("%+v\n", testCase)
@@ -276,7 +280,7 @@ func startSmokescreen(t *testing.T, useTls bool) func() {
 			fmt.Sprintf("--listen-port=%d", plainSmokescreenPort),
 			"--egress-acl-file=testdata/sample_config.yaml",
 			"--danger-allow-access-to-private-ranges",
-			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
+			"--additional-error-message-on-deny=moar ctx",
 		}, nil)
 	} else {
 		conf, err = NewConfiguration([]string{
@@ -285,10 +289,10 @@ func startSmokescreen(t *testing.T, useTls bool) func() {
 			fmt.Sprintf("--listen-port=%d", tlsSmokescreenPort),
 			"--egress-acl-file=testdata/sample_config.yaml",
 			"--danger-allow-access-to-private-ranges",
-			"--error-message-on-deny=\"egress denied: go see doc at https://example.com/egressproxy\"",
 			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
 			"--tls-client-ca-file=testdata/pki/ca.pem",
 			"--tls-crl-file=testdata/pki/crl.pem",
+			"--additional-error-message-on-deny=moar ctx",
 		}, nil)
 	}
 
