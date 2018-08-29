@@ -103,7 +103,7 @@ type ServiceRule struct {
 	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
-type EgressAclConfiguration struct {
+type YamlEgressAclConfiguration struct {
 	Services []ServiceRule `yaml:"services"`
 	Default  *ServiceRule  `yaml:"default"`
 	Version  string        `yaml:"version"`
@@ -122,14 +122,22 @@ func LoadYamlAclFromFilePath(config *Config, aclPath string) (*EgressAclConfig, 
 func LoadYamlAclFromReader(config *Config, aclReader io.Reader) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
-	yamlConfig := EgressAclConfiguration{}
+	yamlConfig := YamlEgressAclConfiguration{}
 
 	yamlFile, err := ioutil.ReadAll(aclReader)
 	if err != nil {
-		return nil, fmt.Errorf("could not load acl configuration")
+		return fail(fmt.Errorf("could not load acl configuration"))
 	}
 
 	err = yaml.Unmarshal(yamlFile, &yamlConfig)
+
+	return BuildAclFromYamlConfig(config, &yamlConfig)
+}
+
+func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfiguration) (*EgressAclConfig, error) {
+	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
+
+	var err error
 
 	if yamlConfig.Version != "v1" {
 		return fail(fmt.Errorf("Expected version \"v1\" got %#v\n", yamlConfig.Version))
