@@ -4,12 +4,127 @@ package smokescreen
 
 import "github.com/stretchr/testify/assert"
 import (
-	log "github.com/sirupsen/logrus"
+	"path"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var dummyConf = &Config{
 	Log: log.New(),
+}
+
+var testCases = map[string]struct {
+	yamlFile, service, host string
+	expectDecision          EgressAclDecision
+	expectProject           string
+}{
+	"allowed by whitelist when enforcing": {
+		"sample_config.yaml",
+		"enforce-dummy-srv",
+		"example1.com",
+		EgressAclDecisionAllow,
+		"usersec",
+	},
+	"disallowed when enforcing": {
+		"sample_config.yaml",
+		"enforce-dummy-srv",
+		"www.example1.com",
+		EgressAclDecisionDeny,
+		"usersec",
+	},
+	"allowed by whitelist when reporting": {
+		"sample_config.yaml",
+		"report-dummy-srv",
+		"example3.com",
+		EgressAclDecisionAllow,
+		"security",
+	},
+	"reported when reporting": {
+		"sample_config.yaml",
+		"report-dummy-srv",
+		"example1.com",
+		EgressAclDecisionAllowAndReport,
+		"security",
+	},
+	"allowed when open": {
+		"sample_config.yaml",
+		"open-dummy-srv",
+		"anythingisgoodreally.com",
+		EgressAclDecisionAllow,
+		"automation",
+	},
+	"deny by glob": {
+		"sample_config.yaml",
+		"dummy-glob",
+		"shouldbreak.com",
+		EgressAclDecisionDeny,
+		"phony",
+	},
+	"deny by glob missing subdomain": {
+		"sample_config.yaml",
+		"dummy-glob",
+		"example.com",
+		EgressAclDecisionDeny,
+		"phony",
+	},
+	"allow by glob": {
+		"sample_config.yaml",
+		"dummy-glob",
+		"api.example.com",
+		EgressAclDecisionAllow,
+		"phony",
+	},
+	"deny from default": {
+		"sample_config.yaml",
+		"unknown-service",
+		"nope.example.com",
+		EgressAclDecisionDeny,
+		"other",
+	},
+	"allow from default whitelist": {
+		"sample_config.yaml",
+		"unknown-service",
+		"default.example.com",
+		EgressAclDecisionAllow,
+		"other",
+	},
+}
+
+func TestServiceDecideAndProject(t *testing.T) {
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			a := assert.New(t)
+			acl, err := LoadFromYamlFile(dummyConf, path.Join("testdata", testCase.yamlFile), []string{})
+
+			a.NoError(err)
+			a.NotNil(acl)
+
+			proj, err := acl.Project(testCase.service)
+			a.NoError(err)
+			a.Equal(testCase.expectProject, proj)
+
+			decision, err := acl.Decide(testCase.service, testCase.host)
+			a.NoError(err)
+			a.Equal(testCase.expectDecision, decision)
+		})
+	}
+}
+
+func TestUnknownServiceWithoutDefault(t *testing.T) {
+	a := assert.New(t)
+	acl, err := LoadFromYamlFile(dummyConf, "testdata/no_default.yaml", []string{})
+
+	a.NoError(err)
+	a.NotNil(acl)
+
+	proj, err := acl.Project("unk")
+	a.Equal(UnknownRoleError{"unk"}, err)
+	a.Empty(proj)
+
+	decision, err := acl.Decide("unk", "example.com")
+	a.Equal(UnknownRoleError{"unk"}, err)
+	a.Empty(decision)
 }
 
 func TestLoadFromYaml(t *testing.T) {
@@ -35,72 +150,6 @@ func TestLoadFromYaml(t *testing.T) {
 		acl, err := LoadFromYamlFile(dummyConf, "testdata/unknown_action.yaml", []string{})
 		a.Nil(err)
 		a.NotNil(acl)
-	}
-}
-
-func TestDecide(t *testing.T) {
-	a := assert.New(t)
-
-	acl, _ := LoadFromYamlFile(dummyConf, "testdata/sample_config.yaml", []string{})
-
-	// Test allowed domain for enforcing service
-	{
-		res, err := acl.Decide("enforce-dummy-srv", "example1.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
-	}
-	{
-		res, err := acl.Decide("enforce-dummy-srv", "www.example2.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionDeny, res)
-	}
-	{
-		res, err := acl.Decide("enforce-dummy-srv", "example2.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
-	}
-
-	// Test disallowed domain for enforcing service
-	{
-		res, err := acl.Decide("enforce-dummy-srv", "www.example1.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionDeny, res)
-	}
-
-	// Test on reporting service
-	{
-		res, err := acl.Decide("report-dummy-srv", "example3.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
-	}
-	{
-		res, err := acl.Decide("report-dummy-srv", "example1.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllowAndReport, res)
-	}
-
-	// Test on open service
-	{
-		res, err := acl.Decide("open-dummy-srv", "anythingisgoodreally.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
-	}
-
-	// Globbing
-	{
-		res, err := acl.Decide("dummy-glob", "shouldbreak.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionDeny, res)
-	}
-	{
-		res, err := acl.Decide("dummy-glob", "example.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionDeny, res)
-	}
-	{
-		res, err := acl.Decide("dummy-glob", "api.example.com")
-		a.Nil(err)
-		a.Equal(EgressAclDecisionAllow, res)
 	}
 }
 

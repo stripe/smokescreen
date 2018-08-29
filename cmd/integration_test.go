@@ -256,7 +256,6 @@ func TestSmokescreenIntegration(t *testing.T) {
 						TargetPort:     outsideListenerPort,
 						RandomTrace:    rand.Int(),
 					}
-					fmt.Printf("%+v\n", testCase)
 					executeRequestForTest(t, testCase)
 					if t.Failed() {
 						fmt.Printf("%+v\n", testCase)

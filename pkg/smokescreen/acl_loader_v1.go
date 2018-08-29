@@ -22,76 +22,56 @@ type EgressAclConfig struct {
 }
 
 func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
-
-	var (
-		found   bool
-		service EgressAclRule
-	)
-	if fromService == "" {
-		found = false
-	} else {
-		service, found = ew.Services[fromService]
-	}
-
-	if !found && ew.Default != nil {
-		found = true
-		service = *ew.Default
-	}
-
-	if !found {
+	rule := ew.ruleForService(fromService)
+	if rule == nil {
 		return 0, UnknownRoleError{fromService}
 	}
 
-	if service.Policy == ConfigEnforcementPolicyOpen {
-		return EgressAclDecisionAllow, nil
-	}
-
-	matches := false
-	for _, host := range service.DomainGlob {
-		if len(host) > 0 && host[0] == '*' {
-			postfix := host[1:]
-			if strings.HasSuffix(toHost, postfix) {
-				matches = true
-				break
-			}
-		} else {
-			if host == toHost {
-				matches = true
-				break
-			}
-		}
-	}
-
-	switch service.Policy {
+	var action EgressAclDecision
+	switch rule.Policy {
 	case ConfigEnforcementPolicyReport:
-		if matches {
-			return EgressAclDecisionAllow, nil
-		} else {
-			return EgressAclDecisionAllowAndReport, nil
-		}
+		action = EgressAclDecisionAllowAndReport
 	case ConfigEnforcementPolicyEnforce:
-		if matches {
-			return EgressAclDecisionAllow, nil
-		} else {
-			return EgressAclDecisionDeny, nil
-		}
+		action = EgressAclDecisionDeny
+	case ConfigEnforcementPolicyOpen:
+		return EgressAclDecisionAllow, nil
 	default:
 		return 0, errors.New("unexpected state")
 	}
+
+	for _, host := range rule.DomainGlob {
+		if len(host) > 0 && host[0] == '*' {
+			postfix := host[1:]
+			if strings.HasSuffix(toHost, postfix) {
+				return EgressAclDecisionAllow, nil
+			}
+		} else {
+			if host == toHost {
+				return EgressAclDecisionAllow, nil
+			}
+		}
+	}
+
+	return action, nil
 }
 
 func (ew *EgressAclConfig) Project(fromService string) (string, error) {
-	service, found := ew.Services[fromService]
-
-	if found {
-		return service.Project, nil
+	service := ew.ruleForService(fromService)
+	if service == nil {
+		return "", UnknownRoleError{fromService}
 	}
 
-	if ew.Default != nil {
-		return ew.Default.Project, nil
+	return service.Project, nil
+}
+
+func (ew *EgressAclConfig) ruleForService(fromService string) *EgressAclRule {
+	if fromService != "" {
+		if service, found := ew.Services[fromService]; found {
+			return &service
+		}
 	}
 
-	return "", fmt.Errorf("warn: No known project: role=%#v\n", fromService)
+	return ew.Default
 }
 
 // Configuration
