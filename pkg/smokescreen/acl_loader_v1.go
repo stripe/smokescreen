@@ -109,6 +109,10 @@ type YamlEgressAclConfiguration struct {
 	Version  string        `yaml:"version"`
 }
 
+func (yamlConf *YamlEgressAclConfiguration) ValidateConfig() error {
+	return nil
+}
+
 func LoadYamlAclFromFilePath(config *Config, aclPath string) (*EgressAclConfig, error) {
 	file, err := os.Open(aclPath)
 
