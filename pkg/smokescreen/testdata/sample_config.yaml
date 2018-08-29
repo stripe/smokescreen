@@ -26,5 +26,7 @@ services:
 
 
 default:
-    project: security
+    project: other
     action: enforce
+    allowed_domains:
+      - default.example.com

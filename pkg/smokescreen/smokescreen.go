@@ -381,15 +381,12 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) error {
 	if config.EgressAcl != nil {
-		role, err := config.RoleFromRequest(req)
-		if err != nil {
-			if _, ok := err.(MissingRoleError); ok {
-				return denyError{
-					outboundHost,
-					fmt.Sprintf("unable to extract a role from your request (%s)", err.Error()),
-				}
+		role, roleErr := config.RoleFromRequest(req)
+		if roleErr != nil {
+			// A missing role is OK at this point since we may have a default
+			if _, ok := roleErr.(MissingRoleError); !ok {
+				return roleErr
 			}
-			return err
 		}
 
 		project := ""
@@ -400,10 +397,13 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		result, err := config.EgressAcl.Decide(role, submatch[1])
 		if err != nil {
 			if rerr, ok := err.(UnknownRoleError); ok {
-				return denyError{
-					outboundHost,
-					fmt.Sprintf("you passed an unknown role '%s'", rerr.Role),
+				var msg string
+				if roleErr != nil {
+					msg = fmt.Sprintf("unable to extract a role from your request and no default is provided (%s)", err.Error())
+				} else {
+					msg = fmt.Sprintf("you passed an unknown role '%s'", rerr.Role)
 				}
+				return denyError{outboundHost, msg}
 			}
 			return err
 		}
