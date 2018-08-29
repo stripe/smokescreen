@@ -184,7 +184,7 @@ func (config *Config) SetupEgressAcl(aclFile string, disabledAclPolicyActions []
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
-	egressAcl, err := LoadFromYamlFile(config, aclFile, disabledAclPolicyActions)
+	egressAcl, err := LoadYamlAclFromFilePath(config, aclFile, disabledAclPolicyActions)
 	if err != nil {
 		log.Print(err)
 		return err

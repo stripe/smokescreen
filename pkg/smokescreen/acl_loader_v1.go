@@ -109,16 +109,17 @@ type EgressAclConfiguration struct {
 	Version  string        `yaml:"version"`
 }
 
-func LoadFromYamlFile(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+func LoadYamlAclFromFilePath(config *Config, aclPath string, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
 	file, err := os.Open(aclPath)
+
 	if err != nil {
 		return nil, err
 	}
-
-	return LoadFromReader(config, file, disabledAclPolicyActions)
+	defer file.Close()
+	return LoadYamlAclFromReader(config, file, disabledAclPolicyActions)
 }
 
-func LoadFromReader(config *Config, aclReader io.Reader, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
+func LoadYamlAclFromReader(config *Config, aclReader io.Reader, disabledAclPolicyActions []string) (*EgressAclConfig, error) {
 	fail := func(err error) (*EgressAclConfig, error) { return nil, err }
 
 	yamlConfig := EgressAclConfiguration{}
