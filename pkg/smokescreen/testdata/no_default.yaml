@@ -1,0 +1,9 @@
+---
+version: v1
+services:
+  - name: dummy-srv
+    project: usersec
+    action: enforce
+    allowed_domains:
+      - example1.com
+      - example2.com

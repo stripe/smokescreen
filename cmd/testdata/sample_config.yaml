@@ -24,3 +24,5 @@ default:
   name: unknown-role
   project: security
   action: enforce
+  allowed_domains:
+      - localhost

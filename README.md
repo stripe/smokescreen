@@ -134,10 +134,11 @@ A host can be specified with or without a globbing prefix
 
 # Contributors
 
- - Evan Broder
- - Andrew Dunham
- - Andreas Fuchs
- - Carl Jackson
  - Aditya Mukerjee
- - Ryan Koppenhaver
+ - Andreas Fuchs
+ - Andrew Dunham
+ - Andrew Metcalf
+ - Carl Jackson
+ - Evan Broder
  - Marc-André Tremblay
+ - Ryan Koppenhaver
