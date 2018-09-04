@@ -145,7 +145,7 @@ func errorResponse(req *http.Request, config *Config, err error) *http.Response 
 	return resp
 }
 
-func buildProxy(config *Config) *goproxy.ProxyHttpServer {
+func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
 	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
@@ -300,7 +300,7 @@ func findListener(ip string, defaultPort int) (net.Listener, error) {
 
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
-	proxy := buildProxy(config)
+	proxy := BuildProxy(config)
 
 	listener, err := findListener(config.Ip, config.Port)
 	if err != nil {
