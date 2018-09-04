@@ -66,8 +66,7 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 }
 
 func classifyIP(config *Config, ip net.IP) IpType {
-	isPrivate := !ip.IsGlobalUnicast()
-	if isPrivate && !config.AllowPrivateRange {
+	if !(ip.IsGlobalUnicast() || (config.AllowProxyToLoopback && ip.IsLoopback())) {
 		return IpDenyNotGlobalUnicast
 	}
 

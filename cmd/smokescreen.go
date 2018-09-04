@@ -90,10 +90,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "tls-crl-file",
 			Usage: "Verify validity of client certificates against Certificate Revocation List from `FILE`",
 		},
-		cli.BoolFlag{
-			Name:  "danger-allow-access-to-private-ranges",
-			Usage: "WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.",
-		},
 		cli.StringFlag{
 			Name:  "additional-error-message-on-deny",
 			Usage: "Display `MESSAGE` in the HTTP response if proxying request is denied",
@@ -147,7 +143,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			ExitTimeout:                  60 * time.Second,
 			MaintenanceFile:              c.String("maintenance-file"),
 			SupportProxyProtocol:         c.Bool("proxy-protocol"),
-			AllowPrivateRange:            c.Bool("danger-allow-access-to-private-ranges"),
 			AdditionalErrorMessageOnDeny: c.String("additional-error-message-on-deny"),
 			DisabledAclPolicyActions:     c.StringSlice("disable-acl-policy-action"),
 		}

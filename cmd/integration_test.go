@@ -300,7 +300,6 @@ func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
 		"--egress-acl-file=testdata/sample_config.yaml",
-		"--danger-allow-access-to-private-ranges",
 		"--additional-error-message-on-deny=moar ctx",
 		"--deny-range=127.0.0.2/32",
 	}
@@ -326,6 +325,8 @@ func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+
+	conf.AllowProxyToLoopback = true
 
 	kill := make(chan interface{})
 	go smokescreen.StartWithConfig(conf, kill)
