@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,14 +30,17 @@ const (
 
 type IpType int
 
-type denyError struct {
-	host   string
-	reason string
+type aclDecision struct {
+	reason, role, project string
+	allow                 bool
 }
 
-func (d denyError) Error() string {
-	return fmt.Sprintf(denyMsgTmpl, d.host, d.reason)
+type ctxUserData struct {
+	start    time.Time
+	decision *aclDecision
 }
+
+type denyError error
 
 func (t IpType) String() string {
 	switch t {
@@ -82,26 +86,26 @@ func classifyIP(config *Config, ip net.IP) IpType {
 	return IpDenyBlacklist
 }
 
-func safeResolve(config *Config, network, addr string) (string, error) {
+func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 	config.StatsdClient.Count("resolver.attempts_total", 1, []string{}, 0.3)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
 		config.StatsdClient.Count("resolver.errors_total", 1, []string{}, 0.3)
-		return "", err
+		return nil, err
 	}
 
 	switch classifyIP(config, resolved.IP) {
 	case IpOK:
-		return resolved.String(), nil
+		return resolved, nil
 	case IpOKBlacklistExempted:
 		config.StatsdClient.Count("resolver.private_blacklist_exempted_total", 1, []string{}, 0.3)
-		return resolved.String(), nil
+		return resolved, nil
 	case IpDenyNotGlobalUnicast:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return "", denyError{addr, fmt.Sprintf("resolves to private address %s", resolved.IP)}
+		return nil, denyError(fmt.Errorf("resolves to private address %s", resolved.IP))
 	case IpDenyBlacklist:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return "", denyError{addr, fmt.Sprintf("resolves to blacklisted address %s", resolved.IP)}
+		return nil, denyError(fmt.Errorf("resolves to blacklisted address %s", resolved.IP))
 	default:
 		panic("unknown IP type")
 	}
@@ -113,21 +117,16 @@ func dial(config *Config, network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	return net.DialTimeout(network, resolved, config.ConnectTimeout)
+	return net.DialTimeout(network, resolved.String(), config.ConnectTimeout)
 }
 
-func connectErrorResult(config *Config, ctx *goproxy.ProxyCtx, err error) (*goproxy.ConnectAction, string) {
-	config.Log.Warn(err)
-	ctx.Resp = errorResponse(ctx.Req, config, err)
-	return goproxy.RejectConnect, ""
-}
-
-func errorResponse(req *http.Request, config *Config, err error) *http.Response {
+func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
 	var msg string
-	if _, ok := err.(denyError); ok {
-		msg = err.Error()
-	} else {
-		msg = "unexpected error occurred"
+	switch err.(type) {
+	case denyError:
+		msg = fmt.Sprintf(denyMsgTmpl, err.Error(), req.Host)
+	default:
+		msg = "an unexpected error occurred."
 	}
 
 	if config.AdditionalErrorMessageOnDeny != "" {
@@ -159,128 +158,150 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				"remote": ctx.Req.RemoteAddr,
 				"host":   ctx.Req.Host,
 				"url":    ctx.Req.RequestURI,
-			}).Info("received HTTP proxy request")
+			}).Debug("received HTTP proxy request")
+		userData := ctxUserData{time.Now(), nil}
+		ctx.UserData = &userData
 
-		ctx.UserData = time.Now().Unix()
-
-		err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		var err error
+		userData.decision, err = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 		req.Header.Del(roleHeader)
 		if err != nil {
-			return req, errorResponse(req, config, err)
+			return req, rejectResponse(req, config, err)
+		}
+		if !userData.decision.allow {
+			return req, rejectResponse(req, config, denyError(errors.New(userData.decision.reason)))
 		}
 
 		return req, nil
 	})
 
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		config.Log.WithFields(
-			logrus.Fields{
-				"remote": ctx.Req.RemoteAddr,
-				"host":   host,
-			}).Info("received CONNECT proxy request")
-
-		// Check if requesting role is allowed to talk to remote
-		var resolved string
-		err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		resolved, err := handleConnect(config, ctx)
 		if err != nil {
-			return connectErrorResult(config, ctx, err)
+			ctx.Resp = rejectResponse(ctx.Req, config, err)
+			return goproxy.RejectConnect, ""
 		}
-
-		resolved, err = safeResolve(config, "tcp", host)
-		if err != nil {
-			return connectErrorResult(config, ctx, err)
-		}
-
-		ctx.UserData = time.Now().Unix()
-		logHttpsRequest(config, ctx, resolved)
-		return goproxy.OkConnect, resolved
+		return goproxy.OkConnect, resolved.String()
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		if ctx.RoundTrip != nil {
-			logResponse(config, ctx)
-		}
 		if resp != nil {
 			resp.Header.Del(errorHeader)
 		}
+
 		if resp == nil && ctx.Error != nil {
-			resp = errorResponse(ctx.Req, config, ctx.Error)
+			return rejectResponse(ctx.Req, config, ctx.Error)
 		}
+
+		// In case of an error, this function is called a second time to filter the
+		// response we generate so this logger will be called once.
+		logHTTP(config, ctx)
 		return resp
 	})
 	return proxy
 }
 
-func extractHostname(ctx *goproxy.ProxyCtx) string {
-	return ctx.Req.Host
-}
-
-func logHttpsRequest(config *Config, ctx *goproxy.ProxyCtx, resolved string) {
+func logProxy(
+	config *Config,
+	ctx *goproxy.ProxyCtx,
+	proxyType string,
+	toAddress *net.TCPAddr,
+	decision *aclDecision,
+	start time.Time,
+	err error,
+) {
 	var contentLength int64
 	if ctx.Resp != nil {
 		contentLength = ctx.Resp.ContentLength
 	}
-	hostname := extractHostname(ctx)
-	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
-	to_host, to_port, _ := net.SplitHostPort(resolved)
 
-	serviceName, serviceNameErr := config.RoleFromRequest(ctx.Req)
-	if serviceNameErr != nil {
-		serviceName = ""
+	hostname := ctx.Req.Host
+	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
+
+	allow := err == nil
+
+	fields := logrus.Fields{
+		"proxy_type":     proxyType,
+		"src_host":       fromHost,
+		"src_port":       fromPort,
+		"host":           hostname,
+		"start_time":     start.Unix(),
+		"end_time":       time.Now().Unix(),
+		"content_length": contentLength,
 	}
 
-	config.Log.WithFields(
-		logrus.Fields{
-			"proxy_type":     "connect",
-			"known_role":     serviceNameErr == nil || serviceName != "",
-			"role":           serviceName,
-			"src_host":       from_host,
-			"src_port":       from_port,
-			"host":           hostname,
-			"dest_ip":        to_host,
-			"dest_port":      to_port,
-			"start_time":     ctx.UserData,
-			"end_time":       time.Now().Unix(),
-			"content_length": contentLength,
-		}).Info("completed response")
+	if _, ok := err.(denyError); !ok && err != nil {
+		fields["error"] = err
+	}
+
+	if toAddress != nil {
+		fields["dest_ip"] = toAddress.IP.String()
+		fields["dest_port"] = toAddress.Port
+	}
+
+	if decision != nil {
+		fields["role"] = decision.role
+		fields["project"] = decision.project
+		fields["decision_reason"] = decision.reason
+		if !decision.allow {
+			allow = false
+		}
+	}
+	fields["allow"] = allow
+
+	entry := config.Log.WithFields(fields)
+	var logMethod func(...interface{})
+	if _, ok := fields["error"]; ok {
+		logMethod = entry.Error
+	} else if allow {
+		logMethod = entry.Info
+	} else {
+		logMethod = entry.Warn
+	}
+	logMethod("proxy_response")
 }
 
-func logResponse(config *Config, ctx *goproxy.ProxyCtx) {
-	var contentLength int64
-	if ctx.RoundTrip == nil || ctx.RoundTrip.TCPAddr == nil {
-		// Reasons this might happen:
-		// 1) IpTypePrivate ip destination (eg. 192.168.0.0/16, 10.0.0.0/8, etc)
-		// 2) Destination that doesn't respond (eg. i/o timeout)
-		// 3) destination domain that doesn't resolve
-		// 4) bogus IP address (eg. 1154.218.100.183)
-		config.Log.Println("Could not log response: missing IP address")
-		return
-	}
-	if ctx.Resp != nil {
-		contentLength = ctx.Resp.ContentLength
-	}
-	from_host, from_port, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
-	hostname := extractHostname(ctx)
-
-	serviceName, serviceNameErr := config.RoleFromRequest(ctx.Req)
-	if serviceNameErr != nil {
-		serviceName = ""
+func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
+	var toAddr *net.TCPAddr
+	if ctx.RoundTrip != nil {
+		toAddr = ctx.RoundTrip.TCPAddr
 	}
 
+	userData := ctx.UserData.(*ctxUserData)
+
+	logProxy(config, ctx, "http", toAddr, userData.decision, userData.start, ctx.Error)
+}
+
+func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) {
 	config.Log.WithFields(
 		logrus.Fields{
-			"proxy_type":     "http",
-			"known_role":     serviceNameErr == nil || serviceName != "",
-			"role":           serviceName,
-			"src_host":       from_host,
-			"src_port":       from_port,
-			"host":           hostname,
-			"dest_ip":        ctx.RoundTrip.TCPAddr.IP.String(),
-			"dest_port":      ctx.RoundTrip.TCPAddr.Port,
-			"start_time":     ctx.UserData,
-			"end_time":       time.Now().Unix(),
-			"content_length": contentLength,
-		}).Info("completed response")
+			"remote": ctx.Req.RemoteAddr,
+			"host":   ctx.Req.Host,
+		}).Debug("received CONNECT proxy request")
+	start := time.Now()
+
+	// Check if requesting role is allowed to talk to remote
+	var resolved *net.TCPAddr
+	var err error
+	var decision *aclDecision
+	defer func() {
+		logProxy(config, ctx, "connect", resolved, decision, start, err)
+	}()
+
+	decision, err = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+	if err != nil {
+		return nil, err
+	}
+	if !decision.allow {
+		return nil, denyError(errors.New(decision.reason))
+	}
+
+	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	return resolved, nil
 }
 
 func findListener(ip string, defaultPort int) (net.Listener, error) {
@@ -374,66 +395,58 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) error {
-	if config.EgressAcl != nil {
-		role, roleErr := config.RoleFromRequest(req)
-		if roleErr != nil {
-			// A missing role is OK at this point since we may have a default
-			if _, ok := roleErr.(MissingRoleError); !ok {
-				return roleErr
-			}
-		}
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, error) {
+	decision := &aclDecision{}
 
-		project := ""
-		project, projectErr := config.EgressAcl.Project(role)
+	if config.EgressAcl == nil {
+		decision.allow = true
+		decision.reason = "no egress ACL configured"
+		return decision, nil
+	}
 
-		submatch := config.hostExtractExpr.FindStringSubmatch(outboundHost)
-
-		result, err := config.EgressAcl.Decide(role, submatch[1])
-		if err != nil {
-			if rerr, ok := err.(UnknownRoleError); ok {
-				var msg string
-				if roleErr != nil {
-					msg = fmt.Sprintf("unable to extract a role from your request and no default is provided (%s)", err.Error())
-				} else {
-					msg = fmt.Sprintf("you passed an unknown role '%s'", rerr.Role)
-				}
-				return denyError{outboundHost, msg}
-			}
-			return err
-		}
-
-		switch result {
-		case EgressAclDecisionDeny:
-			config.Log.WithFields(
-				logrus.Fields{
-					"proxied":       false,
-					"known_project": projectErr == nil,
-					"project":       project,
-					"known_role":    role != "",
-					"client_role":   role,
-					"outbound_host": outboundHost,
-				}).Warn("request denied by acl")
-			return denyError{
-				outboundHost,
-				fmt.Sprintf("your role '%s' is not allowed to access this host", role),
-			}
-
-		case EgressAclDecisionAllowAndReport:
-
-			config.Log.WithFields(
-				logrus.Fields{
-					"proxied":       true,
-					"known_project": projectErr == nil,
-					"project":       project,
-					"known_role":    role != "",
-					"client_role":   role,
-					"outbound_host": outboundHost,
-				}).Info("unknown egress reported")
-
-		case EgressAclDecisionAllow:
-			// Well, everything is going as expected.
+	role, roleErr := config.RoleFromRequest(req)
+	if roleErr != nil {
+		// A missing role is OK at this point since we may have a default
+		if _, ok := roleErr.(MissingRoleError); !ok {
+			return nil, roleErr
 		}
 	}
-	return nil
+	decision.role = role
+
+	decision.project, _ = config.EgressAcl.Project(role)
+
+	submatch := config.hostExtractExpr.FindStringSubmatch(outboundHost)
+
+	result, err := config.EgressAcl.Decide(role, submatch[1])
+	if err != nil {
+		if rerr, ok := err.(UnknownRoleError); ok {
+			var msg string
+			if roleErr != nil {
+				msg = fmt.Sprintf("unable to extract a role from your request and no default is provided (%s)", err.Error())
+			} else {
+				msg = fmt.Sprintf("you passed an unknown role '%s'", rerr.Role)
+			}
+			decision.reason = msg
+			return decision, nil
+		}
+		return nil, err
+	}
+
+	switch result {
+	case EgressAclDecisionDeny:
+		decision.reason = "role is not allowed to access this host"
+		return decision, nil
+
+	case EgressAclDecisionAllowAndReport:
+		decision.reason = "role is not allowed to access this host but report_only is true"
+		decision.allow = true
+		return decision, nil
+
+	case EgressAclDecisionAllow:
+		// Well, everything is going as expected.
+		decision.allow = true
+		decision.reason = "your role is allowed to access this host"
+		return decision, nil
+	}
+	panic(fmt.Sprintf("unknown acl decision %v", result))
 }

@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,7 +50,7 @@ type TestCase struct {
 	RoleName    string
 }
 
-func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error) {
+func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
 	a := assert.New(t)
 	if test.ExpectAllow {
 		if !a.NoError(err) {
@@ -64,9 +66,35 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error)
 		if !a.NoError(err) {
 			return
 		}
-		a.Contains(string(body), "egress proxying denied to host")
+		a.Contains(string(body), "egress proxying denied")
 		a.Contains(string(body), "moar ctx")
 	}
+
+	var entries []*logrus.Entry
+	for _, entry := range logs {
+		if entry.Level < logrus.WarnLevel {
+			a.Failf("unexpected log line more severe than Warn", "%v", entry)
+		} else if entry.Level < logrus.DebugLevel {
+			entries = append(entries, entry)
+		}
+	}
+	a.Equalf(1, len(entries), "Expected only a single INFO/WARN log line per request, got: %v", entries)
+
+	entry := entries[0]
+	a.Equal(entry.Message, "proxy_response")
+
+	a.Contains(entry.Data, "allow")
+	a.Equal(test.ExpectAllow, entries[0].Data["allow"])
+
+	a.Contains(entry.Data, "proxy_type")
+	if test.OverConnect {
+		a.Equal("connect", entry.Data["proxy_type"])
+	} else {
+		a.Equal("http", entry.Data["proxy_type"])
+	}
+
+	a.Contains(entry.Data, "host")
+	a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["host"])
 }
 
 func generateRoleForAction(action smokescreen.ConfigEnforcementPolicy) string {
@@ -186,12 +214,13 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 	return req
 }
 
-func executeRequestForTest(t *testing.T, test *TestCase) {
+func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hook) {
+	logHook.Reset()
 	client := generateClientForTest(t, test)
 	req := generateRequestForTest(t, test)
 
 	resp, err := client.Do(req)
-	conformResult(t, test, resp, err)
+	conformResult(t, test, resp, err, logHook.AllEntries())
 }
 
 func TestSmokescreenIntegration(t *testing.T) {
@@ -206,9 +235,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	go dummyServer.Serve(outsideListener)
 
+	var logHook logrustest.Hook
 	servers := map[bool]*httptest.Server{}
 	for _, useTls := range []bool{true, false} {
-		server, err := startSmokescreen(t, useTls)
+		server, err := startSmokescreen(t, useTls, &logHook)
 		require.NoError(t, err)
 		defer server.Close()
 		servers[useTls] = server
@@ -290,7 +320,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	for _, testCase := range testCases {
 		testCase.RandomTrace = rand.Int()
-		executeRequestForTest(t, testCase)
+		executeRequestForTest(t, testCase, &logHook)
 		if t.Failed() {
 			fmt.Printf("%+v\n", testCase)
 			return
@@ -298,7 +328,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 	}
 }
 
-func startSmokescreen(t *testing.T, useTls bool) (*httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
@@ -323,6 +353,7 @@ func startSmokescreen(t *testing.T, useTls bool) (*httptest.Server, error) {
 	}
 
 	conf.AllowProxyToLoopback = true
+	conf.Log.AddHook(logHook)
 
 	handler := smokescreen.BuildProxy(conf)
 	server := httptest.NewUnstartedServer(handler)
