@@ -2,7 +2,6 @@
 
 package cmd
 
-import "github.com/stretchr/testify/assert"
 import (
 	"bytes"
 	"context"
@@ -20,6 +19,9 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
 
@@ -185,21 +187,22 @@ func executeRequestForTest(t *testing.T, test *TestCase) {
 }
 
 func TestSmokescreenIntegration(t *testing.T) {
-	a := assert.New(t)
+	r := require.New(t)
 
 	dummyServer := NewDummyServer()
 	outsideListener, err := net.Listen("tcp4", "127.0.0.1:")
 	outsideListenerUrl, err := url.Parse(fmt.Sprintf("//%s", outsideListener.Addr().String()))
-	a.NoError(err)
+	r.NoError(err)
 	outsideListenerPort, err := strconv.Atoi(outsideListenerUrl.Port())
-	a.NoError(err)
+	r.NoError(err)
 
 	go dummyServer.Serve(outsideListener)
 
-	killNonTls := startSmokescreen(t, false)
-	defer killNonTls()
-	killTls := startSmokescreen(t, true)
-	defer killTls()
+	for _, useTls := range []bool{true, false} {
+		kill, err := startSmokescreen(t, useTls)
+		require.NoError(t, err)
+		defer kill()
+	}
 
 	// Generate all non-tls tests
 	overTlsDomain := []bool{true, false}
@@ -250,17 +253,17 @@ func TestSmokescreenIntegration(t *testing.T) {
 			}
 		}
 
-		baseDefaultCase := TestCase{
+		baseCase := TestCase{
 			OverConnect: overConnect,
 			ProxyPort:   plainSmokescreenPort,
 			TargetPort:  outsideListenerPort,
 		}
 
-		noRoleDenyCase := baseDefaultCase
+		noRoleDenyCase := baseCase
 		noRoleDenyCase.Host = "127.0.0.1"
 		noRoleDenyCase.ExpectAllow = false
 
-		noRoleAllowCase := baseDefaultCase
+		noRoleAllowCase := baseCase
 		noRoleAllowCase.Host = "localhost"
 		noRoleAllowCase.ExpectAllow = true
 
@@ -270,7 +273,16 @@ func TestSmokescreenIntegration(t *testing.T) {
 		unknownRoleAllowCase := noRoleAllowCase
 		unknownRoleAllowCase.RoleName = "unknown"
 
-		testCases = append(testCases, &unknownRoleAllowCase, &unknownRoleDenyCase, &noRoleAllowCase, &noRoleDenyCase)
+		badIPCase := baseCase
+		badIPCase.Host = "127.0.0.2"
+		badIPCase.ExpectAllow = false
+		badIPCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+
+		testCases = append(testCases,
+			&unknownRoleAllowCase, &unknownRoleDenyCase,
+			&noRoleAllowCase, &noRoleDenyCase,
+			&badIPCase,
+		)
 	}
 
 	for _, testCase := range testCases {
@@ -283,36 +295,39 @@ func TestSmokescreenIntegration(t *testing.T) {
 	}
 }
 
-func startSmokescreen(t *testing.T, useTls bool) func() {
-	a := assert.New(t)
+func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
+	args := []string{
+		"smokescreen",
+		"--listen-ip=127.0.0.1",
+		"--egress-acl-file=testdata/sample_config.yaml",
+		"--danger-allow-access-to-private-ranges",
+		"--additional-error-message-on-deny=moar ctx",
+		"--deny-range=127.0.0.2/32",
+	}
 
 	var conf *smokescreen.Config
 	var err error
 	if useTls {
-		conf, err = NewConfiguration([]string{
-			"smokescreen",
-			"--listen-ip=127.0.0.1",
+		args = append(args,
 			fmt.Sprintf("--listen-port=%d", plainSmokescreenPort),
-			"--egress-acl-file=testdata/sample_config.yaml",
-			"--danger-allow-access-to-private-ranges",
-			"--additional-error-message-on-deny=moar ctx",
-		}, nil)
+		)
+		conf, err = NewConfiguration(args, nil)
 	} else {
-		conf, err = NewConfiguration([]string{
-			"smokescreen",
-			"--listen-ip=127.0.0.1",
+		args = append(args,
 			fmt.Sprintf("--listen-port=%d", tlsSmokescreenPort),
-			"--egress-acl-file=testdata/sample_config.yaml",
-			"--danger-allow-access-to-private-ranges",
 			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
 			"--tls-client-ca-file=testdata/pki/ca.pem",
 			"--tls-crl-file=testdata/pki/crl.pem",
-			"--additional-error-message-on-deny=moar ctx",
-		}, nil)
+		)
+
+		conf, err = NewConfiguration(args, nil)
 	}
 
-	a.NoError(err)
+	if err != nil {
+		return nil, err
+	}
+
 	kill := make(chan interface{})
 	go smokescreen.StartWithConfig(conf, kill)
-	return func() { kill <- syscall.SIGHUP }
+	return func() { kill <- syscall.SIGHUP }, nil
 }
