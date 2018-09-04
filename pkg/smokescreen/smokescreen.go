@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	IpTypePublic IpType = iota
-	IpTypePrivate
-	IpTypeBlacklistExempted
+	IpOK IpType = iota
+	IpOKBlacklistExempted
+	IpDenyNotGlobalUnicast
+	IpDenyBlacklist
 
 	denyMsgTmpl = "egress proxying denied to host '%s' because %s. " +
 		"If you didn't intend for your request to be proxied, you may want a 'no_proxy' environment variable."
@@ -39,12 +40,14 @@ func (d denyError) Error() string {
 
 func (t IpType) String() string {
 	switch t {
-	case IpTypePublic:
-		return "IpTypePublic"
-	case IpTypePrivate:
-		return "IpTypePrivate"
-	case IpTypeBlacklistExempted:
-		return "IpTypeBlacklistExempted"
+	case IpOK:
+		return "IpOK"
+	case IpOKBlacklistExempted:
+		return "IpOKBlacklistExempted"
+	case IpDenyNotGlobalUnicast:
+		return "IpDenyNotGlobalUnicast"
+	case IpDenyBlacklist:
+		return "IpDenyBlacklist"
 	default:
 		panic(fmt.Sprintf("unknown ip type %d", t))
 	}
@@ -52,20 +55,6 @@ func (t IpType) String() string {
 
 const errorHeader = "X-Smokescreen-Error"
 const roleHeader = "X-Smokescreen-Role"
-
-func isPrivateNetwork(nets []net.IPNet, ip net.IP) bool {
-	if !ip.IsGlobalUnicast() {
-		return true
-	}
-	return ipIsInSetOfNetworks(nets, ip)
-}
-
-func isWhitelistNetwork(nets []net.IPNet, ip net.IP) bool {
-	if !ip.IsGlobalUnicast() {
-		return false
-	}
-	return ipIsInSetOfNetworks(nets, ip)
-}
 
 func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 	for _, network := range nets {
@@ -77,15 +66,21 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 }
 
 func classifyIP(config *Config, ip net.IP) IpType {
-	if isPrivateNetwork(config.CidrBlacklist, ip) {
-		if isWhitelistNetwork(config.CidrBlacklistExemptions, ip) {
-			return IpTypeBlacklistExempted
-		} else {
-			return IpTypePrivate
-		}
-	} else {
-		return IpTypePublic
+	isPrivate := !ip.IsGlobalUnicast()
+	if isPrivate && !config.AllowPrivateRange {
+		return IpDenyNotGlobalUnicast
 	}
+
+	blacklisted := ipIsInSetOfNetworks(config.CidrBlacklist, ip)
+	whitelisted := ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip)
+
+	if !blacklisted {
+		return IpOK
+	} else if whitelisted {
+		return IpOKBlacklistExempted
+	}
+
+	return IpDenyBlacklist
 }
 
 func safeResolve(config *Config, network, addr string) (string, error) {
@@ -96,19 +91,20 @@ func safeResolve(config *Config, network, addr string) (string, error) {
 		return "", err
 	}
 
-	if config.AllowPrivateRange {
-		return resolved.String(), nil
-	}
-
 	switch classifyIP(config, resolved.IP) {
-	case IpTypePublic:
+	case IpOK:
 		return resolved.String(), nil
-	case IpTypeBlacklistExempted:
+	case IpOKBlacklistExempted:
 		config.StatsdClient.Count("resolver.private_blacklist_exempted_total", 1, []string{}, 0.3)
 		return resolved.String(), nil
-	default:
+	case IpDenyNotGlobalUnicast:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return "", denyError{addr, fmt.Sprintf("resolves to %s", resolved.IP)}
+		return "", denyError{addr, fmt.Sprintf("resolves to private address %s", resolved.IP)}
+	case IpDenyBlacklist:
+		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
+		return "", denyError{addr, fmt.Sprintf("resolves to blacklisted address %s", resolved.IP)}
+	default:
+		panic("unknown IP type")
 	}
 }
 
