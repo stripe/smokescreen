@@ -57,32 +57,32 @@ func TestClassifyIP(t *testing.T) {
 	a.NoError(err)
 
 	testIPs := []testCase{
-		// IpTypePublic addresses
-		testCase{"8.8.8.8", IpTypePublic},
-		// whitelisting a IpTypePublic address does nothing
-		testCase{"8.8.9.8", IpTypePublic},
+		// IpOK addresses
+		testCase{"8.8.8.8", IpOK},
+		// whitelisting a IpOK address does nothing
+		testCase{"8.8.9.8", IpOK},
 
 		// Specific blocked networks
-		testCase{"10.0.0.1", IpTypePrivate},
-		testCase{"10.0.1.1", IpTypeBlacklistExempted},
-		testCase{"172.16.0.1", IpTypePrivate},
-		testCase{"172.16.1.1", IpTypeBlacklistExempted},
-		testCase{"192.168.0.1", IpTypePrivate},
-		testCase{"192.168.1.1", IpTypeBlacklistExempted},
+		testCase{"10.0.0.1", IpDenyBlacklist},
+		testCase{"10.0.1.1", IpOKBlacklistExempted},
+		testCase{"172.16.0.1", IpDenyBlacklist},
+		testCase{"172.16.1.1", IpOKBlacklistExempted},
+		testCase{"192.168.0.1", IpDenyBlacklist},
+		testCase{"192.168.1.1", IpOKBlacklistExempted},
 
 		// localhost
-		testCase{"127.0.0.1", IpTypePrivate},
-		testCase{"127.255.255.255", IpTypePrivate},
-		testCase{"::1", IpTypePrivate},
+		testCase{"127.0.0.1", IpDenyNotGlobalUnicast},
+		testCase{"127.255.255.255", IpDenyNotGlobalUnicast},
+		testCase{"::1", IpDenyNotGlobalUnicast},
 		// whitelisting a localhost address does nothing
-		testCase{"127.0.1.1", IpTypePrivate},
+		testCase{"127.0.1.1", IpDenyNotGlobalUnicast},
 
 		// ec2 metadata endpoint
-		testCase{"169.254.169.254", IpTypePrivate},
+		testCase{"169.254.169.254", IpDenyNotGlobalUnicast},
 
 		// Broadcast addresses
-		testCase{"255.255.255.255", IpTypePrivate},
-		testCase{"ff02:0:0:0:0:0:0:2", IpTypePrivate},
+		testCase{"255.255.255.255", IpDenyNotGlobalUnicast},
+		testCase{"ff02:0:0:0:0:0:0:2", IpDenyNotGlobalUnicast},
 	}
 
 	for _, test := range testIPs {
