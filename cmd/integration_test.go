@@ -13,9 +13,9 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
-	"syscall"
 	"testing"
 
 	"github.com/hashicorp/go-cleanhttp"
@@ -24,9 +24,6 @@ import (
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
-
-var plainSmokescreenPort = 4520
-var tlsSmokescreenPort = 4521
 
 type DummyHandler struct{}
 
@@ -44,7 +41,7 @@ type TestCase struct {
 	ExpectAllow bool
 	OverTls     bool
 	OverConnect bool
-	ProxyPort   int
+	ProxyURL    string
 	TargetPort  int
 	RandomTrace int
 	Host        string
@@ -100,8 +97,14 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					"CONNECT",
 					fmt.Sprintf("http://%s", addr),
 					nil)
+				if err != nil {
+					return nil, err
+				}
 
-				proxyUrl := fmt.Sprintf("localhost:%d", test.ProxyPort)
+				proxyURL, err := url.Parse(test.ProxyURL)
+				if err != nil {
+					return nil, err
+				}
 				if test.OverTls {
 					var certs []tls.Certificate
 
@@ -110,13 +113,17 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 						certPath := fmt.Sprintf("testdata/pki/%s-client.pem", test.RoleName)
 						keyPath := fmt.Sprintf("testdata/pki/%s-client-key.pem", test.RoleName)
 						cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-						a.NoError(err)
+						if err != nil {
+							return nil, err
+						}
 
 						certs = append(certs, cert)
 					}
 
 					caBytes, err := ioutil.ReadFile("testdata/pki/ca.pem")
-					a.NoError(err)
+					if err != nil {
+						return nil, err
+					}
 					caPool := x509.NewCertPool()
 					a.True(caPool.AppendCertsFromPEM(caBytes))
 
@@ -124,13 +131,17 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 						Certificates: certs,
 						RootCAs:      caPool,
 					}
-					connRaw, err := tls.Dial("tcp", proxyUrl, &proxyTlsClientConfig)
-					a.NoError(err)
+					connRaw, err := tls.Dial("tcp", proxyURL.Host, &proxyTlsClientConfig)
+					if err != nil {
+						return nil, err
+					}
 					conn = connRaw
 
 				} else {
-					connRaw, err := net.Dial(network, proxyUrl)
-					a.NoError(err)
+					connRaw, err := net.Dial(network, proxyURL.Host)
+					if err != nil {
+						return nil, err
+					}
 					conn = connRaw
 
 					// If we're not talking to the proxy over TLS, let's use headers as identifiers
@@ -140,7 +151,6 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					connectProxyReq.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 				}
 
-				a.NoError(err)
 				buf := bytes.NewBuffer([]byte{})
 				connectProxyReq.Write(buf)
 				buf.Write([]byte{'\n'})
@@ -164,8 +174,7 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 		req, err = http.NewRequest("GET", target, nil)
 	} else {
 		// Target the proxy
-		target := fmt.Sprintf("http://%s:%d", "127.0.0.1", test.ProxyPort)
-		req, err = http.NewRequest("GET", target, nil)
+		req, err = http.NewRequest("GET", test.ProxyURL, nil)
 		req.Host = fmt.Sprintf("%s:%d", test.Host, test.TargetPort)
 	}
 	a.NoError(err)
@@ -183,7 +192,6 @@ func executeRequestForTest(t *testing.T, test *TestCase) {
 
 	resp, err := client.Do(req)
 	conformResult(t, test, resp, err)
-
 }
 
 func TestSmokescreenIntegration(t *testing.T) {
@@ -198,10 +206,12 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	go dummyServer.Serve(outsideListener)
 
+	servers := map[bool]*httptest.Server{}
 	for _, useTls := range []bool{true, false} {
-		kill, err := startSmokescreen(t, useTls)
+		server, err := startSmokescreen(t, useTls)
 		require.NoError(t, err)
-		defer kill()
+		defer server.Close()
+		servers[useTls] = server
 	}
 
 	// Generate all non-tls tests
@@ -223,13 +233,6 @@ func TestSmokescreenIntegration(t *testing.T) {
 				continue
 			}
 
-			var proxyPort int
-			if overTls {
-				proxyPort = tlsSmokescreenPort
-			} else {
-				proxyPort = plainSmokescreenPort
-			}
-
 			for _, authorizedHost := range authorizedHostsDomain {
 				var host string
 				if authorizedHost {
@@ -243,7 +246,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 						ExpectAllow: authorizedHost || action != smokescreen.ConfigEnforcementPolicyEnforce,
 						OverTls:     overTls,
 						OverConnect: overConnect,
-						ProxyPort:   proxyPort,
+						ProxyURL:    servers[overTls].URL,
 						TargetPort:  outsideListenerPort,
 						Host:        host,
 						RoleName:    generateRoleForAction(action),
@@ -255,7 +258,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 		baseCase := TestCase{
 			OverConnect: overConnect,
-			ProxyPort:   plainSmokescreenPort,
+			ProxyURL:    servers[false].URL,
 			TargetPort:  outsideListenerPort,
 		}
 
@@ -295,7 +298,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 	}
 }
 
-func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
+func startSmokescreen(t *testing.T, useTls bool) (*httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
@@ -308,19 +311,12 @@ func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
 	var err error
 	if useTls {
 		args = append(args,
-			fmt.Sprintf("--listen-port=%d", plainSmokescreenPort),
-		)
-		conf, err = NewConfiguration(args, nil)
-	} else {
-		args = append(args,
-			fmt.Sprintf("--listen-port=%d", tlsSmokescreenPort),
 			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
 			"--tls-client-ca-file=testdata/pki/ca.pem",
 			"--tls-crl-file=testdata/pki/crl.pem",
 		)
-
-		conf, err = NewConfiguration(args, nil)
 	}
+	conf, err = NewConfiguration(args, nil)
 
 	if err != nil {
 		return nil, err
@@ -328,7 +324,15 @@ func startSmokescreen(t *testing.T, useTls bool) (func(), error) {
 
 	conf.AllowProxyToLoopback = true
 
-	kill := make(chan interface{})
-	go smokescreen.StartWithConfig(conf, kill)
-	return func() { kill <- syscall.SIGHUP }, nil
+	handler := smokescreen.BuildProxy(conf)
+	server := httptest.NewUnstartedServer(handler)
+
+	if useTls {
+		server.TLS = conf.TlsConfig
+		server.StartTLS()
+	} else {
+		server.Start()
+	}
+
+	return server, nil
 }

@@ -118,7 +118,7 @@ func TestClearsErrorHeader(t *testing.T) {
 	err = conf.Init()
 	a.NoError(err)
 
-	proxy := buildProxy(conf)
+	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 	defer proxySrv.Close()
 
