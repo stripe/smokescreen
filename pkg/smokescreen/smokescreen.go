@@ -94,7 +94,8 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		return nil, err
 	}
 
-	switch classifyIP(config, resolved.IP) {
+	classification := classifyIP(config, resolved.IP)
+	switch classification {
 	case IpOK:
 		return resolved, nil
 	case IpOKBlacklistExempted:
@@ -107,7 +108,7 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
 		return nil, denyError(fmt.Errorf("resolves to blacklisted address %s", resolved.IP))
 	default:
-		panic("unknown IP type")
+		return nil, fmt.Errorf("unknown IP type %v", classification)
 	}
 }
 
@@ -447,6 +448,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		decision.allow = true
 		decision.reason = "your role is allowed to access this host"
 		return decision, nil
+	default:
+		return nil, fmt.Errorf("unknown acl decision %v", result)
 	}
-	panic(fmt.Sprintf("unknown acl decision %v", result))
 }
