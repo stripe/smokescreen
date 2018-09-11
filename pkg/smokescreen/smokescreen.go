@@ -103,10 +103,10 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		return resolved, nil
 	case IpDenyNotGlobalUnicast:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("resolves to private address %s", resolved.IP))
+		return nil, denyError(fmt.Errorf("the destination resolves to private address %s", resolved.IP))
 	case IpDenyBlacklist:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("resolves to blacklisted address %s", resolved.IP))
+		return nil, denyError(fmt.Errorf("the destination resolves to blocked address %s", resolved.IP))
 	default:
 		return nil, fmt.Errorf("unknown IP type %v", classification)
 	}
