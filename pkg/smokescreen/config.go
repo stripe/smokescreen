@@ -219,7 +219,7 @@ func (config *Config) SetupTls(tlsServerPemFile string, tlsClientCasFiles []stri
 		}
 
 		if len(tlsClientCasFiles) != 0 {
-			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+			tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
 			tlsConfig.ClientCAs = x509.NewCertPool()
 			for _, clientCaFile := range tlsClientCasFiles {
 				caBytes, err := ioutil.ReadFile(clientCaFile)
