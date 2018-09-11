@@ -125,7 +125,7 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 	var msg string
 	switch err.(type) {
 	case denyError:
-		msg = fmt.Sprintf(denyMsgTmpl, err.Error(), req.Host)
+		msg = fmt.Sprintf(denyMsgTmpl, req.Host, err.Error())
 	default:
 		msg = "an unexpected error occurred."
 	}
