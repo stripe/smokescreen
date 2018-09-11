@@ -76,7 +76,7 @@ func (config *Config) Init() error {
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
 			if len(req.TLS.PeerCertificates) == 0 {
-				return fail(MissingRoleError(fmt.Errorf("fatal: No PeerCertificates")))
+				return fail(MissingRoleError(fmt.Errorf("no PeerCertificates")))
 			}
 			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 		}
