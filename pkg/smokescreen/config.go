@@ -75,8 +75,8 @@ func (config *Config) Init() error {
 	if config.TlsConfig != nil && config.TlsConfig.ClientCAs != nil { // If client certs are set, pick the CN.
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
-			if len(req.TLS.PeerCertificates) == 0 { // This should be impossible as long as ClientAuth is RequireAndVerifyClientCert
-				fail(MissingRoleError(fmt.Errorf("fatal: No PeerCertificates")))
+			if len(req.TLS.PeerCertificates) == 0 {
+				return fail(MissingRoleError(fmt.Errorf("fatal: No PeerCertificates")))
 			}
 			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 		}
@@ -228,7 +228,7 @@ func (config *Config) SetupTls(tlsServerPemFile string, tlsClientCasFiles []stri
 				}
 				success := tlsConfig.ClientCAs.AppendCertsFromPEM(caBytes)
 				if !success {
-					fail(fmt.Errorf("Problem decoding '%s'", clientCaFile))
+					return fail(fmt.Errorf("Problem decoding '%s'", clientCaFile))
 				}
 
 				config.populateClientCaMap(caBytes)
