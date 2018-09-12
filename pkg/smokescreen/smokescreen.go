@@ -40,7 +40,9 @@ type ctxUserData struct {
 	decision *aclDecision
 }
 
-type denyError error
+type denyError struct {
+	error
+}
 
 func (t IpType) String() string {
 	switch t {
@@ -103,10 +105,10 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		return resolved, nil
 	case IpDenyNotGlobalUnicast:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("the destination resolves to private address %s", resolved.IP))
+		return nil, denyError{fmt.Errorf("the destination resolves to private address %s", resolved.IP)}
 	case IpDenyBlacklist:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("the destination resolves to blocked address %s", resolved.IP))
+		return nil, denyError{fmt.Errorf("the destination resolves to blocked address %s", resolved.IP)}
 	default:
 		return nil, fmt.Errorf("unknown IP type %v", classification)
 	}
@@ -170,9 +172,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return req, rejectResponse(req, config, err)
 		}
 		if !userData.decision.allow {
-			return req, rejectResponse(req, config, denyError(errors.New(userData.decision.reason)))
+			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
 		}
 
+		// Proceed with proxying the request
 		return req, nil
 	})
 
@@ -295,7 +298,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 		return nil, err
 	}
 	if !decision.allow {
-		return nil, denyError(errors.New(decision.reason))
+		return nil, denyError{errors.New(decision.reason)}
 	}
 
 	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
