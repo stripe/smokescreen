@@ -176,6 +176,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return req, nil
 	})
 
+	// Handle CONNECT proxy to HTTPS destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		resolved, err := handleConnect(config, ctx)
 		if err != nil {
