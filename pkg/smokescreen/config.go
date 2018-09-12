@@ -46,7 +46,19 @@ type Config struct {
 	hostExtractExpr *regexp.Regexp
 }
 
-type MissingRoleError error
+type missingRoleError struct {
+	error
+}
+
+func MissingRoleError(s string) error {
+	return missingRoleError{errors.New(s)}
+}
+
+func IsMissingRoleError(err error) bool {
+	_, ok := err.(missingRoleError)
+	return ok
+}
+
 
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
@@ -76,7 +88,7 @@ func (config *Config) Init() error {
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
 			if len(req.TLS.PeerCertificates) == 0 {
-				return fail(MissingRoleError(fmt.Errorf("no PeerCertificates")))
+				return fail(MissingRoleError("client did not provide certificate"))
 			}
 			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 		}
@@ -84,8 +96,10 @@ func (config *Config) Init() error {
 		config.RoleFromRequest = func(req *http.Request) (string, error) {
 			fail := func(err error) (string, error) { return "", err }
 			idHeader := req.Header["X-Smokescreen-Role"]
-			if len(idHeader) != 1 {
-				return fail(MissingRoleError(fmt.Errorf("no or multiple 'X-Smokescreen-Role' header provided")))
+			if len(idHeader) == 0 {
+				return fail(MissingRoleError("client did not send 'X-Smokescreen-Role' header"))
+			} else if len(idHeader) > 1 {
+				return fail(MissingRoleError("client sent multiple 'X-Smokescreen-Role' headers"))
 			}
 			return idHeader[0], nil
 		}

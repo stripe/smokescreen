@@ -406,11 +406,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	}
 
 	role, roleErr := config.RoleFromRequest(req)
-	if roleErr != nil {
-		// A missing role is OK at this point since we may have a default
-		if _, ok := roleErr.(MissingRoleError); !ok {
-			return nil, roleErr
-		}
+	// A missing role is OK at this point since we may have a default
+	if roleErr != nil && !IsMissingRoleError(roleErr) {
+		return nil, roleErr
 	}
 	decision.role = role
 
