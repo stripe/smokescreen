@@ -40,7 +40,9 @@ type ctxUserData struct {
 	decision *aclDecision
 }
 
-type denyError error
+type denyError struct {
+	error
+}
 
 func (t IpType) String() string {
 	switch t {
@@ -103,10 +105,10 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		return resolved, nil
 	case IpDenyNotGlobalUnicast:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("resolves to private address %s", resolved.IP))
+		return nil, denyError{fmt.Errorf("the destination resolves to private address %s", resolved.IP)}
 	case IpDenyBlacklist:
 		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError(fmt.Errorf("resolves to blacklisted address %s", resolved.IP))
+		return nil, denyError{fmt.Errorf("the destination resolves to blocked address %s", resolved.IP)}
 	default:
 		return nil, fmt.Errorf("unknown IP type %v", classification)
 	}
@@ -125,7 +127,7 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 	var msg string
 	switch err.(type) {
 	case denyError:
-		msg = fmt.Sprintf(denyMsgTmpl, err.Error(), req.Host)
+		msg = fmt.Sprintf(denyMsgTmpl, req.Host, err.Error())
 	default:
 		msg = "an unexpected error occurred."
 	}
@@ -170,12 +172,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return req, rejectResponse(req, config, err)
 		}
 		if !userData.decision.allow {
-			return req, rejectResponse(req, config, denyError(errors.New(userData.decision.reason)))
+			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
 		}
 
+		// Proceed with proxying the request
 		return req, nil
 	})
 
+	// Handle CONNECT proxy to HTTPS destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		resolved, err := handleConnect(config, ctx)
 		if err != nil {
@@ -294,7 +298,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 		return nil, err
 	}
 	if !decision.allow {
-		return nil, denyError(errors.New(decision.reason))
+		return nil, denyError{errors.New(decision.reason)}
 	}
 
 	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
@@ -406,11 +410,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	}
 
 	role, roleErr := config.RoleFromRequest(req)
-	if roleErr != nil {
-		// A missing role is OK at this point since we may have a default
-		if _, ok := roleErr.(MissingRoleError); !ok {
-			return nil, roleErr
-		}
+	// A missing role is OK at this point since we may have a default
+	if roleErr != nil && !IsMissingRoleError(roleErr) {
+		return nil, roleErr
 	}
 	decision.role = role
 
