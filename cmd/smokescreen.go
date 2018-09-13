@@ -41,12 +41,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.StringFlag{
 			Name:  "listen-ip",
-			Usage: "listen on interface with address `IP`.\n\t\tThis argument is ignored when running under Einhorn. (default: any)",
+			Usage: "Listen on interface with address `IP`.\n\t\tThis argument is ignored when running under Einhorn. (default: any)",
 		},
 		cli.IntFlag{
 			Name:  "listen-port",
 			Value: 4750,
-			Usage: "listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
+			Usage: "Listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
 		},
 		cli.DurationFlag{
 			Name:  "timeout",
