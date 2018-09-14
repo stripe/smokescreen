@@ -14,10 +14,8 @@ import (
 
 // Process command line args into a configuration object.  If the "--help" or
 // "--version" flags are provided, return nil with no error.
-// As a side-effect, processing the "--help" argument will cause the program to
-// print the the help message and exit.  If args is nil, os.Args will be used.
-// If logger is nil, a default logger will be created and included in the
-// returned configuration.
+// If args is nil, os.Args will be used.  If logger is nil, a default logger
+// will be created and included in the returned configuration.
 func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, error) {
 	if args == nil {
 		args = os.Args
@@ -27,7 +25,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
-	app.Version = smokescreen.Version
+	app.Version = smokescreen.Version()
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 
@@ -105,7 +103,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	app.Action = func(c *cli.Context) error {
 		if c.Bool("help") {
 			cli.ShowAppHelp(c)
-			return
+			return nil // configToReturn will not be set
 		}
 		if len(c.Args()) > 0 {
 			return errors.New("Received unexpected non-option argument(s)")
