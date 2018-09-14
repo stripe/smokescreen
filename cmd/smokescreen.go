@@ -12,7 +12,8 @@ import (
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
 
-// Process command line args into a configuration object.
+// Process command line args into a configuration object.  If the "--help" or
+// "--version" flags are provided, return nil with no error.
 // As a side-effect, processing the "--help" argument will cause the program to
 // print the the help message and exit.  If args is nil, os.Args will be used.
 // If logger is nil, a default logger will be created and included in the
@@ -26,6 +27,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
+	app.Version = smokescreen.Version
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 
@@ -102,7 +104,8 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app.Action = func(c *cli.Context) error {
 		if c.Bool("help") {
-			cli.ShowAppHelpAndExit(c, 0)
+			cli.ShowAppHelp(c)
+			return
 		}
 		if len(c.Args()) > 0 {
 			return errors.New("Received unexpected non-option argument(s)")
