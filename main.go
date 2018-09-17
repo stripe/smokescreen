@@ -10,11 +10,10 @@ func main() {
 
 	conf, err := cmd.NewConfiguration(nil, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Could not create configuration: %v", err)
+	} else if conf != nil {
+		smokescreen.StartWithConfig(conf, nil)
+	} else {
+		// --help or --version was passed and handled by NewConfiguration, so do nothing
 	}
-
-	if conf == nil {
-		log.Fatal("No config")
-	}
-	smokescreen.StartWithConfig(conf, nil)
 }

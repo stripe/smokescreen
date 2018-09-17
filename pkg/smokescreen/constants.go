@@ -2,6 +2,12 @@ package smokescreen
 
 import "net"
 
+const versionSemantic = "0.0.1"
+const versionHash = "$Id$" // See `git help attributes`
+func Version() string {
+	return versionSemantic + "-" + versionHash[5:13]
+}
+
 var PrivateNetworkStrings = []string{
 	"10.0.0.0/8",
 	"172.16.0.0/12",
