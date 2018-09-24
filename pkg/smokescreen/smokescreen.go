@@ -19,16 +19,17 @@ import (
 )
 
 const (
-	IpOK IpType = iota
-	IpOKBlacklistExempted
-	IpDenyNotGlobalUnicast
-	IpDenyBlacklist
+	ipAllowDefault ipType = iota
+	ipAllowUserConfigured
+	ipDenyNotGlobalUnicast
+	ipDenyPrivateRange
+	ipDenyUserConfigured
 
 	denyMsgTmpl = "egress proxying denied to host '%s' because %s. " +
 		"If you didn't intend for your request to be proxied, you may want a 'no_proxy' environment variable."
 )
 
-type IpType int
+type ipType int
 
 type aclDecision struct {
 	reason, role, project string
@@ -44,18 +45,31 @@ type denyError struct {
 	error
 }
 
-func (t IpType) String() string {
+func (t ipType) IsAllowed() bool {
+	return t == ipAllowDefault || t == ipAllowUserConfigured
+}
+
+func (t ipType) String() string {
 	switch t {
-	case IpOK:
-		return "IpOK"
-	case IpOKBlacklistExempted:
-		return "IpOKBlacklistExempted"
-	case IpDenyNotGlobalUnicast:
-		return "IpDenyNotGlobalUnicast"
-	case IpDenyBlacklist:
-		return "IpDenyBlacklist"
+	case ipAllowDefault: return "Allow: Default"
+	case ipAllowUserConfigured: return "Allow: User Configured"
+	case ipDenyNotGlobalUnicast: return "Deny: Not Global Unicast"
+	case ipDenyPrivateRange: return "Deny: Private Range"
+	case ipDenyUserConfigured: return "Deny: User Configured"
 	default:
-		panic(fmt.Sprintf("unknown ip type %d", t))
+		panic(fmt.Errorf("unknown ip type %d", t))
+	}
+}
+
+func (t ipType) statsdString() string {
+	switch t {
+	case ipAllowDefault: return "resolver.allow.default"
+	case ipAllowUserConfigured: return "resolver.allow.user_configured"
+	case ipDenyNotGlobalUnicast: return "resolver.deny.not_global_unicast"
+	case ipDenyPrivateRange: return "resolver.deny.private_range"
+	case ipDenyUserConfigured: return "resolver.deny.user_configured"
+	default:
+		panic(fmt.Errorf("unknown ip type %d", t))
 	}
 }
 
@@ -71,21 +85,24 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 	return false
 }
 
-func classifyIP(config *Config, ip net.IP) IpType {
-	if !(ip.IsGlobalUnicast() || (config.AllowProxyToLoopback && ip.IsLoopback())) {
-		return IpDenyNotGlobalUnicast
+func classifyIP(config *Config, ip net.IP) ipType {
+	if !ip.IsGlobalUnicast() || ip.IsLoopback() {
+		if ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip) {
+			return ipAllowUserConfigured
+		} else {
+			return ipDenyNotGlobalUnicast
+		}
 	}
 
-	blacklisted := ipIsInSetOfNetworks(config.CidrBlacklist, ip)
-	whitelisted := ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip)
-
-	if !blacklisted {
-		return IpOK
-	} else if whitelisted {
-		return IpOKBlacklistExempted
+	if ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip) {
+		return ipAllowUserConfigured
+	} else if ipIsInSetOfNetworks(config.CidrBlacklist, ip) {
+		return ipDenyUserConfigured
+	} else if ipIsInSetOfNetworks(PrivateNetworkRanges, ip) {
+		return ipDenyPrivateRange
+	} else {
+		return ipAllowDefault
 	}
-
-	return IpDenyBlacklist
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
@@ -97,20 +114,12 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 	}
 
 	classification := classifyIP(config, resolved.IP)
-	switch classification {
-	case IpOK:
+	config.StatsdClient.Count(classification.statsdString(), 1, []string{}, 0.3)
+
+	if classification.IsAllowed() {
 		return resolved, nil
-	case IpOKBlacklistExempted:
-		config.StatsdClient.Count("resolver.private_blacklist_exempted_total", 1, []string{}, 0.3)
-		return resolved, nil
-	case IpDenyNotGlobalUnicast:
-		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError{fmt.Errorf("the destination resolves to private address %s", resolved.IP)}
-	case IpDenyBlacklist:
-		config.StatsdClient.Count("resolver.illegal_total", 1, []string{}, 0.3)
-		return nil, denyError{fmt.Errorf("the destination resolves to blocked address %s", resolved.IP)}
-	default:
-		return nil, fmt.Errorf("unknown IP type %v", classification)
+	} else {
+		return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 	}
 }
 

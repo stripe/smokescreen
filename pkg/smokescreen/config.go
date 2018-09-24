@@ -32,7 +32,6 @@ type Config struct {
 	ExitTimeout                  time.Duration
 	MaintenanceFile              string
 	StatsdClient                 *statsd.Client
-	AllowProxyToLoopback         bool
 	EgressAcl                    EgressAcl
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config

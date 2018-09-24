@@ -37,7 +37,7 @@ func generateCidrBlacklistExemptions() ([]net.IPNet, error) {
 
 type testCase struct {
 	ip       string
-	expected IpType
+	expected ipType
 }
 
 func TestClassifyIP(t *testing.T) {
@@ -47,7 +47,6 @@ func TestClassifyIP(t *testing.T) {
 	a.NoError(err)
 
 	conf := &Config{
-		CidrBlacklist:                PrivateNetworks(),
 		CidrBlacklistExemptions:      cidrBlacklistExemptions,
 		ConnectTimeout:               10 * time.Second,
 		ExitTimeout:                  10 * time.Second,
@@ -57,32 +56,29 @@ func TestClassifyIP(t *testing.T) {
 	a.NoError(err)
 
 	testIPs := []testCase{
-		// IpOK addresses
-		testCase{"8.8.8.8", IpOK},
-		// whitelisting a IpOK address does nothing
-		testCase{"8.8.9.8", IpOK},
+		testCase{"8.8.8.8", ipAllowDefault},
+		testCase{"8.8.9.8", ipAllowUserConfigured},
 
 		// Specific blocked networks
-		testCase{"10.0.0.1", IpDenyBlacklist},
-		testCase{"10.0.1.1", IpOKBlacklistExempted},
-		testCase{"172.16.0.1", IpDenyBlacklist},
-		testCase{"172.16.1.1", IpOKBlacklistExempted},
-		testCase{"192.168.0.1", IpDenyBlacklist},
-		testCase{"192.168.1.1", IpOKBlacklistExempted},
+		testCase{"10.0.0.1", ipDenyPrivateRange},
+		testCase{"10.0.1.1", ipAllowUserConfigured},
+		testCase{"172.16.0.1", ipDenyPrivateRange},
+		testCase{"172.16.1.1", ipAllowUserConfigured},
+		testCase{"192.168.0.1", ipDenyPrivateRange},
+		testCase{"192.168.1.1", ipAllowUserConfigured},
 
 		// localhost
-		testCase{"127.0.0.1", IpDenyNotGlobalUnicast},
-		testCase{"127.255.255.255", IpDenyNotGlobalUnicast},
-		testCase{"::1", IpDenyNotGlobalUnicast},
-		// whitelisting a localhost address does nothing
-		testCase{"127.0.1.1", IpDenyNotGlobalUnicast},
+		testCase{"127.0.0.1", ipDenyNotGlobalUnicast},
+		testCase{"127.255.255.255", ipDenyNotGlobalUnicast},
+		testCase{"::1", ipDenyNotGlobalUnicast},
+		testCase{"127.0.1.1", ipAllowUserConfigured},
 
 		// ec2 metadata endpoint
-		testCase{"169.254.169.254", IpDenyNotGlobalUnicast},
+		testCase{"169.254.169.254", ipDenyNotGlobalUnicast},
 
 		// Broadcast addresses
-		testCase{"255.255.255.255", IpDenyNotGlobalUnicast},
-		testCase{"ff02:0:0:0:0:0:0:2", IpDenyNotGlobalUnicast},
+		testCase{"255.255.255.255", ipDenyNotGlobalUnicast},
+		testCase{"ff02:0:0:0:0:0:0:2", ipDenyNotGlobalUnicast},
 	}
 
 	for _, test := range testIPs {
@@ -108,7 +104,6 @@ func TestClearsErrorHeader(t *testing.T) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conf := &Config{
 		Port:                         39381,
-		CidrBlacklist:                PrivateNetworks(),
 		CidrBlacklistExemptions:      cidrBlacklistExemptions,
 		ConnectTimeout:               10 * time.Second,
 		ExitTimeout:                  10 * time.Second,

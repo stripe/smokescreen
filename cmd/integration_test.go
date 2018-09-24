@@ -56,7 +56,7 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(200, resp.StatusCode)
+		a.Equal(200, resp.StatusCode, "TestCase was %v", test)
 	} else {
 		if !a.NoError(err) {
 			return
@@ -335,6 +335,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		"--egress-acl-file=testdata/sample_config.yaml",
 		"--additional-error-message-on-deny=moar ctx",
 		"--deny-range=127.0.0.2/32",
+		"--allow-range=127.0.0.1/32",
 	}
 
 	var conf *smokescreen.Config
@@ -352,7 +353,6 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		return nil, err
 	}
 
-	conf.AllowProxyToLoopback = true
 	conf.Log.AddHook(logHook)
 
 	handler := smokescreen.BuildProxy(conf)

@@ -113,13 +113,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		var cidrBlacklist []net.IPNet
 		var cidrBlacklistExemptions []net.IPNet
 
-		for _, cidrBlock := range smokescreen.PrivateNetworkStrings {
-			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
-			if err != nil {
-				return err
-			}
-		}
-
 		for _, cidrBlock := range c.StringSlice("deny-range") {
 			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
 			if err != nil {
