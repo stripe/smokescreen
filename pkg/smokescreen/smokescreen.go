@@ -51,11 +51,16 @@ func (t ipType) IsAllowed() bool {
 
 func (t ipType) String() string {
 	switch t {
-	case ipAllowDefault: return "Allow: Default"
-	case ipAllowUserConfigured: return "Allow: User Configured"
-	case ipDenyNotGlobalUnicast: return "Deny: Not Global Unicast"
-	case ipDenyPrivateRange: return "Deny: Private Range"
-	case ipDenyUserConfigured: return "Deny: User Configured"
+	case ipAllowDefault:
+		return "Allow: Default"
+	case ipAllowUserConfigured:
+		return "Allow: User Configured"
+	case ipDenyNotGlobalUnicast:
+		return "Deny: Not Global Unicast"
+	case ipDenyPrivateRange:
+		return "Deny: Private Range"
+	case ipDenyUserConfigured:
+		return "Deny: User Configured"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -63,11 +68,16 @@ func (t ipType) String() string {
 
 func (t ipType) statsdString() string {
 	switch t {
-	case ipAllowDefault: return "resolver.allow.default"
-	case ipAllowUserConfigured: return "resolver.allow.user_configured"
-	case ipDenyNotGlobalUnicast: return "resolver.deny.not_global_unicast"
-	case ipDenyPrivateRange: return "resolver.deny.private_range"
-	case ipDenyUserConfigured: return "resolver.deny.user_configured"
+	case ipAllowDefault:
+		return "resolver.allow.default"
+	case ipAllowUserConfigured:
+		return "resolver.allow.user_configured"
+	case ipDenyNotGlobalUnicast:
+		return "resolver.deny.not_global_unicast"
+	case ipDenyPrivateRange:
+		return "resolver.deny.private_range"
+	case ipDenyUserConfigured:
+		return "resolver.deny.user_configured"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}

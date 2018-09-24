@@ -19,7 +19,7 @@ var PrivateNetworkRanges []net.IPNet
 
 func init() {
 	PrivateNetworkRanges = make([]net.IPNet, len(privateNetworkStrings))
-	for i,s := range privateNetworkStrings {
+	for i, s := range privateNetworkStrings {
 		_, rng, err := net.ParseCIDR(s)
 		if err != nil {
 			panic("Couldn't parse internal private network string")

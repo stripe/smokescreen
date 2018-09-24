@@ -58,7 +58,6 @@ func IsMissingRoleError(err error) bool {
 	return ok
 }
 
-
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
