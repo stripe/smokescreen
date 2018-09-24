@@ -54,6 +54,30 @@ func IsMissingRoleError(err error) bool {
 	return ok
 }
 
+func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
+	outRanges := make([]net.IPNet, len(rangeStrings))
+	for i, str := range rangeStrings {
+		_, ipnet, err := net.ParseCIDR(str)
+		if err != nil {
+			return outRanges, err
+		}
+		outRanges[i] = *ipnet
+	}
+	return outRanges, nil
+}
+
+func (config *Config) SetDenyRanges(rangeStrings []string) error {
+	var err error
+	config.CidrBlacklist, err = parseRanges(rangeStrings)
+	return err
+}
+
+func (config *Config) SetAllowRanges(rangeStrings []string) error {
+	var err error
+	config.CidrBlacklistExemptions, err = parseRanges(rangeStrings)
+	return err
+}
+
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
@@ -61,6 +85,10 @@ type authKeyId struct {
 
 func (config *Config) Init() error {
 	var err error
+
+	if config.CidrBlacklist == nil {
+		return errors.New("CidrBlacklist was not initialized!") //TODO extract default ranges from config so this doesn't need to be an error
+	}
 
 	if config.CrlByAuthorityKeyId == nil {
 		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
@@ -171,21 +199,26 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 	return nil
 }
 
-func (config *Config) SetupStatsd(addr, namespace string) error {
+func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
 		config.StatsdClient = nil
 		return nil
 	}
 
-	track, err := statsd.New(addr)
+	client, err := statsd.New(addr)
 	if err != nil {
 		return err
 	}
-	config.StatsdClient = track
+
+	config.StatsdClient = client
 
 	config.StatsdClient.Namespace = namespace
 
 	return nil
+}
+
+func (config *Config) SetupStatsd(addr string) error {
+	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
 func (config *Config) SetupEgressAcl(aclFile string) error {

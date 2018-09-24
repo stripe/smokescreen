@@ -141,7 +141,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			DisabledAclPolicyActions:     c.StringSlice("disable-acl-policy-action"),
 		}
 
-		if err := conf.SetupStatsd(c.String("statsd-address"), "smokescreen."); err != nil {
+		if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
 			return err
 		}
 		if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {

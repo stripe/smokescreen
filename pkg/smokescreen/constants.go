@@ -8,6 +8,8 @@ func Version() string {
 	return versionSemantic + "-" + versionHash[5:13]
 }
 
+const DefaultStatsdNamespace = "smokescreen."
+
 var privateNetworkStrings = [...]string{
 	"10.0.0.0/8",
 	"172.16.0.0/12",
