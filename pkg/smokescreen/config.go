@@ -32,7 +32,6 @@ type Config struct {
 	ExitTimeout                  time.Duration
 	MaintenanceFile              string
 	StatsdClient                 *statsd.Client
-	AllowProxyToLoopback         bool
 	EgressAcl                    EgressAcl
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
@@ -58,7 +57,6 @@ func IsMissingRoleError(err error) bool {
 	_, ok := err.(missingRoleError)
 	return ok
 }
-
 
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
