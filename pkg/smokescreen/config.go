@@ -81,8 +81,6 @@ type authKeyId struct {
 }
 
 func (config *Config) Init() error {
-	var err error
-
 	if config.CrlByAuthorityKeyId == nil {
 		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
 	}
@@ -91,10 +89,6 @@ func (config *Config) Init() error {
 	}
 	if config.Log == nil {
 		config.Log = log.New()
-	}
-
-	if err != nil {
-		return err
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
