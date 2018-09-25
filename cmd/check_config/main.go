@@ -7,11 +7,11 @@ import (
 )
 
 func main() {
-	filePath := os.Args[1]
-	if filePath == "" {
+	if len(os.Args) < 2 {
 		fmt.Println("missing argument: filePath")
 		os.Exit(1)
 	}
+	filePath := os.Args[1]
 	config, err := smokescreen.LoadConfig(filePath)
 
 	if err != nil {
