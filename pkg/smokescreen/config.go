@@ -86,10 +86,6 @@ type authKeyId struct {
 func (config *Config) Init() error {
 	var err error
 
-	if config.CidrBlacklist == nil {
-		return errors.New("CidrBlacklist was not initialized!") //TODO extract default ranges from config so this doesn't need to be an error
-	}
-
 	if config.CrlByAuthorityKeyId == nil {
 		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
 	}
