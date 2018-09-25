@@ -1,9 +1,6 @@
 package smokescreen
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -16,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -209,142 +205,53 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 	return nil
 }
 
-func (config *Config) SetupTls(tlsServerPemFile string, tlsClientCasFiles []string) error {
-	fail := func(err error) error { return err }
+func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) error {
+	data, err := ioutil.ReadFile(fileName)
 
-	if tlsServerPemFile != "" {
+	//TODO this is a bit awkward
+	config.populateClientCaMap(data)
 
-		tlsConfig := tls.Config{}
-
-		fileBytes, err := ioutil.ReadFile(tlsServerPemFile)
-		if err != nil {
-			return fail(err)
-		}
-
-		serverCert, err := ParsePemChain(fileBytes)
-		if err != nil {
-			return fail(err)
-		}
-
-		tlsConfig.Certificates = []tls.Certificate{
-			serverCert,
-		}
-
-		if len(tlsClientCasFiles) != 0 {
-			tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
-			tlsConfig.ClientCAs = x509.NewCertPool()
-			for _, clientCaFile := range tlsClientCasFiles {
-				caBytes, err := ioutil.ReadFile(clientCaFile)
-				if err != nil {
-					return fail(err)
-				}
-				success := tlsConfig.ClientCAs.AppendCertsFromPEM(caBytes)
-				if !success {
-					return fail(fmt.Errorf("Problem decoding '%s'", clientCaFile))
-				}
-
-				config.populateClientCaMap(caBytes)
-			}
-		}
-
-		tlsConfig.BuildNameToCertificate()
-		config.TlsConfig = &tlsConfig
-	} else {
-		if len(tlsClientCasFiles) != 0 {
-			return fail(fmt.Errorf("It is pointless to set client CAs without setting the server's cert/key."))
-		}
-		config.TlsConfig = nil
+	if err != nil {
+		return err
+	}
+	ok := pool.AppendCertsFromPEM(data)
+	if !ok {
+		return fmt.Errorf("Failed to load any certificates from file '%s'", fileName)
 	}
 	return nil
 }
 
-func ParsePemChain(pemBytes []byte) (tls.Certificate, error) {
-	fail := func(err error) (tls.Certificate, error) { return tls.Certificate{}, err }
-
-	var err error
-	var cert tls.Certificate
-
-	for {
-		var certDerBlock *pem.Block
-		certDerBlock, pemBytes = pem.Decode(pemBytes)
-		if certDerBlock == nil {
-			break
-		}
-
-		if strings.HasSuffix(certDerBlock.Type, "PRIVATE KEY") {
-			if cert.PrivateKey != nil {
-				return fail(fmt.Errorf("Found multiple '*PRIVATE KEY's block in the provided file."))
-			}
-			cert.PrivateKey, err = parsePrivateKey(certDerBlock.Bytes)
-			if err != nil {
-				return fail(err)
-			}
-		} else if certDerBlock.Type == "CERTIFICATE" {
-			cert.Certificate = append(cert.Certificate, certDerBlock.Bytes)
-		} else {
-			log.Printf("warn: Unsupported PEM block '%s'. Resolution: ignoring", certDerBlock.Type)
-		}
+// certFile and keyFile may be the same file containing concatenated PEM blocks
+func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) error {
+	if certFile == "" || keyFile == "" {
+		return errors.New("both certificate and key files must be specified to set up TLS")
 	}
 
-	if len(cert.Certificate) == 0 {
-		return fail(fmt.Errorf("Could not find any 'CERTIFICATE' in the provided file."))
-	}
-
-	if cert.PrivateKey == nil {
-		return fail(fmt.Errorf("Could not find a '*PRIVATE KEY' in the provided file."))
-	}
-	// We don't need to parse the IpTypePublic key for TLS, but we so do anyway
-	// to check that it looks sane and matches the IpTypePrivate key.
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	serverCert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return fail(err)
+		return err
 	}
 
-	switch pub := x509Cert.PublicKey.(type) {
-	case *rsa.PublicKey:
-		priv, ok := cert.PrivateKey.(*rsa.PrivateKey)
-		if !ok {
-			return fail(errors.New("tls: IpTypePrivate key type does not match IpTypePublic key type"))
+	clientAuth := tls.NoClientCert
+	clientCAs := x509.NewCertPool()
+
+	if len(clientCAFiles) != 0 {
+		clientAuth = tls.VerifyClientCertIfGiven
+		for _, caFile := range clientCAFiles {
+			err = addCertsFromFile(config, clientCAs, caFile)
+			if err != nil {
+				return err
+			}
 		}
-		if pub.N.Cmp(priv.N) != 0 {
-			return fail(errors.New("tls: IpTypePrivate key does not match IpTypePublic key"))
-		}
-	case *ecdsa.PublicKey:
-		priv, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
-		if !ok {
-			return fail(errors.New("tls: IpTypePrivate key type does not match IpTypePublic key type"))
-		}
-		if pub.X.Cmp(priv.X) != 0 || pub.Y.Cmp(priv.Y) != 0 {
-			return fail(errors.New("tls: IpTypePrivate key does not match IpTypePublic key"))
-		}
-	default:
-		return fail(errors.New("tls: unknown IpTypePublic key algorithm"))
 	}
 
-	return cert, nil
-}
-
-// Cargoculted from pkg/tls/tls.go
-// Attempt to parse the given IpTypePrivate key DER block. OpenSSL 0.9.8 generates
-// PKCS#1 IpTypePrivate keys by default, while OpenSSL 1.0.0 generates PKCS#8 keys.
-// OpenSSL ecparam generates SEC1 EC IpTypePrivate keys for ECDSA. We try all three.
-func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
-	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
-		return key, nil
-	}
-	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
-		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey:
-			return key, nil
-		default:
-			return nil, errors.New("tls: found unknown IpTypePrivate key type in PKCS#8 wrapping")
+		config.TlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{serverCert},
+			ClientAuth: clientAuth,
+			ClientCAs: clientCAs,
 		}
-	}
-	if key, err := x509.ParseECPrivateKey(der); err == nil {
-		return key, nil
-	}
 
-	return nil, errors.New("tls: failed to parse IpTypePrivate key")
+	return nil
 }
 
 func (config *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
