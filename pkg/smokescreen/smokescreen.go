@@ -437,7 +437,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 
 	decision.project, _ = config.EgressAcl.Project(role)
 
-	submatch := config.hostExtractExpr.FindStringSubmatch(outboundHost)
+	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 
 	result, err := config.EgressAcl.Decide(role, submatch[1])
 	if err != nil {

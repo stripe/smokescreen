@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -37,8 +36,6 @@ type Config struct {
 	AdditionalErrorMessageOnDeny string
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
-
-	hostExtractExpr *regexp.Regexp
 }
 
 type missingRoleError struct {
@@ -96,7 +93,6 @@ func (config *Config) Init() error {
 		config.Log = log.New()
 	}
 
-	config.hostExtractExpr, err = regexp.Compile("^([^:]*)(:\\d+)?$")
 	if err != nil {
 		return err
 	}
