@@ -81,12 +81,13 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		if yc.Tls.CertFile == "" {
 			return c, errors.New("'tls' section requires 'cert_file'")
 		}
-		var key_file string
-		if  yc.Tls.KeyFile != "" {
-			key_file = yc.Tls.KeyFile
-		} else {
+
+		key_file := yc.Tls.KeyFile
+		if  key_file == "" {
+			// Assume CertFile is a cert+key bundle
 			key_file = yc.Tls.CertFile
 		}
+
 		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
 		if err != nil {
 			return c, err
