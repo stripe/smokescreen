@@ -1,12 +1,19 @@
 package smokescreen
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"time"
 
 	"gopkg.in/yaml.v2"
 )
+
+type yamlConfigTls struct {
+	CertFile string `yaml:"cert_file"`
+	KeyFile string `yaml:"key_file"`
+	ClientCAFiles []string `yaml:"client_ca_files"`
+}
 
 type yamlConfig struct{
 	Ip string
@@ -17,8 +24,10 @@ type yamlConfig struct{
 	ExitTimeout time.Duration `yaml:"exit_timeout"`
 	MaintenanceFile	string `yaml:"maintenance_file"`
 	StatsdAddress string `yaml:"statsd_address"`
-	SupportProxyProtocol bool `yaml:"support_proxy_protocol"`
 	EgressAclFile string `yaml:"acl_file"`
+	SupportProxyProtocol bool `yaml:"support_proxy_protocol"`
+	Tls *yamlConfigTls
+	DenyMessage string `yaml:"deny_message"`
 }
 
 func UnmarshalConfig(rawYaml []byte) (Config, error) {
@@ -57,8 +66,6 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		return c, err
 	}
 
-	c.SupportProxyProtocol = yc.SupportProxyProtocol
-
 	if yc.EgressAclFile != "" {
 		err = c.SetupEgressAcl(yc.EgressAclFile)
 		if err != nil {
@@ -66,10 +73,27 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		}
 	}
 
-	//TODO TLS server bundle, client ca, crl -> TLS opts
+	c.SupportProxyProtocol = yc.SupportProxyProtocol
+
+	if yc.Tls != nil {
+		if yc.Tls.CertFile == "" {
+			return c, errors.New("'tls' section requires 'cert_file'")
+		}
+		var key_file string
+		if  yc.Tls.KeyFile != "" {
+			key_file = yc.Tls.KeyFile
+		} else {
+			key_file = yc.Tls.CertFile
+		}
+		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
+		if err != nil {
+			return c, err
+		}
+	}
+
+	c.AdditionalErrorMessageOnDeny = yc.DenyMessage
 
 	//TODO disable acl policy?
-
 
 	return c, nil
 }
