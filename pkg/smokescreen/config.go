@@ -264,11 +264,11 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		}
 	}
 
-		config.TlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{serverCert},
-			ClientAuth: clientAuth,
-			ClientCAs: clientCAs,
-		}
+	config.TlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth: clientAuth,
+		ClientCAs: clientCAs,
+	}
 
 	return nil
 }

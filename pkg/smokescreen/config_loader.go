@@ -96,8 +96,6 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 
-	//TODO disable acl policy?
-
 	return c, nil
 }
 
