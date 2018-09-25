@@ -150,8 +150,18 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
 			return err
 		}
-		if err := conf.SetupTls(c.String("tls-server-bundle-file"), c.StringSlice("tls-client-ca-file")); err != nil {
-			return err
+		// Originally, we assumed a single file with both cert and key
+		// concatenated.  That setup will continue to work, but SetupTLS now
+		// takes separate args for cert and key, so we pass the filename twice
+		// here.
+		bundleFile := c.String("tls-server-bundle-file")
+		if bundleFile != "" {
+			if err := conf.SetupTls(
+				bundleFile,
+				bundleFile,
+				c.StringSlice("tls-client-ca-file")); err != nil {
+				return err
+			}
 		}
 		if err := conf.Init(); err != nil {
 			return err
