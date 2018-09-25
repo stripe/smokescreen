@@ -27,7 +27,9 @@ type yamlConfig struct{
 	EgressAclFile string `yaml:"acl_file"`
 	SupportProxyProtocol bool `yaml:"support_proxy_protocol"`
 	Tls *yamlConfigTls
-	DenyMessage string `yaml:"deny_message"`
+	DenyMessageExtra string `yaml:"deny_message_extra"`
+
+	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
 
 func UnmarshalConfig(rawYaml []byte) (Config, error) {
@@ -91,7 +93,7 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		}
 	}
 
-	c.AdditionalErrorMessageOnDeny = yc.DenyMessage
+	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 
 	//TODO disable acl policy?
 
