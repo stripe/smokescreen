@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"net"
 	"os"
 	"time"
 
@@ -109,30 +108,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			return errors.New("Received unexpected non-option argument(s)")
 		}
 
-		var err error
-		var cidrBlacklist []net.IPNet
-		var cidrBlacklistExemptions []net.IPNet
-
-		for _, cidrBlock := range c.StringSlice("deny-range") {
-			cidrBlacklist, err = smokescreen.AddCidrToSlice(cidrBlacklist, cidrBlock)
-			if err != nil {
-				return err
-			}
-		}
-
-		for _, cidrBlock := range c.StringSlice("allow-range") {
-			cidrBlacklistExemptions, err = smokescreen.AddCidrToSlice(cidrBlacklistExemptions, cidrBlock)
-			if err != nil {
-				return err
-			}
-		}
-
 		conf := &smokescreen.Config{
 			Log:                          logger,
 			Ip:                           c.String("listen-ip"),
 			Port:                         c.Int("listen-port"),
-			CidrBlacklist:                cidrBlacklist,
-			CidrBlacklistExemptions:      cidrBlacklistExemptions,
 			ConnectTimeout:               c.Duration("timeout"),
 			ExitTimeout:                  60 * time.Second,
 			MaintenanceFile:              c.String("maintenance-file"),
@@ -141,7 +120,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			DisabledAclPolicyActions:     c.StringSlice("disable-acl-policy-action"),
 		}
 
-		if err := conf.SetupStatsd(c.String("statsd-address"), "smokescreen."); err != nil {
+		conf.SetDenyRanges(c.StringSlice("deny-range"))
+		conf.SetAllowRanges(c.StringSlice("allow-range"))
+
+		if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
 			return err
 		}
 		if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {

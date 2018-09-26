@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -37,8 +36,6 @@ type Config struct {
 	AdditionalErrorMessageOnDeny string
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
-
-	hostExtractExpr *regexp.Regexp
 }
 
 type missingRoleError struct {
@@ -54,14 +51,36 @@ func IsMissingRoleError(err error) bool {
 	return ok
 }
 
+func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
+	outRanges := make([]net.IPNet, len(rangeStrings))
+	for i, str := range rangeStrings {
+		_, ipnet, err := net.ParseCIDR(str)
+		if err != nil {
+			return outRanges, err
+		}
+		outRanges[i] = *ipnet
+	}
+	return outRanges, nil
+}
+
+func (config *Config) SetDenyRanges(rangeStrings []string) error {
+	var err error
+	config.CidrBlacklist, err = parseRanges(rangeStrings)
+	return err
+}
+
+func (config *Config) SetAllowRanges(rangeStrings []string) error {
+	var err error
+	config.CidrBlacklistExemptions, err = parseRanges(rangeStrings)
+	return err
+}
+
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
 }
 
 func (config *Config) Init() error {
-	var err error
-
 	if config.CrlByAuthorityKeyId == nil {
 		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
 	}
@@ -70,11 +89,6 @@ func (config *Config) Init() error {
 	}
 	if config.Log == nil {
 		config.Log = log.New()
-	}
-
-	config.hostExtractExpr, err = regexp.Compile("^([^:]*)(:\\d+)?$")
-	if err != nil {
-		return err
 	}
 
 	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
@@ -171,21 +185,26 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 	return nil
 }
 
-func (config *Config) SetupStatsd(addr, namespace string) error {
+func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
 		config.StatsdClient = nil
 		return nil
 	}
 
-	track, err := statsd.New(addr)
+	client, err := statsd.New(addr)
 	if err != nil {
 		return err
 	}
-	config.StatsdClient = track
+
+	config.StatsdClient = client
 
 	config.StatsdClient.Namespace = namespace
 
 	return nil
+}
+
+func (config *Config) SetupStatsd(addr string) error {
+	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
 func (config *Config) SetupEgressAcl(aclFile string) error {
@@ -245,11 +264,11 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		}
 	}
 
-		config.TlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{serverCert},
-			ClientAuth: clientAuth,
-			ClientCAs: clientCAs,
-		}
+	config.TlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth: clientAuth,
+		ClientCAs: clientCAs,
+	}
 
 	return nil
 }
