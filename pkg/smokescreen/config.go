@@ -92,28 +92,6 @@ func (config *Config) Init() error {
 		config.Log = log.New()
 	}
 
-	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
-	if config.TlsConfig != nil && config.TlsConfig.ClientCAs != nil { // If client certs are set, pick the CN.
-		config.RoleFromRequest = func(req *http.Request) (string, error) {
-			fail := func(err error) (string, error) { return "", err }
-			if len(req.TLS.PeerCertificates) == 0 {
-				return fail(MissingRoleError("client did not provide certificate"))
-			}
-			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
-		}
-	} else { // Use a custom header
-		config.RoleFromRequest = func(req *http.Request) (string, error) {
-			fail := func(err error) (string, error) { return "", err }
-			idHeader := req.Header["X-Smokescreen-Role"]
-			if len(idHeader) == 0 {
-				return fail(MissingRoleError("client did not send 'X-Smokescreen-Role' header"))
-			} else if len(idHeader) > 1 {
-				return fail(MissingRoleError("client sent multiple 'X-Smokescreen-Role' headers"))
-			}
-			return idHeader[0], nil
-		}
-	}
-
 	return nil
 }
 
