@@ -18,7 +18,7 @@ func _testGetRole(t *testing.T, rfr_s string, rfr_e error, allow_missing bool, e
 		AllowMissingRole: allow_missing,
 	}
 	s, e := getRole(&config, nil)
-	if (e == nil) != (expect_e == nil) {
+	if e != expect_e {
 		t.Fatalf("expected err %v got %v\n", expect_e, e)
 	}
 	if s != expect_s {
@@ -39,7 +39,7 @@ func TestGetRole(t *testing.T) {
 	})
 
 	t.Run("missing not allowed", func(t *testing.T) {
-		_testGetRole(t, "", mre, false, "", genErr)
+		_testGetRole(t, "", mre, false, "", mre)
 	})
 	t.Run("missing allowed", func(t *testing.T) {
 		_testGetRole(t, "", mre, true, "", nil)
