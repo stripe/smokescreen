@@ -114,7 +114,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			conf.Log = logger
 		}
 
-		conf.Ip =                           c.String("listen-ip")
+		conf.Ip = c.String("listen-ip")
 		conf.Port = c.Int("listen-port")
 		conf.ConnectTimeout = c.Duration("timeout")
 		conf.ExitTimeout = 60 * time.Second

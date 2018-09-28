@@ -19,6 +19,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Parsed: %#v\n", config)
+	fmt.Printf("Parsed: %#v\n\n", config)
+
+	if config.Port < 1 || config.Port > 65535 {
+		fmt.Printf("Invalid port: %d", config.Port)
+	}
+
+	//TODO more checks here
+
 	os.Exit(0)
 }

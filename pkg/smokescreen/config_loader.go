@@ -26,8 +26,8 @@ type yamlConfig struct {
 	StatsdAddress        string        `yaml:"statsd_address"`
 	EgressAclFile        string        `yaml:"acl_file"`
 	SupportProxyProtocol bool          `yaml:"support_proxy_protocol"`
-	DenyMessageExtra     string `yaml:"deny_message_extra"`
-	AllowMissingRole     bool	`yaml:"allow_missing_role"`
+	DenyMessageExtra     string        `yaml:"deny_message_extra"`
+	AllowMissingRole     bool          `yaml:"allow_missing_role"`
 
 	Tls                  *yamlConfigTls
 
