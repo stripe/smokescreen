@@ -27,8 +27,8 @@ var PrivateNetworkRanges []net.IPNet
 // handing out Regexps from a pool doesn't save us anything either, so we'll
 // just live with it.
 const hostExtractPattern = "^([^:]*)(:\\d+)?$"
-var hostExtractRE *regexp.Regexp
 
+var hostExtractRE *regexp.Regexp
 
 func init() {
 	PrivateNetworkRanges = make([]net.IPNet, len(privateNetworkStrings))

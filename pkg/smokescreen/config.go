@@ -36,6 +36,7 @@ type Config struct {
 	AdditionalErrorMessageOnDeny string
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
+	AllowMissingRole             bool
 }
 
 type missingRoleError struct {
@@ -266,8 +267,8 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 
 	config.TlsConfig = &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
-		ClientAuth: clientAuth,
-		ClientCAs: clientCAs,
+		ClientAuth:   clientAuth,
+		ClientCAs:    clientCAs,
 	}
 
 	return nil

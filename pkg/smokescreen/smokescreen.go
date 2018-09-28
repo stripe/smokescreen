@@ -419,6 +419,11 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 }
 
+// Extract the client's ACL role from the HTTP request, using the configured
+// RoleFromRequest function.  Returns the role, or an error if the role cannot
+// be determined (including no RoleFromRequest configured), unless
+// AllowMissingRole is configured, in which case an empty role and no error is
+// returned.
 func getRole(config *Config, req *http.Request) (string, error) {
 	var role string
 	var err error

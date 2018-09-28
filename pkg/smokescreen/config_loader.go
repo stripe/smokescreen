@@ -10,24 +10,26 @@ import (
 )
 
 type yamlConfigTls struct {
-	CertFile string `yaml:"cert_file"`
-	KeyFile string `yaml:"key_file"`
+	CertFile      string   `yaml:"cert_file"`
+	KeyFile       string   `yaml:"key_file"`
 	ClientCAFiles []string `yaml:"client_ca_files"`
 }
 
-type yamlConfig struct{
-	Ip string
-	Port int
-	DenyRanges	[]string `yaml:"deny_ranges"`
-	AllowRanges	[]string `yaml:"allow_ranges"`
-	ConnectTimeout time.Duration `yaml:"connect_timeout"`
-	ExitTimeout time.Duration `yaml:"exit_timeout"`
-	MaintenanceFile	string `yaml:"maintenance_file"`
-	StatsdAddress string `yaml:"statsd_address"`
-	EgressAclFile string `yaml:"acl_file"`
-	SupportProxyProtocol bool `yaml:"support_proxy_protocol"`
-	Tls *yamlConfigTls
-	DenyMessageExtra string `yaml:"deny_message_extra"`
+type yamlConfig struct {
+	Ip                   string
+	Port                 int
+	DenyRanges           []string      `yaml:"deny_ranges"`
+	AllowRanges          []string      `yaml:"allow_ranges"`
+	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
+	ExitTimeout          time.Duration `yaml:"exit_timeout"`
+	MaintenanceFile      string        `yaml:"maintenance_file"`
+	StatsdAddress        string        `yaml:"statsd_address"`
+	EgressAclFile        string        `yaml:"acl_file"`
+	SupportProxyProtocol bool          `yaml:"support_proxy_protocol"`
+	DenyMessageExtra     string `yaml:"deny_message_extra"`
+	AllowMissingRole     bool	`yaml:"allow_missing_role"`
+
+	Tls                  *yamlConfigTls
 
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
@@ -83,7 +85,7 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		}
 
 		key_file := yc.Tls.KeyFile
-		if  key_file == "" {
+		if key_file == "" {
 			// Assume CertFile is a cert+key bundle
 			key_file = yc.Tls.CertFile
 		}
@@ -94,6 +96,7 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 		}
 	}
 
+	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 
 	return c, nil
