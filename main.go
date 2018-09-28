@@ -18,22 +18,6 @@ func defaultRoleFromRequest(req *http.Request) (string, error) {
 	return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 }
 
-// This is an example of another way to obtain a role from a request, using an
-// HTTP header.  Note that this is not reliable in the face of a malicious
-// client with the ability to construct arbitrary HTTP requests.
-/*
-func headerRoleFromRequest(req *http.Request) (string, error) {
-	idHeader := req.Header["X-Smokescreen-Role"]
-	if len(idHeader) == 0 {
-		return "", smokescreen.MissingRoleError("client did not send 'X-Smokescreen-Role' header")
-	} else if len(idHeader) > 1 {
-		return "", smokescreen.MissingRoleError("client sent multiple 'X-Smokescreen-Role' headers")
-	}
-	return idHeader[0], nil
-}
-*/
-
-
 func main() {
 	conf, err := cmd.NewConfiguration(nil, nil)
 	if err != nil {

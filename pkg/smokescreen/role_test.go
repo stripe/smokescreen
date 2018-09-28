@@ -38,10 +38,10 @@ func TestGetRole(t *testing.T) {
 		_testGetRole(t, "", genErr, false, "", genErr)
 	})
 
-	t.Run("missing not allowed", func(t *testing.T) {
+	t.Run("missing not allowed -> err", func(t *testing.T) {
 		_testGetRole(t, "", mre, false, "", mre)
 	})
-	t.Run("missing allowed", func(t *testing.T) {
+	t.Run("missing allowed -> empty role", func(t *testing.T) {
 		_testGetRole(t, "", mre, true, "", nil)
 	})
 }

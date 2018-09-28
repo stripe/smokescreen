@@ -39,6 +39,22 @@ func NewDummyServer() *http.Server {
 	}
 }
 
+// RoleFromRequest implementations
+func testRFRHeader(req *http.Request) (string, error) {
+	idHeader := req.Header["X-Smokescreen-Role"]
+	if len(idHeader) != 1 {
+		return "", smokescreen.MissingRoleError(fmt.Sprintf("Expected 1 header, got %d", len(idHeader)))
+	}
+	return idHeader[0], nil
+}
+func testRFRCert(req *http.Request) (string, error) {
+	if len(req.TLS.PeerCertificates) == 0 {
+		return "", smokescreen.MissingRoleError("client did not provide certificate")
+	}
+	return req.TLS.PeerCertificates[0].Subject.CommonName, nil
+}
+
+
 type TestCase struct {
 	ExpectAllow bool
 	OverTls     bool
@@ -51,12 +67,14 @@ type TestCase struct {
 }
 
 func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+	t.Logf("HTTP Response: %#v", resp)
+
 	a := assert.New(t)
 	if test.ExpectAllow {
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(200, resp.StatusCode, "TestCase was %v", test)
+		a.Equal(200, resp.StatusCode, "HTTP Response code should indicate success.")
 	} else {
 		if !a.NoError(err) {
 			return
@@ -80,21 +98,23 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 	}
 	a.Equalf(1, len(entries), "Expected only a single INFO/WARN log line per request, got: %v", entries)
 
-	entry := entries[0]
-	a.Equal(entry.Message, "proxy_response")
+	if len(entries) > 0 {
+		entry := entries[0]
+		a.Equal(entry.Message, "proxy_response")
 
-	a.Contains(entry.Data, "allow")
-	a.Equal(test.ExpectAllow, entries[0].Data["allow"])
+		a.Contains(entry.Data, "allow")
+		a.Equal(test.ExpectAllow, entries[0].Data["allow"])
 
-	a.Contains(entry.Data, "proxy_type")
-	if test.OverConnect {
-		a.Equal("connect", entry.Data["proxy_type"])
-	} else {
-		a.Equal("http", entry.Data["proxy_type"])
+		a.Contains(entry.Data, "proxy_type")
+		if test.OverConnect {
+			a.Equal("connect", entry.Data["proxy_type"])
+		} else {
+			a.Equal("http", entry.Data["proxy_type"])
+		}
+
+		a.Contains(entry.Data, "host")
+		a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["host"])
 	}
-
-	a.Contains(entry.Data, "host")
-	a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["host"])
 }
 
 func generateRoleForAction(action smokescreen.ConfigEnforcementPolicy) string {
@@ -173,15 +193,16 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					conn = connRaw
 
 					// If we're not talking to the proxy over TLS, let's use headers as identifiers
-					if test.RoleName != "" {
-						connectProxyReq.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
-					}
+					connectProxyReq.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
 					connectProxyReq.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 				}
 
 				buf := bytes.NewBuffer([]byte{})
 				connectProxyReq.Write(buf)
 				buf.Write([]byte{'\n'})
+
+				t.Logf("connect request: %#v", buf.String())
+
 				buf.WriteTo(conn)
 
 				// Todo: Catch the proxy response here and act on it.
@@ -211,10 +232,14 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 		req.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
 		req.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 	}
+
+	t.Logf("HTTP Request: %#v", req)
 	return req
 }
 
 func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hook) {
+	t.Logf("Executing Request for test case %#v", test)
+
 	logHook.Reset()
 	client := generateClientForTest(t, test)
 	req := generateRequestForTest(t, test)
@@ -319,12 +344,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase.RandomTrace = rand.Int()
-		executeRequestForTest(t, testCase, &logHook)
-		if t.Failed() {
-			fmt.Printf("%+v\n", testCase)
-			return
-		}
+		t.Run("", func(t *testing.T) {
+			testCase.RandomTrace = rand.Int()
+			executeRequestForTest(t, testCase, &logHook)
+		})
 	}
 }
 
@@ -351,6 +374,12 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 
 	if err != nil {
 		return nil, err
+	}
+
+	if (useTls) {
+		conf.RoleFromRequest = testRFRCert
+	} else {
+		conf.RoleFromRequest = testRFRHeader
 	}
 
 	conf.Log.AddHook(logHook)
