@@ -108,20 +108,28 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			return errors.New("Received unexpected non-option argument(s)")
 		}
 
-		conf := &smokescreen.Config{
-			Log:                          logger,
-			Ip:                           c.String("listen-ip"),
-			Port:                         c.Int("listen-port"),
-			ConnectTimeout:               c.Duration("timeout"),
-			ExitTimeout:                  60 * time.Second,
-			MaintenanceFile:              c.String("maintenance-file"),
-			SupportProxyProtocol:         c.Bool("proxy-protocol"),
-			AdditionalErrorMessageOnDeny: c.String("additional-error-message-on-deny"),
-			DisabledAclPolicyActions:     c.StringSlice("disable-acl-policy-action"),
+		conf := smokescreen.NewConfig()
+
+		if logger != nil {
+			conf.Log = logger
 		}
 
-		conf.SetDenyRanges(c.StringSlice("deny-range"))
-		conf.SetAllowRanges(c.StringSlice("allow-range"))
+		conf.Ip =                           c.String("listen-ip")
+		conf.Port = c.Int("listen-port")
+		conf.ConnectTimeout = c.Duration("timeout")
+		conf.ExitTimeout = 60 * time.Second
+		conf.MaintenanceFile = c.String("maintenance-file")
+		conf.SupportProxyProtocol = c.Bool("proxy-protocol")
+		conf.AdditionalErrorMessageOnDeny = c.String("additional-error-message-on-deny")
+		conf.DisabledAclPolicyActions = c.StringSlice("disable-acl-policy-action")
+
+		if err := conf.SetDenyRanges(c.StringSlice("deny-range")); err != nil {
+			return err
+		}
+
+		if err := conf.SetAllowRanges(c.StringSlice("allow-range")); err != nil {
+			return err
+		}
 
 		if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
 			return err
@@ -132,6 +140,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
 			return err
 		}
+
 		// Originally, we assumed a single file with both cert and key
 		// concatenated.  That setup will continue to work, but SetupTLS now
 		// takes separate args for cert and key, so we pass the filename twice
@@ -144,9 +153,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				c.StringSlice("tls-client-ca-file")); err != nil {
 				return err
 			}
-		}
-		if err := conf.Init(); err != nil {
-			return err
 		}
 
 		configToReturn = conf

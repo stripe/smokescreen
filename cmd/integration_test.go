@@ -361,8 +361,6 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		"--allow-range=127.0.0.1/32",
 	}
 
-	var conf *smokescreen.Config
-	var err error
 	if useTls {
 		args = append(args,
 			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
@@ -370,10 +368,10 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 			"--tls-crl-file=testdata/pki/crl.pem",
 		)
 	}
-	conf, err = NewConfiguration(args, nil)
 
+	conf, err := NewConfiguration(args, nil)
 	if err != nil {
-		return nil, err
+		t.Fatalf("Failed to create configuration: %v", err)
 	}
 
 	if (useTls) {
@@ -382,6 +380,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		conf.RoleFromRequest = testRFRHeader
 	}
 
+	fmt.Printf("2 %#v\n", conf)
 	conf.Log.AddHook(logHook)
 
 	handler := smokescreen.BuildProxy(conf)

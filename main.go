@@ -1,10 +1,10 @@
 package main
 
 import (
-	"net/http"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/cmd"
 	"github.com/stripe/smokescreen/pkg/smokescreen"
+	"net/http"
 )
 
 // This default implementation of RoleFromRequest uses the CommonName of the

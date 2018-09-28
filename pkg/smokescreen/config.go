@@ -81,18 +81,12 @@ type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
 }
 
-func (config *Config) Init() error {
-	if config.CrlByAuthorityKeyId == nil {
-		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
+func NewConfig() *Config {
+	return &Config{
+		CrlByAuthorityKeyId: make(map[string]*pkix.CertificateList),
+		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
+		Log: log.New(),
 	}
-	if config.clientCasBySubjectKeyId == nil {
-		config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
-	}
-	if config.Log == nil {
-		config.Log = log.New()
-	}
-
-	return nil
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
