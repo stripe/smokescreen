@@ -25,7 +25,5 @@ func main() {
 		fmt.Printf("Invalid port: %d", config.Port)
 	}
 
-	//TODO more checks here
-
 	os.Exit(0)
 }
