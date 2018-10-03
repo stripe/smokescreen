@@ -19,12 +19,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Parsed: %#v\n\n", config)
+	fmt.Printf("Parsed configuration:\n\n%#v\n\n", config)
 
 	errors := config.Check()
 	if len(errors) > 0 {
-		for e := range errors {
-			fmt.Println(e)
+		fmt.Printf("Check() returned %d error(s):\n\n", len(errors))
+		for _, e := range errors {
+			fmt.Printf(" - %s\n", e)
 		}
 		os.Exit(1)
 	}
