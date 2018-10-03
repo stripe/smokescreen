@@ -89,6 +89,16 @@ func NewConfig() *Config {
 	}
 }
 
+func (config *Config) Check() []error {
+	errors := make([]error, 0)
+
+	if config.Port < 1 || config.Port > 65535 {
+		errors = append(errors, fmt.Errorf("Invalid port: %d", config.Port))
+	}
+
+	return errors
+}
+
 func (config *Config) SetupCrls(crlFiles []string) error {
 	fail := func(err error) error { fmt.Print(err); return err }
 
