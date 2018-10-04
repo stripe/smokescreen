@@ -2,7 +2,6 @@ package smokescreen
 
 import (
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -114,14 +113,11 @@ func LoadConfig(filePath string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	config, err := UnmarshalConfig(bytes)
 	if err != nil {
 		return nil, err
 	}
 
-	errs := config.Check()
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("Invalid Config: %v", errs)
-	}
 	return config, nil
 }
