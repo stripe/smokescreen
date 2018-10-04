@@ -21,8 +21,8 @@ import (
 type Config struct {
 	Ip                           string
 	Port                         uint16
-	CidrBlacklist                []net.IPNet
-	CidrBlacklistExemptions      []net.IPNet
+	DenyRanges                   []net.IPNet
+	AllowRanges                  []net.IPNet
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	MaintenanceFile              string
@@ -66,13 +66,13 @@ func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
 
 func (config *Config) SetDenyRanges(rangeStrings []string) error {
 	var err error
-	config.CidrBlacklist, err = parseRanges(rangeStrings)
+	config.DenyRanges, err = parseRanges(rangeStrings)
 	return err
 }
 
 func (config *Config) SetAllowRanges(rangeStrings []string) error {
 	var err error
-	config.CidrBlacklistExemptions, err = parseRanges(rangeStrings)
+	config.AllowRanges, err = parseRanges(rangeStrings)
 	return err
 }
 

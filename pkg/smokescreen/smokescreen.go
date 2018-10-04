@@ -97,16 +97,16 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 
 func classifyIP(config *Config, ip net.IP) ipType {
 	if !ip.IsGlobalUnicast() || ip.IsLoopback() {
-		if ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip) {
+		if ipIsInSetOfNetworks(config.AllowRanges, ip) {
 			return ipAllowUserConfigured
 		} else {
 			return ipDenyNotGlobalUnicast
 		}
 	}
 
-	if ipIsInSetOfNetworks(config.CidrBlacklistExemptions, ip) {
+	if ipIsInSetOfNetworks(config.AllowRanges, ip) {
 		return ipAllowUserConfigured
-	} else if ipIsInSetOfNetworks(config.CidrBlacklist, ip) {
+	} else if ipIsInSetOfNetworks(config.DenyRanges, ip) {
 		return ipDenyUserConfigured
 	} else if ipIsInSetOfNetworks(PrivateNetworkRanges, ip) {
 		return ipDenyPrivateRange
