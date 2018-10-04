@@ -15,7 +15,7 @@ func main() {
 
 	config, err := smokescreen.LoadConfig(filePath)
 	if err != nil {
-		fmt.Printf("Failed to parse config: %v\n", err);
+		fmt.Printf("Failed to load config: %v\n", err);
 		os.Exit(1)
 	}
 
