@@ -328,7 +328,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 	return resolved, nil
 }
 
-func findListener(ip string, defaultPort int) (net.Listener, error) {
+func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 	if einhorn.IsWorker() {
 		listener, err := einhorn.GetListener(0)
 		if err != nil {

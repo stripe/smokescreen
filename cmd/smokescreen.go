@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"errors"
+	"math"
 	"os"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -42,7 +44,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "listen-ip",
 			Usage: "Listen on interface with address `IP`.\n\t\tThis argument is ignored when running under Einhorn. (default: any)",
 		},
-		cli.IntFlag{
+		cli.UintFlag{
 			Name:  "listen-port",
 			Value: 4750,
 			Usage: "Listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
@@ -115,7 +117,13 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		conf.Ip = c.String("listen-ip")
-		conf.Port = c.Int("listen-port")
+
+		port := c.Uint("listen-port")
+		if port > math.MaxUint16 {
+			return fmt.Errorf("Invalid listen-port: %d", port)
+		}
+		conf.Port = uint16(port)
+
 		conf.ConnectTimeout = c.Duration("timeout")
 		conf.ExitTimeout = 60 * time.Second
 		conf.MaintenanceFile = c.String("maintenance-file")

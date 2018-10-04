@@ -20,7 +20,7 @@ import (
 
 type Config struct {
 	Ip                           string
-	Port                         int
+	Port                         uint16
 	CidrBlacklist                []net.IPNet
 	CidrBlacklistExemptions      []net.IPNet
 	ConnectTimeout               time.Duration
@@ -86,6 +86,7 @@ func NewConfig() *Config {
 		CrlByAuthorityKeyId: make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log: log.New(),
+		Port: 4750,
 	}
 }
 

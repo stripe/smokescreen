@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -17,7 +18,9 @@ type yamlConfigTls struct {
 
 type yamlConfig struct {
 	Ip                   string
-	Port                 int
+	// use a pointer here so we can distinguish unset vs explicit zero, as we
+	// may be overriding a non-zero default
+	Port                 *uint16
 	DenyRanges           []string      `yaml:"deny_ranges"`
 	AllowRanges          []string      `yaml:"allow_ranges"`
 	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
@@ -34,16 +37,20 @@ type yamlConfig struct {
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
 
-func UnmarshalConfig(rawYaml []byte) (Config, error) {
+func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 	var yc yamlConfig
-	var c Config
+	c := NewConfig()
+
 	err := yaml.UnmarshalStrict(rawYaml, &yc)
 	if err != nil {
 		return c, err
 	}
 
 	c.Ip = yc.Ip
-	c.Port = yc.Port
+
+	if yc.Port != nil {
+		c.Port = *yc.Port
+	}
 
 	err = c.SetDenyRanges(yc.DenyRanges)
 	if err != nil {
@@ -102,10 +109,19 @@ func UnmarshalConfig(rawYaml []byte) (Config, error) {
 	return c, nil
 }
 
-func LoadConfig(filePath string) (Config, error) {
+func LoadConfig(filePath string) (*Config, error) {
 	bytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
-	return UnmarshalConfig(bytes)
+	config, err := UnmarshalConfig(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	errs := config.Check()
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("Invalid Config: %v", errs)
+	}
+	return config, nil
 }
