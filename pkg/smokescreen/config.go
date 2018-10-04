@@ -91,15 +91,10 @@ func NewConfig() *Config {
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
-	fail := func(err error) error { fmt.Print(err); return err }
-
-	config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
-	config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
-
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
 		if err != nil {
-			return fail(err)
+			return err
 		}
 
 		certList, err := x509.ParseCRL(crlBytes)

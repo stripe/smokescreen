@@ -13,6 +13,7 @@ type yamlConfigTls struct {
 	CertFile      string   `yaml:"cert_file"`
 	KeyFile       string   `yaml:"key_file"`
 	ClientCAFiles []string `yaml:"client_ca_files"`
+	CRLFiles      []string `yaml:"crl_files"`
 }
 
 type yamlConfig struct {
@@ -100,6 +101,8 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 		if err != nil {
 			return c, err
 		}
+
+		c.SetupCrls(yc.Tls.CRLFiles)
 	}
 
 	c.AllowMissingRole = yc.AllowMissingRole
