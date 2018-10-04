@@ -87,6 +87,7 @@ func NewConfig() *Config {
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log: log.New(),
 		Port: 4750,
+		ExitTimeout: 60 * time.Second,
 	}
 }
 

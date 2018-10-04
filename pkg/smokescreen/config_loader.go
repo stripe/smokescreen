@@ -16,15 +16,15 @@ type yamlConfigTls struct {
 	CRLFiles      []string `yaml:"crl_files"`
 }
 
+// Port and ExitTimeout use a pointer so we can distinguish unset vs explicit
+// zero, to avoid overriding a non-zero default when the value is not set.
 type yamlConfig struct {
 	Ip                   string
-	// use a pointer here so we can distinguish unset vs explicit zero, as we
-	// may be overriding a non-zero default
 	Port                 *uint16
 	DenyRanges           []string      `yaml:"deny_ranges"`
 	AllowRanges          []string      `yaml:"allow_ranges"`
 	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
-	ExitTimeout          time.Duration `yaml:"exit_timeout"`
+	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
 	MaintenanceFile      string        `yaml:"maintenance_file"`
 	StatsdAddress        string        `yaml:"statsd_address"`
 	EgressAclFile        string        `yaml:"acl_file"`
@@ -63,7 +63,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	c.ConnectTimeout = yc.ConnectTimeout
-	c.ExitTimeout = yc.ExitTimeout
+	if yc.ExitTimeout != nil {
+		c.ExitTimeout = *yc.ExitTimeout
+	}
 
 	c.MaintenanceFile = yc.MaintenanceFile
 	if c.MaintenanceFile != "" {

@@ -3,8 +3,8 @@ package cmd
 import (
 	"errors"
 	"math"
-	"os"
 	"fmt"
+	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -39,6 +39,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		cli.BoolFlag{
 			Name:  "help",
 			Usage: "Show this help text.",
+		},
+		cli.StringFlag{
+			Name:  "config-file",
+			Usage: "Load configuration from `FILE`.  Command line options override values in the file.",
 		},
 		cli.StringFlag{
 			Name:  "listen-ip",
@@ -110,51 +114,92 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			return errors.New("Received unexpected non-option argument(s)")
 		}
 
-		conf := smokescreen.NewConfig()
+		var conf *smokescreen.Config
+		if file := c.String("config-file"); file != "" {
+			var err error
+			conf, err = smokescreen.LoadConfig(file)
+			if err != nil {
+				return fmt.Errorf("Couldn't load file \"%s\" specified by --config-file: %v", file, err)
+			}
+		} else {
+			conf = smokescreen.NewConfig()
+		}
 
 		if logger != nil {
 			conf.Log = logger
 		}
 
-		conf.Ip = c.String("listen-ip")
-
-		port := c.Uint("listen-port")
-		if port > math.MaxUint16 {
-			return fmt.Errorf("Invalid listen-port: %d", port)
-		}
-		conf.Port = uint16(port)
-
-		conf.ConnectTimeout = c.Duration("timeout")
-		conf.ExitTimeout = 60 * time.Second
-		conf.MaintenanceFile = c.String("maintenance-file")
-		conf.SupportProxyProtocol = c.Bool("proxy-protocol")
-		conf.AdditionalErrorMessageOnDeny = c.String("additional-error-message-on-deny")
-		conf.DisabledAclPolicyActions = c.StringSlice("disable-acl-policy-action")
-
-		if err := conf.SetDenyRanges(c.StringSlice("deny-range")); err != nil {
-			return err
+		if c.IsSet("listen-ip") {
+			conf.Ip = c.String("listen-ip")
 		}
 
-		if err := conf.SetAllowRanges(c.StringSlice("allow-range")); err != nil {
-			return err
+		if c.IsSet("listen-port") {
+			port := c.Uint("listen-port")
+			if port > math.MaxUint16 {
+				return fmt.Errorf("Invalid listen-port: %d", port)
+			}
+			conf.Port = uint16(port)
 		}
 
-		if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
-			return err
-		}
-		if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {
-			return err
-		}
-		if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
-			return err
+		if c.IsSet("timeout") {
+			conf.ConnectTimeout = c.Duration("timeout")
 		}
 
-		// Originally, we assumed a single file with both cert and key
-		// concatenated.  That setup will continue to work, but SetupTLS now
-		// takes separate args for cert and key, so we pass the filename twice
-		// here.
-		bundleFile := c.String("tls-server-bundle-file")
-		if bundleFile != "" {
+		if c.IsSet("maintenance-file") {
+			conf.MaintenanceFile = c.String("maintenance-file")
+		}
+
+		if c.IsSet("proxy-protocol") {
+			conf.SupportProxyProtocol = c.Bool("proxy-protocol")
+		}
+
+		if c.IsSet("additional-error-message-on-deny") {
+			conf.AdditionalErrorMessageOnDeny = c.String("additional-error-message-on-deny")
+		}
+
+		if c.IsSet("disable-acl-policy-action") {
+			conf.DisabledAclPolicyActions = c.StringSlice("disable-acl-policy-action")
+		}
+
+		if c.IsSet("deny-range") {
+			if err := conf.SetDenyRanges(c.StringSlice("deny-range")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("allow-range") {
+			if err := conf.SetAllowRanges(c.StringSlice("allow-range")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("statsd-address") {
+			if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("egress-acl-file") {
+			if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("tls-crl-file") {
+			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
+				return err
+			}
+		}
+
+		// FIXME: mixing and matching parts of TLS config between cli and file
+		// hasn't been thought through and likely won't work
+
+		if c.IsSet("tls-server-bundle-file") {
+			// Originally, we assumed a single file with both cert and key
+			// concatenated.  That setup will continue to work, but SetupTLS now
+			// takes separate args for cert and key, so we pass the filename twice
+			// here.
+			bundleFile := c.String("tls-server-bundle-file")
 			if err := conf.SetupTls(
 				bundleFile,
 				bundleFile,
