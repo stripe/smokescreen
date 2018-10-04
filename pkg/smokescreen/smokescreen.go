@@ -328,7 +328,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 	return resolved, nil
 }
 
-func findListener(ip string, defaultPort int) (net.Listener, error) {
+func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 	if einhorn.IsWorker() {
 		listener, err := einhorn.GetListener(0)
 		if err != nil {
@@ -419,6 +419,31 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 }
 
+// Extract the client's ACL role from the HTTP request, using the configured
+// RoleFromRequest function.  Returns the role, or an error if the role cannot
+// be determined (including no RoleFromRequest configured), unless
+// AllowMissingRole is configured, in which case an empty role and no error is
+// returned.
+func getRole(config *Config, req *http.Request) (string, error) {
+	var role string
+	var err error
+
+	if config.RoleFromRequest != nil {
+		role, err = config.RoleFromRequest(req)
+	} else {
+		err = MissingRoleError("RoleFromRequest not configured")
+	}
+
+	switch {
+	case err == nil:
+		return role, nil
+	case IsMissingRoleError(err) && config.AllowMissingRole:
+		return "", nil
+	default:
+		return "", err
+	}
+}
+
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, error) {
 	decision := &aclDecision{}
 
@@ -428,13 +453,12 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		return decision, nil
 	}
 
-	role, roleErr := config.RoleFromRequest(req)
-	// A missing role is OK at this point since we may have a default
-	if roleErr != nil && !IsMissingRoleError(roleErr) {
+	role, roleErr := getRole(config, req)
+	if roleErr != nil {
 		return nil, roleErr
 	}
-	decision.role = role
 
+	decision.role = role
 	decision.project, _ = config.EgressAcl.Project(role)
 
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
@@ -442,6 +466,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	result, err := config.EgressAcl.Decide(role, submatch[1])
 	if err != nil {
 		if rerr, ok := err.(UnknownRoleError); ok {
+			//XXX TODO confirm this is still right
 			var msg string
 			if roleErr != nil {
 				msg = fmt.Sprintf("unable to extract a role from your request and no default is provided (%s)", err.Error())

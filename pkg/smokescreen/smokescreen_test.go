@@ -14,25 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var cidrBlacklistExemptionsStrings = []string{
+var allowRanges = []string{
 	"8.8.9.0/24",
 	"10.0.1.0/24",
 	"172.16.1.0/24",
 	"192.168.1.0/24",
 	"127.0.1.0/24",
-}
-
-func generateCidrBlacklistExemptions() ([]net.IPNet, error) {
-	var cidrBlacklistExemptions []net.IPNet
-
-	for _, cidrString := range cidrBlacklistExemptionsStrings {
-		_, network, err := net.ParseCIDR(cidrString)
-		if err != nil {
-			return nil, err
-		}
-		cidrBlacklistExemptions = append(cidrBlacklistExemptions, *network)
-	}
-	return cidrBlacklistExemptions, nil
 }
 
 type testCase struct {
@@ -43,17 +30,11 @@ type testCase struct {
 func TestClassifyIP(t *testing.T) {
 	a := assert.New(t)
 
-	cidrBlacklistExemptions, err := generateCidrBlacklistExemptions()
-	a.NoError(err)
-
-	conf := &Config{
-		CidrBlacklistExemptions:      cidrBlacklistExemptions,
-		ConnectTimeout:               10 * time.Second,
-		ExitTimeout:                  10 * time.Second,
-		AdditionalErrorMessageOnDeny: "Proxy denied",
-	}
-	err = conf.Init()
-	a.NoError(err)
+	conf := NewConfig()
+	a.NoError(conf.SetAllowRanges(allowRanges))
+	conf.ConnectTimeout = 10 * time.Second
+	conf.ExitTimeout = 10 * time.Second
+	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 
 	testIPs := []testCase{
 		testCase{"8.8.8.8", ipAllowDefault},
@@ -98,20 +79,14 @@ func TestClassifyIP(t *testing.T) {
 func TestClearsErrorHeader(t *testing.T) {
 	a := assert.New(t)
 
-	cidrBlacklistExemptions, err := generateCidrBlacklistExemptions()
-	a.NoError(err)
-
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	conf := &Config{
-		Port:                         39381,
-		CidrBlacklistExemptions:      cidrBlacklistExemptions,
-		ConnectTimeout:               10 * time.Second,
-		ExitTimeout:                  10 * time.Second,
-		AdditionalErrorMessageOnDeny: "Proxy denied",
-	}
 
-	err = conf.Init()
-	a.NoError(err)
+	conf := NewConfig()
+	conf.Port = 39381
+	a.NoError(conf.SetAllowRanges(allowRanges))
+	conf.ConnectTimeout = 10 * time.Second
+	conf.ExitTimeout = 10 * time.Second
+	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 
 	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)

@@ -20,7 +20,7 @@ import (
 
 type Config struct {
 	Ip                           string
-	Port                         int
+	Port                         uint16
 	CidrBlacklist                []net.IPNet
 	CidrBlacklistExemptions      []net.IPNet
 	ConnectTimeout               time.Duration
@@ -36,6 +36,7 @@ type Config struct {
 	AdditionalErrorMessageOnDeny string
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
+	AllowMissingRole             bool
 }
 
 type missingRoleError struct {
@@ -80,40 +81,13 @@ type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
 }
 
-func (config *Config) Init() error {
-	if config.CrlByAuthorityKeyId == nil {
-		config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
+func NewConfig() *Config {
+	return &Config{
+		CrlByAuthorityKeyId: make(map[string]*pkix.CertificateList),
+		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
+		Log: log.New(),
+		Port: 4750,
 	}
-	if config.clientCasBySubjectKeyId == nil {
-		config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
-	}
-	if config.Log == nil {
-		config.Log = log.New()
-	}
-
-	// Configure RoleFromRequest for default behavior. It is ultimately meant to be replaced by the user.
-	if config.TlsConfig != nil && config.TlsConfig.ClientCAs != nil { // If client certs are set, pick the CN.
-		config.RoleFromRequest = func(req *http.Request) (string, error) {
-			fail := func(err error) (string, error) { return "", err }
-			if len(req.TLS.PeerCertificates) == 0 {
-				return fail(MissingRoleError("client did not provide certificate"))
-			}
-			return req.TLS.PeerCertificates[0].Subject.CommonName, nil
-		}
-	} else { // Use a custom header
-		config.RoleFromRequest = func(req *http.Request) (string, error) {
-			fail := func(err error) (string, error) { return "", err }
-			idHeader := req.Header["X-Smokescreen-Role"]
-			if len(idHeader) == 0 {
-				return fail(MissingRoleError("client did not send 'X-Smokescreen-Role' header"))
-			} else if len(idHeader) > 1 {
-				return fail(MissingRoleError("client sent multiple 'X-Smokescreen-Role' headers"))
-			}
-			return idHeader[0], nil
-		}
-	}
-
-	return nil
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
@@ -266,8 +240,8 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 
 	config.TlsConfig = &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
-		ClientAuth: clientAuth,
-		ClientCAs: clientCAs,
+		ClientAuth:   clientAuth,
+		ClientCAs:    clientCAs,
 	}
 
 	return nil
