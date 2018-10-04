@@ -37,13 +37,13 @@ type yamlConfig struct {
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
 
-func UnmarshalConfig(rawYaml []byte) (*Config, error) {
+func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var yc yamlConfig
-	c := NewConfig()
+	*c = *NewConfig()
 
-	err := yaml.UnmarshalStrict(rawYaml, &yc)
+	err := unmarshal(&yc)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	c.Ip = yc.Ip
@@ -54,12 +54,12 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 	err = c.SetDenyRanges(yc.DenyRanges)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	err = c.SetAllowRanges(yc.AllowRanges)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	c.ConnectTimeout = yc.ConnectTimeout
@@ -68,19 +68,19 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 	c.MaintenanceFile = yc.MaintenanceFile
 	if c.MaintenanceFile != "" {
 		if _, err = os.Stat(c.MaintenanceFile); err != nil {
-			return c, err
+			return err
 		}
 	}
 
 	err = c.SetupStatsd(yc.StatsdAddress)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	if yc.EgressAclFile != "" {
 		err = c.SetupEgressAcl(yc.EgressAclFile)
 		if err != nil {
-			return c, err
+			return err
 		}
 	}
 
@@ -88,7 +88,7 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 	if yc.Tls != nil {
 		if yc.Tls.CertFile == "" {
-			return c, errors.New("'tls' section requires 'cert_file'")
+			return errors.New("'tls' section requires 'cert_file'")
 		}
 
 		key_file := yc.Tls.KeyFile
@@ -99,7 +99,7 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
 		if err != nil {
-			return c, err
+			return err
 		}
 
 		c.SetupCrls(yc.Tls.CRLFiles)
@@ -108,7 +108,7 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 
-	return c, nil
+	return nil
 }
 
 func LoadConfig(filePath string) (*Config, error) {
@@ -117,8 +117,8 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, err
 	}
 
-	config, err := UnmarshalConfig(bytes)
-	if err != nil {
+	config := &Config{}
+	if err := yaml.UnmarshalStrict(bytes, config); err != nil {
 		return nil, err
 	}
 
