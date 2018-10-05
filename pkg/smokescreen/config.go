@@ -21,8 +21,8 @@ import (
 type Config struct {
 	Ip                           string
 	Port                         uint16
-	CidrBlacklist                []net.IPNet
-	CidrBlacklistExemptions      []net.IPNet
+	DenyRanges                   []net.IPNet
+	AllowRanges                  []net.IPNet
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	MaintenanceFile              string
@@ -66,13 +66,13 @@ func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
 
 func (config *Config) SetDenyRanges(rangeStrings []string) error {
 	var err error
-	config.CidrBlacklist, err = parseRanges(rangeStrings)
+	config.DenyRanges, err = parseRanges(rangeStrings)
 	return err
 }
 
 func (config *Config) SetAllowRanges(rangeStrings []string) error {
 	var err error
-	config.CidrBlacklistExemptions, err = parseRanges(rangeStrings)
+	config.AllowRanges, err = parseRanges(rangeStrings)
 	return err
 }
 
@@ -87,19 +87,15 @@ func NewConfig() *Config {
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log: log.New(),
 		Port: 4750,
+		ExitTimeout: 60 * time.Second,
 	}
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
-	fail := func(err error) error { fmt.Print(err); return err }
-
-	config.CrlByAuthorityKeyId = make(map[string]*pkix.CertificateList)
-	config.clientCasBySubjectKeyId = make(map[string]*x509.Certificate)
-
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
 		if err != nil {
-			return fail(err)
+			return err
 		}
 
 		certList, err := x509.ParseCRL(crlBytes)

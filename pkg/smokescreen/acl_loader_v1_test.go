@@ -19,7 +19,7 @@ var testCases = map[string]struct {
 	expectDecision          EgressAclDecision
 	expectProject           string
 }{
-	"allowed by whitelist when enforcing": {
+	"allowed by list when enforcing": {
 		"sample_config.yaml",
 		"enforce-dummy-srv",
 		"example1.com",
@@ -33,7 +33,7 @@ var testCases = map[string]struct {
 		EgressAclDecisionDeny,
 		"usersec",
 	},
-	"allowed by whitelist when reporting": {
+	"allowed by list when reporting": {
 		"sample_config.yaml",
 		"report-dummy-srv",
 		"example3.com",
@@ -82,7 +82,7 @@ var testCases = map[string]struct {
 		EgressAclDecisionDeny,
 		"other",
 	},
-	"allow from default whitelist": {
+	"allow from default list": {
 		"sample_config.yaml",
 		"unknown-service",
 		"default.example.com",

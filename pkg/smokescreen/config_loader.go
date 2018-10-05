@@ -13,17 +13,18 @@ type yamlConfigTls struct {
 	CertFile      string   `yaml:"cert_file"`
 	KeyFile       string   `yaml:"key_file"`
 	ClientCAFiles []string `yaml:"client_ca_files"`
+	CRLFiles      []string `yaml:"crl_files"`
 }
 
+// Port and ExitTimeout use a pointer so we can distinguish unset vs explicit
+// zero, to avoid overriding a non-zero default when the value is not set.
 type yamlConfig struct {
 	Ip                   string
-	// use a pointer here so we can distinguish unset vs explicit zero, as we
-	// may be overriding a non-zero default
 	Port                 *uint16
 	DenyRanges           []string      `yaml:"deny_ranges"`
 	AllowRanges          []string      `yaml:"allow_ranges"`
 	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
-	ExitTimeout          time.Duration `yaml:"exit_timeout"`
+	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
 	MaintenanceFile      string        `yaml:"maintenance_file"`
 	StatsdAddress        string        `yaml:"statsd_address"`
 	EgressAclFile        string        `yaml:"acl_file"`
@@ -36,13 +37,13 @@ type yamlConfig struct {
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
 
-func UnmarshalConfig(rawYaml []byte) (*Config, error) {
+func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var yc yamlConfig
-	c := NewConfig()
+	*c = *NewConfig()
 
-	err := yaml.UnmarshalStrict(rawYaml, &yc)
+	err := unmarshal(&yc)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	c.Ip = yc.Ip
@@ -53,33 +54,35 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 	err = c.SetDenyRanges(yc.DenyRanges)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	err = c.SetAllowRanges(yc.AllowRanges)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	c.ConnectTimeout = yc.ConnectTimeout
-	c.ExitTimeout = yc.ExitTimeout
+	if yc.ExitTimeout != nil {
+		c.ExitTimeout = *yc.ExitTimeout
+	}
 
 	c.MaintenanceFile = yc.MaintenanceFile
 	if c.MaintenanceFile != "" {
 		if _, err = os.Stat(c.MaintenanceFile); err != nil {
-			return c, err
+			return err
 		}
 	}
 
 	err = c.SetupStatsd(yc.StatsdAddress)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	if yc.EgressAclFile != "" {
 		err = c.SetupEgressAcl(yc.EgressAclFile)
 		if err != nil {
-			return c, err
+			return err
 		}
 	}
 
@@ -87,7 +90,7 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 	if yc.Tls != nil {
 		if yc.Tls.CertFile == "" {
-			return c, errors.New("'tls' section requires 'cert_file'")
+			return errors.New("'tls' section requires 'cert_file'")
 		}
 
 		key_file := yc.Tls.KeyFile
@@ -98,14 +101,16 @@ func UnmarshalConfig(rawYaml []byte) (*Config, error) {
 
 		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
 		if err != nil {
-			return c, err
+			return err
 		}
+
+		c.SetupCrls(yc.Tls.CRLFiles)
 	}
 
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 
-	return c, nil
+	return nil
 }
 
 func LoadConfig(filePath string) (*Config, error) {
@@ -114,8 +119,8 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, err
 	}
 
-	config, err := UnmarshalConfig(bytes)
-	if err != nil {
+	config := &Config{}
+	if err := yaml.UnmarshalStrict(bytes, config); err != nil {
 		return nil, err
 	}
 
