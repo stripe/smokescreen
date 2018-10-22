@@ -443,6 +443,11 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	case IsMissingRoleError(err) && config.AllowMissingRole:
 		return "", nil
 	default:
+		config.Log.WithFields(logrus.Fields{
+			"error": err,
+			"is_missing_role": IsMissingRoleError(err),
+			"allow_missing_role": config.AllowMissingRole,
+		}).Info("Unable to get role for request")
 		return "", err
 	}
 }
