@@ -148,6 +148,9 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 	case denyError:
 		msg = fmt.Sprintf(denyMsgTmpl, req.Host, err.Error())
 	default:
+		config.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("rejectResponse called with unexpected error")
 		msg = "an unexpected error occurred."
 	}
 
