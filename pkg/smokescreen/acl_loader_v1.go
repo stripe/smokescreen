@@ -24,7 +24,7 @@ type EgressAclConfig struct {
 func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
-		return 0, UnknownRoleError{fromService}
+		return 0, fmt.Errorf("unknown role: '%s'", fromService)
 	}
 
 	var action EgressAclDecision
@@ -36,7 +36,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	case ConfigEnforcementPolicyOpen:
 		return EgressAclDecisionAllow, nil
 	default:
-		return 0, errors.New("unexpected state")
+		return 0, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
 	}
 
 	for _, host := range rule.DomainGlob {
@@ -58,7 +58,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 func (ew *EgressAclConfig) Project(fromService string) (string, error) {
 	service := ew.ruleForService(fromService)
 	if service == nil {
-		return "", UnknownRoleError{fromService}
+		return "", fmt.Errorf("unknown role: '%s'", fromService)
 	}
 
 	return service.Project, nil
@@ -140,7 +140,7 @@ func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfigurati
 	for _, v := range yamlConfig.Services {
 		res, err := aclConfigToRule(&v, config.DisabledAclPolicyActions)
 		if err != nil {
-			config.Log.Error("gnored policy", err)
+			config.Log.Error("Ignored policy: ", err)
 		} else {
 			acl.Services[v.Name] = res
 		}
@@ -149,7 +149,7 @@ func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfigurati
 	if yamlConfig.Default != nil {
 		res, err := aclConfigToRule(yamlConfig.Default, config.DisabledAclPolicyActions)
 		if err != nil {
-			config.Log.Error("gnored policy", err)
+			config.Log.Error("Ignored policy: ", err)
 		} else {
 			acl.Default = &res
 		}
@@ -171,7 +171,7 @@ func aclConfigToRule(v *ServiceRule, disabledAclPolicyAction []string) (EgressAc
 
 	for _, host := range v.AllowedHosts {
 		if !strings.HasPrefix(host, "*.") && strings.HasPrefix(host, "*") {
-			return EgressAclRule{}, fmt.Errorf("glob must represent a full prefxi (sub)domain")
+			return EgressAclRule{}, fmt.Errorf("glob must represent a full prefix (sub)domain")
 		}
 
 		// Check for stars elsewhere

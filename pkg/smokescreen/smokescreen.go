@@ -25,8 +25,7 @@ const (
 	ipDenyPrivateRange
 	ipDenyUserConfigured
 
-	denyMsgTmpl = "egress proxying denied to host '%s' because %s. " +
-		"If you didn't intend for your request to be proxied, you may want a 'no_proxy' environment variable."
+	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 )
 
 type ipType int
@@ -128,9 +127,8 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 
 	if classification.IsAllowed() {
 		return resolved, nil
-	} else {
-		return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 	}
+	return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
 func dial(config *Config, network, addr string) (net.Conn, error) {
@@ -151,12 +149,11 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Warn("rejectResponse called with unexpected error")
-		msg = "an unexpected error occurred."
+		msg = "An unexpected error occurred."
 	}
 
 	if config.AdditionalErrorMessageOnDeny != "" {
-		msg += " "
-		msg += config.AdditionalErrorMessageOnDeny
+		msg = fmt.Sprintf("%s\n\n%s\n", msg, config.AdditionalErrorMessageOnDeny)
 	}
 
 	resp := goproxy.NewResponse(req,
@@ -187,12 +184,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		userData := ctxUserData{time.Now(), nil}
 		ctx.UserData = &userData
 
-		var err error
-		userData.decision, err = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		userData.decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 		req.Header.Del(roleHeader)
-		if err != nil {
-			return req, rejectResponse(req, config, err)
-		}
 		if !userData.decision.allow {
 			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
 		}
@@ -315,10 +308,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 		logProxy(config, ctx, "connect", resolved, decision, start, err)
 	}()
 
-	decision, err = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
-	if err != nil {
-		return nil, err
-	}
+	decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	if !decision.allow {
 		return nil, denyError{errors.New(decision.reason)}
 	}
@@ -434,7 +424,7 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	if config.RoleFromRequest != nil {
 		role, err = config.RoleFromRequest(req)
 	} else {
-		err = MissingRoleError("RoleFromRequest not configured")
+		err = MissingRoleError("RoleFromRequest is not configured")
 	}
 
 	switch {
@@ -447,62 +437,65 @@ func getRole(config *Config, req *http.Request) (string, error) {
 			"error": err,
 			"is_missing_role": IsMissingRoleError(err),
 			"allow_missing_role": config.AllowMissingRole,
-		}).Info("Unable to get role for request")
+		}).Error("Unable to get role for request")
 		return "", err
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, error) {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision) {
 	decision := &aclDecision{}
 
 	if config.EgressAcl == nil {
 		decision.allow = true
-		decision.reason = "no egress ACL configured"
-		return decision, nil
+		decision.reason = "Egress ACL is not configured"
+		return decision
 	}
 
 	role, roleErr := getRole(config, req)
 	if roleErr != nil {
-		return nil, roleErr
+		decision.reason = "Client role cannot be determined"
+		return decision
 	}
 
 	decision.role = role
 	decision.project, _ = config.EgressAcl.Project(role)
 
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
+	destination := submatch[1]
 
-	result, err := config.EgressAcl.Decide(role, submatch[1])
+	action, err := config.EgressAcl.Decide(role, destination)
 	if err != nil {
-		if rerr, ok := err.(UnknownRoleError); ok {
-			//XXX TODO confirm this is still right
-			var msg string
-			if roleErr != nil {
-				msg = fmt.Sprintf("unable to extract a role from your request and no default is provided (%s)", err.Error())
-			} else {
-				msg = fmt.Sprintf("you passed an unknown role '%s'", rerr.Role)
-			}
-			decision.reason = msg
-			return decision, nil
+		config.Log.WithFields(logrus.Fields{
+			"error": err,
+			"role": role,
+		}).Warn("EgressAcl.Decide returned an error.")
+		if role != "" {
+			decision.reason = "Role is invalid or unknown"
+		} else {
+			decision.reason = "Default rules are not set"
 		}
-		return nil, err
+		return decision
 	}
 
-	switch result {
+	switch action {
 	case EgressAclDecisionDeny:
-		decision.reason = "role is not allowed to access this host"
-		return decision, nil
+		decision.reason = "Role is not allowed to access this host"
 
 	case EgressAclDecisionAllowAndReport:
-		decision.reason = "role is not allowed to access this host but report_only is true"
+		decision.reason = "Role is not allowed to access this host but report_only is true"
 		decision.allow = true
-		return decision, nil
 
 	case EgressAclDecisionAllow:
 		// Well, everything is going as expected.
 		decision.allow = true
-		decision.reason = "your role is allowed to access this host"
-		return decision, nil
+		decision.reason = "Role is allowed to access this host"
 	default:
-		return nil, fmt.Errorf("unknown acl decision %v", result)
+		config.Log.WithFields(logrus.Fields{
+			"role": role,
+			"destination": destination,
+			"action": action,
+		}).Warn("Unknown ACL action")
+		decision.reason = "Internal error"
 	}
+	return decision
 }
