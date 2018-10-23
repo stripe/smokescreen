@@ -84,7 +84,7 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 		if !a.NoError(err) {
 			return
 		}
-		a.Contains(string(body), "egress proxying denied")
+		a.Contains(string(body), "denied")
 		a.Contains(string(body), "moar ctx")
 	}
 
