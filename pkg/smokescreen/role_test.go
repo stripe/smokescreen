@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	log "github.com/sirupsen/logrus"
 )
 
 func mockRFR(s string, e error) func(req *http.Request) (string, error) {
@@ -16,6 +17,7 @@ func _testGetRole(t *testing.T, rfr_s string, rfr_e error, allow_missing bool, e
 	config := Config{
 		RoleFromRequest:  mockRFR(rfr_s, rfr_e),
 		AllowMissingRole: allow_missing,
+		Log: log.New(),
 	}
 	s, e := getRole(&config, nil)
 	if e != expect_e {

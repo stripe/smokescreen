@@ -12,6 +12,9 @@ import (
 // configuration option will control whether the request is rejected, or the
 // default ACL is applied.
 func defaultRoleFromRequest(req *http.Request) (string, error) {
+	if req.TLS == nil {
+		return "", smokescreen.MissingRoleError("defaultRoleFromRequest requires TLS")
+	}
 	if len(req.TLS.PeerCertificates) == 0 {
 		return "", smokescreen.MissingRoleError("client did not provide certificate")
 	}

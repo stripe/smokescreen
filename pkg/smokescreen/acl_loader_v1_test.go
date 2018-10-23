@@ -119,11 +119,11 @@ func TestUnknownServiceWithoutDefault(t *testing.T) {
 	a.NotNil(acl)
 
 	proj, err := acl.Project("unk")
-	a.Equal(UnknownRoleError{"unk"}, err)
+	a.Equal("unknown role: 'unk'", err.Error())
 	a.Empty(proj)
 
 	decision, err := acl.Decide("unk", "example.com")
-	a.Equal(UnknownRoleError{"unk"}, err)
+	a.Equal("unknown role: 'unk'", err.Error())
 	a.Empty(decision)
 }
 
