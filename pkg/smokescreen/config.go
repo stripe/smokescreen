@@ -64,9 +64,47 @@ func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
 	return outRanges, nil
 }
 
+func DefaultDenyRanges() (ranges []net.IPNet) {
+	
+	var err error
+	ranges, err = parseRanges([]string{
+		"0.0.0.0/8", // RFC 1122: "This" Network
+		"10.0.0.0/8", // RFC 1918: Private use network
+		"127.0.0.0/8", // RFC 1122: Loopback
+		"169.254.0.0/16", // RFC 3927: Link Local
+		"172.16.0.0/12", // RFC 1918: Private use network,
+		"192.0.0.0/24", // RFC 5736: IETF Protocol Assignments
+		"192.0.2.0/24", // RFC 5737: TEST-NET-1
+		"192.88.99.0/24", // RFC 3068: 6to4 Relay Anycast
+		"192.168.0.0/16", // RFC 1918: Private use network
+		"198.18.0.0/15", // Network Interconnect
+		"198.51.100.0/24", // RFC 5737: TEST-NET-2
+		"203.0.113.0/24", // RFC 5737: TEST-NET-3
+		"224.0.0.0/4", // RFC 3171: Multicast
+		"255.255.255.255/32", // RFC 919: Limited Broadcast
+
+		"::1/128",
+		"ff00::/8",
+	})
+
+	if err != nil { panic(err) }
+	return
+}
+
 func (config *Config) SetDenyRanges(rangeStrings []string) error {
 	var err error
 	config.DenyRanges, err = parseRanges(rangeStrings)
+	return err
+}
+
+func (config *Config) AppendDenyRanges(rangeStrings []string) error {
+	var err error
+	var newRanges []net.IPNet
+	config.DenyRanges, err = parseRanges(rangeStrings)
+
+	if err != nil {
+		config.DenyRanges = append(config.DenyRanges, newRanges...)
+	}
 	return err
 }
 
@@ -88,6 +126,7 @@ func NewConfig() *Config {
 		Log: log.New(),
 		Port: 4750,
 		ExitTimeout: 60 * time.Second,
+		DenyRanges: DefaultDenyRanges(),
 	}
 }
 

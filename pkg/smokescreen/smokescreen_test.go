@@ -38,28 +38,28 @@ func TestClassifyIP(t *testing.T) {
 
 	testIPs := []testCase{
 		testCase{"8.8.8.8", ipAllowDefault},
-		testCase{"8.8.9.8", ipAllowUserConfigured},
+		testCase{"8.8.9.8", ipAllowList},
 
 		// Specific blocked networks
-		testCase{"10.0.0.1", ipDenyPrivateRange},
-		testCase{"10.0.1.1", ipAllowUserConfigured},
-		testCase{"172.16.0.1", ipDenyPrivateRange},
-		testCase{"172.16.1.1", ipAllowUserConfigured},
-		testCase{"192.168.0.1", ipDenyPrivateRange},
-		testCase{"192.168.1.1", ipAllowUserConfigured},
+		testCase{"10.0.0.1", ipDenyList},
+		testCase{"10.0.1.1", ipAllowList},
+		testCase{"172.16.0.1", ipDenyList},
+		testCase{"172.16.1.1", ipAllowList},
+		testCase{"192.168.0.1", ipDenyList},
+		testCase{"192.168.1.1", ipAllowList},
 
 		// localhost
-		testCase{"127.0.0.1", ipDenyNotGlobalUnicast},
-		testCase{"127.255.255.255", ipDenyNotGlobalUnicast},
-		testCase{"::1", ipDenyNotGlobalUnicast},
-		testCase{"127.0.1.1", ipAllowUserConfigured},
+		testCase{"127.0.0.1", ipDenyList},
+		testCase{"127.255.255.255", ipDenyList},
+		testCase{"::1", ipDenyList},
+		testCase{"127.0.1.1", ipAllowList},
 
 		// ec2 metadata endpoint
-		testCase{"169.254.169.254", ipDenyNotGlobalUnicast},
+		testCase{"169.254.169.254", ipDenyList},
 
 		// Broadcast addresses
-		testCase{"255.255.255.255", ipDenyNotGlobalUnicast},
-		testCase{"ff02:0:0:0:0:0:0:2", ipDenyNotGlobalUnicast},
+		testCase{"255.255.255.255", ipDenyList},
+		testCase{"ff02:0:0:0:0:0:0:2", ipDenyList},
 	}
 
 	for _, test := range testIPs {

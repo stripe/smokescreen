@@ -20,10 +20,8 @@ import (
 
 const (
 	ipAllowDefault ipType = iota
-	ipAllowUserConfigured
-	ipDenyNotGlobalUnicast
-	ipDenyPrivateRange
-	ipDenyUserConfigured
+	ipAllowList
+	ipDenyList
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 )
@@ -45,21 +43,17 @@ type denyError struct {
 }
 
 func (t ipType) IsAllowed() bool {
-	return t == ipAllowDefault || t == ipAllowUserConfigured
+	return t == ipAllowDefault || t == ipAllowList
 }
 
 func (t ipType) String() string {
 	switch t {
 	case ipAllowDefault:
 		return "Allow: Default"
-	case ipAllowUserConfigured:
-		return "Allow: User Configured"
-	case ipDenyNotGlobalUnicast:
-		return "Deny: Not Global Unicast"
-	case ipDenyPrivateRange:
-		return "Deny: Private Range"
-	case ipDenyUserConfigured:
-		return "Deny: User Configured"
+	case ipAllowList:
+		return "Allow: List"
+	case ipDenyList:
+		return "Deny: List"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -69,14 +63,10 @@ func (t ipType) statsdString() string {
 	switch t {
 	case ipAllowDefault:
 		return "resolver.allow.default"
-	case ipAllowUserConfigured:
-		return "resolver.allow.user_configured"
-	case ipDenyNotGlobalUnicast:
-		return "resolver.deny.not_global_unicast"
-	case ipDenyPrivateRange:
-		return "resolver.deny.private_range"
-	case ipDenyUserConfigured:
-		return "resolver.deny.user_configured"
+	case ipAllowList:
+		return "resolver.allow.list"
+	case ipDenyList:
+		return "resolver.deny"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -95,20 +85,10 @@ func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
 }
 
 func classifyIP(config *Config, ip net.IP) ipType {
-	if !ip.IsGlobalUnicast() || ip.IsLoopback() {
-		if ipIsInSetOfNetworks(config.AllowRanges, ip) {
-			return ipAllowUserConfigured
-		} else {
-			return ipDenyNotGlobalUnicast
-		}
-	}
-
 	if ipIsInSetOfNetworks(config.AllowRanges, ip) {
-		return ipAllowUserConfigured
+		return ipAllowList
 	} else if ipIsInSetOfNetworks(config.DenyRanges, ip) {
-		return ipDenyUserConfigured
-	} else if ipIsInSetOfNetworks(PrivateNetworkRanges, ip) {
-		return ipDenyPrivateRange
+		return ipDenyList
 	} else {
 		return ipAllowDefault
 	}
