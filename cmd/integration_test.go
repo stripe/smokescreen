@@ -54,7 +54,6 @@ func testRFRCert(req *http.Request) (string, error) {
 	return req.TLS.PeerCertificates[0].Subject.CommonName, nil
 }
 
-
 type TestCase struct {
 	ExpectAllow bool
 	OverTls     bool
@@ -100,7 +99,7 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 
 	if len(entries) > 0 {
 		entry := entries[0]
-		a.Equal(entry.Message, "proxy_response")
+		a.Equal(entry.Message, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
 
 		a.Contains(entry.Data, "allow")
 		a.Equal(test.ExpectAllow, entries[0].Data["allow"])
@@ -374,7 +373,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		t.Fatalf("Failed to create configuration: %v", err)
 	}
 
-	if (useTls) {
+	if useTls {
 		conf.RoleFromRequest = testRFRCert
 	} else {
 		conf.RoleFromRequest = testRFRHeader
