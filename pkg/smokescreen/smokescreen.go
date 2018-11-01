@@ -28,6 +28,8 @@ const (
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 )
 
+var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
+
 type ipType int
 
 type aclDecision struct {
@@ -115,15 +117,15 @@ func classifyIP(config *Config, ip net.IP) ipType {
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
-	config.StatsdClient.Count("resolver.attempts_total", 1, []string{}, 0.3)
+	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
-		config.StatsdClient.Count("resolver.errors_total", 1, []string{}, 0.3)
+		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
 		return nil, err
 	}
 
 	classification := classifyIP(config, resolved.IP)
-	config.StatsdClient.Count(classification.statsdString(), 1, []string{}, 0.3)
+	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
 
 	if classification.IsAllowed() {
 		return resolved, nil
@@ -278,7 +280,7 @@ func logProxy(
 	} else {
 		logMethod = entry.Warn
 	}
-	logMethod("proxy_response")
+	logMethod(LOGLINE_CANONICAL_PROXY_DECISION)
 }
 
 func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
@@ -434,15 +436,15 @@ func getRole(config *Config, req *http.Request) (string, error) {
 		return "", nil
 	default:
 		config.Log.WithFields(logrus.Fields{
-			"error": err,
-			"is_missing_role": IsMissingRoleError(err),
+			"error":              err,
+			"is_missing_role":    IsMissingRoleError(err),
 			"allow_missing_role": config.AllowMissingRole,
 		}).Error("Unable to get role for request")
 		return "", err
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision) {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) *aclDecision {
 	decision := &aclDecision{}
 
 	if config.EgressAcl == nil {
@@ -467,7 +469,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
-			"role": role,
+			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
 		if role != "" {
 			decision.reason = "Role is invalid or unknown"
@@ -491,9 +493,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		decision.reason = "Role is allowed to access this host"
 	default:
 		config.Log.WithFields(logrus.Fields{
-			"role": role,
+			"role":        role,
 			"destination": destination,
-			"action": action,
+			"action":      action,
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
 	}
