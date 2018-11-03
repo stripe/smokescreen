@@ -455,6 +455,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 
 	role, roleErr := getRole(config, req)
 	if roleErr != nil {
+		config.StatsdClient.Incr("acl.role_not_determined", []string{}, 1)
 		decision.reason = "Client role cannot be determined"
 		return decision
 	}
@@ -473,6 +474,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}).Warn("EgressAcl.Decide returned an error.")
 		if role != "" {
 			decision.reason = "Role is invalid or unknown"
+			config.StatsdClient.Incr("acl.role_error", []string{}, 1)
 		} else {
 			decision.reason = "Default rules are not set"
 		}
@@ -482,15 +484,18 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	switch action {
 	case EgressAclDecisionDeny:
 		decision.reason = "Role is not allowed to access this host"
+		config.StatsdClient.Incr("acl.not_allowed_enforce", []string{}, 1)
 
 	case EgressAclDecisionAllowAndReport:
 		decision.reason = "Role is not allowed to access this host but report_only is true"
+		config.StatsdClient.Incr("acl.not_allowed_report", []string{}, 1)
 		decision.allow = true
 
 	case EgressAclDecisionAllow:
 		// Well, everything is going as expected.
 		decision.allow = true
 		decision.reason = "Role is allowed to access this host"
+		config.StatsdClient.Incr("acl.success", []string{}, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
@@ -498,6 +503,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 			"action":      action,
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
+		config.StatsdClient.Incr("acl.unknown_error", []string{}, 1)
 	}
 	return decision
 }
