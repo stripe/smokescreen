@@ -179,8 +179,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		config.Log.WithFields(
 			logrus.Fields{
-				"remote": ctx.Req.RemoteAddr,
-				"host":   ctx.Req.Host,
+				"source_ip": ctx.Req.RemoteAddr,
+				"requested_host":   ctx.Req.Host,
 				"url":    ctx.Req.RequestURI,
 			}).Debug("received HTTP proxy request")
 		userData := ctxUserData{time.Now(), nil}
@@ -237,7 +237,6 @@ func logProxy(
 		contentLength = ctx.Resp.ContentLength
 	}
 
-	hostname := ctx.Req.Host
 	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 
 	allow := err == nil
@@ -246,7 +245,7 @@ func logProxy(
 		"proxy_type":     proxyType,
 		"src_host":       fromHost,
 		"src_port":       fromPort,
-		"host":           hostname,
+		"requested_host": ctx.Req.Host,
 		"start_time":     start.Unix(),
 		"end_time":       time.Now().Unix(),
 		"content_length": contentLength,
@@ -298,7 +297,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 	config.Log.WithFields(
 		logrus.Fields{
 			"remote": ctx.Req.RemoteAddr,
-			"host":   ctx.Req.Host,
+			"requested_host":   ctx.Req.Host,
 		}).Debug("received CONNECT proxy request")
 	start := time.Now()
 
