@@ -111,8 +111,8 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 			a.Equal("http", entry.Data["proxy_type"])
 		}
 
-		a.Contains(entry.Data, "host")
-		a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["host"])
+		a.Contains(entry.Data, "requested_host")
+		a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["requested_host"])
 	}
 }
 
