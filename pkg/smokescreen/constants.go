@@ -15,9 +15,11 @@ const DefaultStatsdNamespace = "smokescreen."
 
 var privateNetworkStrings = [...]string{
 	"10.0.0.0/8",
+	"169.254.0.0/16",  // Link-local address range
 	"172.16.0.0/12",
 	"192.168.0.0/16",
 	"fc00::/7",
+	"fe80::/10",       // Link-local address range
 }
 
 var PrivateNetworkRanges []net.IPNet
