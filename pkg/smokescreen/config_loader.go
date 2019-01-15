@@ -21,18 +21,18 @@ type yamlConfigTls struct {
 type yamlConfig struct {
 	Ip                   string
 	Port                 *uint16
-	DenyRanges           []string      `yaml:"deny_ranges"`
-	AllowRanges          []string      `yaml:"allow_ranges"`
-	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
+	DenyRanges           []string       `yaml:"deny_ranges"`
+	AllowRanges          []string       `yaml:"allow_ranges"`
+	ConnectTimeout       time.Duration  `yaml:"connect_timeout"`
 	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
-	MaintenanceFile      string        `yaml:"maintenance_file"`
-	StatsdAddress        string        `yaml:"statsd_address"`
-	EgressAclFile        string        `yaml:"acl_file"`
-	SupportProxyProtocol bool          `yaml:"support_proxy_protocol"`
-	DenyMessageExtra     string        `yaml:"deny_message_extra"`
-	AllowMissingRole     bool          `yaml:"allow_missing_role"`
+	MaintenanceFile      string         `yaml:"maintenance_file"`
+	StatsdAddress        string         `yaml:"statsd_address"`
+	EgressAclFile        string         `yaml:"acl_file"`
+	SupportProxyProtocol bool           `yaml:"support_proxy_protocol"`
+	DenyMessageExtra     string         `yaml:"deny_message_extra"`
+	AllowMissingRole     bool           `yaml:"allow_missing_role"`
 
-	Tls                  *yamlConfigTls
+	Tls *yamlConfigTls
 
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
