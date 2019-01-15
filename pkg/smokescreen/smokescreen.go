@@ -139,16 +139,16 @@ func dial(config *Config, network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	config.StatsdClient.Incr("connection.attempt.total", []string{}, 1)
+	config.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
 	conn, err := net.DialTimeout(network, resolved.String(), config.ConnectTimeout)
 
 	if err != nil {
-		config.StatsdClient.Incr("connection.attempt.fail.total", []string{}, 1)
+		config.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
+		return nil, err
 	} else {
-		config.StatsdClient.Incr("connection.attempt.success.total", []string{}, 1)
+		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
+		return &ConnExt{conn, config}, nil
 	}
-
-	return conn, err
 }
 
 func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
