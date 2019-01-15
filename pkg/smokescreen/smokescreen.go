@@ -175,13 +175,17 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return dial(config, network, addr)
 	}
 
+	// Ensure that we don't keep old connections alive to avoid TLS errors
+	// when attempting to re-use an idle connection.
+	proxy.Tr.DisableKeepAlives = true
+
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		config.Log.WithFields(
 			logrus.Fields{
-				"source_ip": ctx.Req.RemoteAddr,
-				"requested_host":   ctx.Req.Host,
-				"url":    ctx.Req.RequestURI,
+				"source_ip":      ctx.Req.RemoteAddr,
+				"requested_host": ctx.Req.Host,
+				"url":            ctx.Req.RequestURI,
 			}).Debug("received HTTP proxy request")
 		userData := ctxUserData{time.Now(), nil}
 		ctx.UserData = &userData
@@ -296,8 +300,8 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) {
 	config.Log.WithFields(
 		logrus.Fields{
-			"remote": ctx.Req.RemoteAddr,
-			"requested_host":   ctx.Req.Host,
+			"remote":         ctx.Req.RemoteAddr,
+			"requested_host": ctx.Req.Host,
 		}).Debug("received CONNECT proxy request")
 	start := time.Now()
 

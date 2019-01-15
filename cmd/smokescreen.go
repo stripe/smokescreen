@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"errors"
-	"math"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
