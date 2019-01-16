@@ -6,6 +6,7 @@ type EgressAclDecision int
 const (
 	EgressAclDecisionAllow EgressAclDecision = 1 + iota
 	EgressAclDecisionAllowAndReport
+	EgressAclDecisionNoRuleDeny
 	EgressAclDecisionDeny
 )
 

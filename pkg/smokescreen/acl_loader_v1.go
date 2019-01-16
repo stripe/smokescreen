@@ -23,12 +23,14 @@ type EgressAclConfig struct {
 }
 
 func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
+	var action EgressAclDecision
+
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
-		return 0, fmt.Errorf("unknown role: '%s'", fromService)
+		action = EgressAclDecisionNoRuleDeny
+		return action, nil
 	}
 
-	var action EgressAclDecision
 	switch rule.Policy {
 	case ConfigEnforcementPolicyReport:
 		action = EgressAclDecisionAllowAndReport

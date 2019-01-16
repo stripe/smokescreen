@@ -484,12 +484,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 			"error": err,
 			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
-		if role != "" {
-			decision.reason = "Role is invalid or unknown"
-			config.StatsdClient.Incr("acl.role_error", []string{}, 1)
-		} else {
-			decision.reason = "Default rules are not set"
-		}
+
+		config.StatsdClient.Incr("acl.role_error", []string{}, 1)
+		decision.reason = "acl.decide error"
 		return decision
 	}
 
@@ -501,6 +498,10 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	case EgressAclDecisionDeny:
 		decision.reason = "Role is not allowed to access this host"
 		config.StatsdClient.Incr("acl.not_allowed_enforce", tags, 1)
+
+	case EgressAclDecisionNoRuleDeny:
+		decision.reason = "No rule was found for for this role"
+		config.StatsdClient.Incr("acl.rule_not_found", tags, 1)
 
 	case EgressAclDecisionAllowAndReport:
 		decision.reason = "Role is not allowed to access this host but report_only is true"
