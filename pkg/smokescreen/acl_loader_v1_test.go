@@ -104,7 +104,7 @@ func TestServiceDecideAndProject(t *testing.T) {
 			a.NoError(err)
 			a.Equal(testCase.expectProject, proj)
 
-			decision, err := acl.Decide(testCase.service, testCase.host)
+			decision, _, err := acl.Decide(testCase.service, testCase.host)
 			a.NoError(err)
 			a.Equal(testCase.expectDecision, decision)
 		})
@@ -122,7 +122,7 @@ func TestUnknownServiceWithoutDefault(t *testing.T) {
 	a.Equal("unknown role: 'unk'", err.Error())
 	a.Empty(proj)
 
-	decision, err := acl.Decide("unk", "example.com")
+	decision, _, err := acl.Decide("unk", "example.com")
 	a.Equal(EgressAclDecisionNoRuleDeny, decision)
 	a.Nil(err)
 }
