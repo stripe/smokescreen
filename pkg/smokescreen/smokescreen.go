@@ -478,40 +478,38 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
 
-	action, err := config.EgressAcl.Decide(role, destination)
+	action, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
 			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
-		if role != "" {
-			decision.reason = "Role is invalid or unknown"
-			config.StatsdClient.Incr("acl.role_error", []string{}, 1)
-		} else {
-			decision.reason = "Default rules are not set"
-		}
+
+		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
+		decision.reason = "acl.decide error"
 		return decision
 	}
 
 	tags := []string{
 		fmt.Sprintf("role:%s", decision.role),
+		fmt.Sprintf("def_rule:%t", defaultRuleUsed),
 	}
 
 	switch action {
 	case EgressAclDecisionDeny:
 		decision.reason = "Role is not allowed to access this host"
-		config.StatsdClient.Incr("acl.not_allowed_enforce", tags, 1)
+		config.StatsdClient.Incr("acl.deny", tags, 1)
 
 	case EgressAclDecisionAllowAndReport:
 		decision.reason = "Role is not allowed to access this host but report_only is true"
-		config.StatsdClient.Incr("acl.not_allowed_report", tags, 1)
+		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
 
 	case EgressAclDecisionAllow:
 		// Well, everything is going as expected.
 		decision.allow = true
 		decision.reason = "Role is allowed to access this host"
-		config.StatsdClient.Incr("acl.success", tags, 1)
+		config.StatsdClient.Incr("acl.allow", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,

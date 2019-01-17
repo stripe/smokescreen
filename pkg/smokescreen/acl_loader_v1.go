@@ -22,38 +22,41 @@ type EgressAclConfig struct {
 	Default  *EgressAclRule
 }
 
-func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, error) {
+func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, bool, error) {
+	var action EgressAclDecision
+
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
-		return 0, fmt.Errorf("unknown role: '%s'", fromService)
+		action = EgressAclDecisionDeny
+		return action, false, nil
 	}
 
-	var action EgressAclDecision
+	defaultRuleUsed := rule == ew.Default
+
 	switch rule.Policy {
 	case ConfigEnforcementPolicyReport:
 		action = EgressAclDecisionAllowAndReport
 	case ConfigEnforcementPolicyEnforce:
 		action = EgressAclDecisionDeny
 	case ConfigEnforcementPolicyOpen:
-		return EgressAclDecisionAllow, nil
+		return EgressAclDecisionAllow, defaultRuleUsed, nil
 	default:
-		return 0, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
+		return 0, defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
 	}
 
 	for _, host := range rule.DomainGlob {
 		if len(host) > 0 && host[0] == '*' {
 			postfix := host[1:]
 			if strings.HasSuffix(toHost, postfix) {
-				return EgressAclDecisionAllow, nil
+				return EgressAclDecisionAllow, defaultRuleUsed, nil
 			}
 		} else {
 			if host == toHost {
-				return EgressAclDecisionAllow, nil
+				return EgressAclDecisionAllow, defaultRuleUsed, nil
 			}
 		}
 	}
-
-	return action, nil
+	return action, defaultRuleUsed, nil
 }
 
 func (ew *EgressAclConfig) Project(fromService string) (string, error) {
@@ -71,7 +74,6 @@ func (ew *EgressAclConfig) ruleForService(fromService string) *EgressAclRule {
 			return &service
 		}
 	}
-
 	return ew.Default
 }
 
@@ -154,7 +156,10 @@ func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfigurati
 		} else {
 			acl.Default = &res
 		}
+	} else {
+		config.Log.Warn("No default rule set")
 	}
+
 	return &acl, nil
 }
 
