@@ -500,10 +500,6 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		decision.reason = "Role is not allowed to access this host"
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
-	case EgressAclDecisionNoRuleDeny:
-		decision.reason = "No rule was found for for this role"
-		config.StatsdClient.Incr("acl.no_rule_deny", tags, 1)
-
 	case EgressAclDecisionAllowAndReport:
 		decision.reason = "Role is not allowed to access this host but report_only is true"
 		config.StatsdClient.Incr("acl.report", tags, 1)

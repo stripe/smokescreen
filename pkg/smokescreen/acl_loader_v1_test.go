@@ -122,8 +122,9 @@ func TestUnknownServiceWithoutDefault(t *testing.T) {
 	a.Equal("unknown role: 'unk'", err.Error())
 	a.Empty(proj)
 
-	decision, _, err := acl.Decide("unk", "example.com")
-	a.Equal(EgressAclDecisionNoRuleDeny, decision)
+	decision, usedDefaultRule, err := acl.Decide("unk", "example.com")
+	a.Equal(EgressAclDecisionDeny, decision)
+	a.False(usedDefaultRule)
 	a.Nil(err)
 }
 

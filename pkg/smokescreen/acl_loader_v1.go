@@ -27,7 +27,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
-		action = EgressAclDecisionNoRuleDeny
+		action = EgressAclDecisionDeny
 		return action, false, nil
 	}
 
@@ -156,7 +156,10 @@ func BuildAclFromYamlConfig(config *Config, yamlConfig *YamlEgressAclConfigurati
 		} else {
 			acl.Default = &res
 		}
+	} else {
+		config.Log.Warn("No default rule set")
 	}
+
 	return &acl, nil
 }
 
