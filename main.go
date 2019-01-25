@@ -29,6 +29,11 @@ func main() {
 	} else if conf != nil {
 		conf.RoleFromRequest = defaultRoleFromRequest
 
+		adapter := &smokescreen.Log2LogrusWriter{
+			Entry: conf.Log.WithField("stdlog", "1"),
+		}
+		// Set the standard logger to use our logger's writter as output.
+		log.SetOutput(adapter)
 		smokescreen.StartWithConfig(conf, nil)
 	} else {
 		// --help or --version was passed and handled by NewConfiguration, so do nothing
