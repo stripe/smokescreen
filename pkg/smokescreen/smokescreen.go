@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"log"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -356,7 +355,6 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
-	log.Printf("%s\n", "hello")
 	proxy := BuildProxy(config)
 
 	listener, err := findListener(config.Ip, config.Port)
