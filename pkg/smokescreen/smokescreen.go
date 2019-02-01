@@ -35,6 +35,7 @@ type ipType int
 type aclDecision struct {
 	reason, role, project string
 	allow                 bool
+	enforceWouldDeny      bool
 }
 
 type ctxUserData struct {
@@ -277,6 +278,8 @@ func logProxy(
 		fields["role"] = decision.role
 		fields["project"] = decision.project
 		fields["decision_reason"] = decision.reason
+		fields["enforce_would_deny"] = decision.enforceWouldDeny
+
 		if !decision.allow {
 			allow = false
 		}
@@ -498,10 +501,12 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	switch action {
 	case EgressAclDecisionDeny:
 		decision.reason = "Role is not allowed to access this host"
+		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
 	case EgressAclDecisionAllowAndReport:
 		decision.reason = "Role is not allowed to access this host but report_only is true"
+		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
 
@@ -509,6 +514,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		// Well, everything is going as expected.
 		decision.allow = true
 		decision.reason = "Role is allowed to access this host"
+		decision.enforceWouldDeny = false
 		config.StatsdClient.Incr("acl.allow", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
