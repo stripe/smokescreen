@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/cmd"
 	"github.com/stripe/smokescreen/pkg/smokescreen"

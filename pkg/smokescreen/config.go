@@ -85,9 +85,9 @@ func NewConfig() *Config {
 	return &Config{
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
-		Log:                     log.New(),
-		Port:                    4750,
-		ExitTimeout:             60 * time.Second,
+		Log:         log.New(),
+		Port:        4750,
+		ExitTimeout: 60 * time.Second,
 	}
 }
 
