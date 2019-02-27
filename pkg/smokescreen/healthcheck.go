@@ -4,11 +4,26 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/DataDog/datadog-go/statsd"
 )
+
+var tagsUp, tagsDown, tagsErr []string
+
+func init() {
+	tagsUp = []string{"status:up"}
+	tagsDown = []string{"status:down"}
+	tagsErr = []string{"status:err"}
+}
 
 type HealthcheckMiddleware struct {
 	App             http.Handler
 	MaintenanceFile string
+	StatsdClient    *statsd.Client
+}
+
+func (h HealthcheckMiddleware) incMetric(tags []string) {
+	h.StatsdClient.Incr("healthchecked", tags, 1)
 }
 
 func (h HealthcheckMiddleware) analyzeError(err error) (bool, error) {
@@ -50,12 +65,15 @@ func (h HealthcheckMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	if r.URL.Path == "/healthcheck" {
 		healthy, err := h.healthy()
 		if err != nil {
+			h.incMetric(tagsErr)
 			w.WriteHeader(500)
 			w.Write([]byte(err.Error()))
 		} else if healthy {
+			h.incMetric(tagsUp)
 			w.WriteHeader(200)
 			w.Write([]byte("Service is up.\n"))
 		} else {
+			h.incMetric(tagsDown)
 			w.WriteHeader(404)
 			w.Write([]byte("Host is in maintenance mode.\n"))
 		}

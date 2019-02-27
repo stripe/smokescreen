@@ -371,6 +371,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		handler = &HealthcheckMiddleware{
 			App:             handler,
 			MaintenanceFile: config.MaintenanceFile,
+			StatsdClient:    config.StatsdClient,
 		}
 	}
 
