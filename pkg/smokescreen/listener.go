@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"net"
+	"sync"
 
 	"github.com/stripe/go-einhorn/einhorn"
 )
@@ -16,24 +17,35 @@ import (
 // connections (if the accept queue overflows) or timeouts because nothing
 // realized this process died.
 //
-// The alternatives to work around this are complex, introduce concurrency
-// and create several new classes of errors, so I've erred on the side
-// of simplicity so far, hoping that by moving the ACK as close to the Accept
-// as possible.
+// The alternatives to work around this are complex, introduce concurrency and
+// create several new classes of errors. So I've erred on the side of
+// simplicity and am hoping that by moving the ACK as close to the Accept as
+// possible we'll avoid too much pain.
 type einhornListener struct {
 	net.Listener
+
+	firstAcceptLock sync.Mutex
+	firstAcceptOnce sync.Once
 
 	accept func() (net.Conn, error)
 }
 
-func (el *einhornListener) firstAccept() (net.Conn, error) {
-	// Switch to the embedded Listener's Accept for all future calls
-	el.accept = el.Listener.Accept
+func (el *einhornListener) firstAccept() (conn net.Conn, err error) {
+	el.firstAcceptLock.Lock()
+	defer el.firstAcceptLock.Unlock()
 
-	// TODO: Should we just fire this into a goroutine so it will probably
-	// happen after we start blocking on Accept and then log.Fatal if it
-	// fails instead of returning an error?
-	if err := einhorn.Ack(); err != nil {
+	el.firstAcceptOnce.Do(func() {
+		// Switch to the embedded Listener's Accept for all future calls
+		el.accept = el.Listener.Accept
+
+		// TODO: Should we just fire this into a goroutine so it will probably
+		// happen after we start blocking on Accept and then log.Fatal if it
+		// fails instead of returning an error?
+		if err = einhorn.Ack(); err != nil {
+			return
+		}
+	})
+	if err != nil {
 		return nil, err
 	}
 
