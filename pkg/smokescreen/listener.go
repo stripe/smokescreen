@@ -24,16 +24,12 @@ import (
 type einhornListener struct {
 	net.Listener
 
-	firstAcceptLock sync.Mutex
 	firstAcceptOnce sync.Once
 
 	accept func() (net.Conn, error)
 }
 
 func (el *einhornListener) firstAccept() (conn net.Conn, err error) {
-	el.firstAcceptLock.Lock()
-	defer el.firstAcceptLock.Unlock()
-
 	el.firstAcceptOnce.Do(func() {
 		// Switch to the embedded Listener's Accept for all future calls
 		el.accept = el.Listener.Accept
