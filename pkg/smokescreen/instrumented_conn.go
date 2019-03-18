@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type ConnExt struct {
 	BytesIn int
 	BytesOut int
 	Wakeups int
+
+	mutex sync.Mutex
 }
 
 func NewConnExt(
@@ -33,10 +36,14 @@ func NewConnExt(
 		0,
 		0,
 		0,
+		sync.Mutex{},
 	}
 }
 
 func (c *ConnExt) Close() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	endTime := time.Now()
 	duration := endTime.Sub(c.StartTime).Seconds()
 
@@ -64,12 +71,18 @@ func (c *ConnExt) Close() error {
 }
 
 func (c *ConnExt) Read(b []byte) (n int, err error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	c.BytesIn += len(b)
 	c.Wakeups += 1
 	return c.Conn.Read(b)
 }
 
 func (c *ConnExt) Write(b []byte) (n int, err error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	c.BytesOut += len(b)
 	c.Wakeups += 1
 	return c.Conn.Write(b)
