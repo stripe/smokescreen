@@ -43,7 +43,6 @@ func NewConnExt(
 func (c *ConnExt) Close() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-
 	endTime := time.Now()
 	duration := endTime.Sub(c.StartTime).Seconds()
 
@@ -72,18 +71,18 @@ func (c *ConnExt) Close() error {
 
 func (c *ConnExt) Read(b []byte) (n int, err error) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	c.BytesIn += len(b)
 	c.Wakeups += 1
+	c.mutex.Unlock()
+
 	return c.Conn.Read(b)
 }
 
 func (c *ConnExt) Write(b []byte) (n int, err error) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	c.BytesOut += len(b)
 	c.Wakeups += 1
+	c.mutex.Unlock()
+
 	return c.Conn.Write(b)
 }
