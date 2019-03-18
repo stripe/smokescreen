@@ -33,9 +33,9 @@ var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
 type ipType int
 
 type aclDecision struct {
-	reason, role, project string
-	allow                 bool
-	enforceWouldDeny      bool
+	reason, role, project, outboundHost string
+	allow                               bool
+	enforceWouldDeny                    bool
 }
 
 type ctxUserData struct {
@@ -134,7 +134,14 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 	return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
-func dial(config *Config, network, addr string) (net.Conn, error) {
+func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
+	var role, outboundHost string
+
+	if v, ok := userdata.(*ctxUserData); ok {
+		role = v.decision.role
+		outboundHost = v.decision.outboundHost
+	}
+
 	resolved, err := safeResolve(config, network, addr)
 	if err != nil {
 		return nil, err
@@ -148,7 +155,7 @@ func dial(config *Config, network, addr string) (net.Conn, error) {
 		return nil, err
 	} else {
 		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-		return &ConnExt{conn, config}, nil
+		return NewConnExt(conn, config, role, outboundHost, time.Now()), nil
 	}
 }
 
@@ -181,8 +188,8 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
-	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
-		return dial(config, network, addr)
+	proxy.Tr.Dial = func(network, addr string, userdata interface{}) (net.Conn, error) {
+		return dial(config, network, addr, userdata)
 	}
 
 	// Ensure that we don't keep old connections alive to avoid TLS errors
@@ -191,14 +198,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		userData := ctxUserData{time.Now(), nil}
+		ctx.UserData = &userData
+
 		config.Log.WithFields(
 			logrus.Fields{
 				"source_ip":      ctx.Req.RemoteAddr,
 				"requested_host": ctx.Req.Host,
 				"url":            ctx.Req.RequestURI,
 			}).Debug("received HTTP proxy request")
-		userData := ctxUserData{time.Now(), nil}
-		ctx.UserData = &userData
 
 		userData.decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 		req.Header.Del(roleHeader)
@@ -210,8 +218,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return req, nil
 	})
 
-	// Handle CONNECT proxy to HTTPS destination
+	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		ctx.UserData = &ctxUserData{time.Now(), nil}
 		resolved, err := handleConnect(config, ctx)
 		if err != nil {
 			ctx.Resp = rejectResponse(ctx.Req, config, err)
@@ -261,7 +270,6 @@ func logProxy(
 		"src_port":       fromPort,
 		"requested_host": ctx.Req.Host,
 		"start_time":     start.Unix(),
-		"end_time":       time.Now().Unix(),
 		"content_length": contentLength,
 	}
 
@@ -326,6 +334,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 	}()
 
 	decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+	ctx.UserData.(*ctxUserData).decision = decision
 	if !decision.allow {
 		return nil, denyError{errors.New(decision.reason)}
 	}
@@ -459,7 +468,9 @@ func getRole(config *Config, req *http.Request) (string, error) {
 }
 
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) *aclDecision {
-	decision := &aclDecision{}
+	decision := &aclDecision{
+		outboundHost: outboundHost,
+	}
 
 	if config.EgressAcl == nil {
 		decision.allow = true
