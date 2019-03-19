@@ -17,7 +17,7 @@
   # to avoid introducing a timeout bug that was introduced after that commit.
   # We've subsequently switched to our own fork of goproxy, and the master branch
   # of our fork has reverted that bug.
-  revision = "7d72f050809adb6424b4f729619fa290eeb5f253"
+  revision = "5c4c446c41ebf8520b3fbfce11ffa30c85edc174"
 
 [[constraint]]
   branch = "master"

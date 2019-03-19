@@ -95,14 +95,14 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 			entries = append(entries, entry)
 		}
 	}
-	a.Equalf(1, len(entries), "Expected only a single INFO/WARN log line per request, got: %v", entries)
 
 	if len(entries) > 0 {
-		entry := entries[0]
+		lastEntryIndex := len(entries) - 1
+		entry := entries[lastEntryIndex]
 		a.Equal(entry.Message, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
 
 		a.Contains(entry.Data, "allow")
-		a.Equal(test.ExpectAllow, entries[0].Data["allow"])
+		a.Equal(test.ExpectAllow, entries[lastEntryIndex].Data["allow"])
 
 		a.Contains(entry.Data, "proxy_type")
 		if test.OverConnect {
