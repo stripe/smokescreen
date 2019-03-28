@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -37,6 +38,9 @@ type Config struct {
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
 	AllowMissingRole             bool
+	StatsSocketDir               string
+	StatsServer         interface{} // StatsServer
+	ConnTracker                  sync.Map // The zero Map is empty and ready to use
 }
 
 type missingRoleError struct {

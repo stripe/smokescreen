@@ -103,6 +103,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "disable-acl-policy-action",
 			Usage: "Disable usage of a `POLICY ACTION` such as \"open\" in the egress ACL",
 		},
+		cli.StringFlag{
+			Name: "stats-socket-dir",
+			Usage: "Enable connection tracking. Will expose one UDS in the directory mentioned going by the name of `track-{pid}.sock`.",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -159,6 +163,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("disable-acl-policy-action") {
 			conf.DisabledAclPolicyActions = c.StringSlice("disable-acl-policy-action")
+		}
+		
+		if c.IsSet("stats-socket-dir") {
+			conf.StatsSocketDir = c.String("stats-socket-dir")
 		}
 
 		if c.IsSet("deny-range") {
