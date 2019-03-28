@@ -2,23 +2,22 @@ package smokescreen
 
 import (
 	"fmt"
-	"net/http"
 	"net"
+	"net/http"
 	"os"
 )
 
-
 type StatsServer struct {
-	config *Config
-	ln net.Listener
-	mux *http.ServeMux
+	config     *Config
+	ln         net.Listener
+	mux        *http.ServeMux
 	socketPath string
 }
 
 func newServer(config *Config) (s *StatsServer) {
 	s = &StatsServer{
 		config: config,
-		mux: http.NewServeMux(),
+		mux:    http.NewServeMux(),
 	}
 
 	s.mux.HandleFunc("/", s.stats)
@@ -33,6 +32,7 @@ func (s *StatsServer) Serve() {
 	if err != nil {
 		s.config.Log.Fatal("Could not start the reporting server.")
 	}
+	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
 
 	s.ln = ln
 	http.Serve(s.ln, s.mux)
@@ -54,7 +54,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 	})
 
 	firstRun := true
-	
+
 	s.config.ConnTracker.Range(func(k, v interface{}) bool {
 		if !firstRun {
 			rw.Write([]byte{byte(','), byte('\n')})
@@ -62,15 +62,15 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 		firstRun = false
 		instrumentedConn := k.(*ConnExt)
 		repr, err := instrumentedConn.JsonStats()
-		
+
 		if err != nil {
 			s.config.Log.Error(err)
 		}
-		
+
 		rw.Write(repr)
 		return true
 	})
-	
+
 	rw.Write([]byte{
 		byte(']'),
 		byte('\n'),

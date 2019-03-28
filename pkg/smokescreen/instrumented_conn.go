@@ -10,15 +10,15 @@ import (
 )
 
 type ConnExt struct {
-	net.Conn `json:"-"`
-	Config *Config `json:"-"`
-	Role string `json:"role"`
-	OutboundHost string `json:"outbound"`
-	StartTime time.Time
+	net.Conn     `json:"-"`
+	Config       *Config `json:"-"`
+	Role         string  `json:"role"`
+	OutboundHost string  `json:"outbound"`
+	StartTime    time.Time
 
-	BytesIn int
-	BytesOut int
-	Wakeups int
+	BytesIn      int
+	BytesOut     int
+	Wakeups      int
 	LastActivity time.Time
 
 	mutex sync.Mutex `json:"-"`
@@ -76,8 +76,8 @@ func (c *ConnExt) Close() error {
 		"remote_addr": c.Conn.RemoteAddr(),
 		"start_time":  c.StartTime.UTC(),
 		"end_time":    endTime.UTC(),
-		"duration": duration,
-		"wakeups": c.Wakeups,
+		"duration":    duration,
+		"wakeups":     c.Wakeups,
 	}).Info("CANONICAL-PROXY-CN-CLOSE")
 	return c.Conn.Close()
 }
@@ -104,26 +104,26 @@ func (c *ConnExt) Write(b []byte) (n int, err error) {
 
 func (c *ConnExt) JsonStats() ([]byte, error) {
 	type stats = struct {
-		Id string `json:"id"`
-		Role string `json:"role"`
-		Rhost string `json:"rhost"`
-		Created time.Time `json:"created"`
-		BytesIn int `json:"bytesIn"`
-		BytesOut int `json:"bytesOut"`
-		Wakeups int `json:"wakeups"`
-		SecondsSinceLastActivity float64 `json:"secondsSinceLastActivity"`
+		Id                       string    `json:"id"`
+		Role                     string    `json:"role"`
+		Rhost                    string    `json:"rhost"`
+		Created                  time.Time `json:"created"`
+		BytesIn                  int       `json:"bytesIn"`
+		BytesOut                 int       `json:"bytesOut"`
+		Wakeups                  int       `json:"wakeups"`
+		SecondsSinceLastActivity float64   `json:"secondsSinceLastActivity"`
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	s := stats{
-		Id: fmt.Sprintf("%d", &c),
-		Role: c.Role,
-		Rhost: c.OutboundHost,
-		Created: c.StartTime,
-		BytesIn: c.BytesIn,
-		BytesOut: c.BytesOut,
-		Wakeups: c.Wakeups,
+		Id:                       fmt.Sprintf("%d", &c),
+		Role:                     c.Role,
+		Rhost:                    c.OutboundHost,
+		Created:                  c.StartTime,
+		BytesIn:                  c.BytesIn,
+		BytesOut:                 c.BytesOut,
+		Wakeups:                  c.Wakeups,
 		SecondsSinceLastActivity: time.Now().Sub(c.LastActivity).Seconds(),
 	}
 
