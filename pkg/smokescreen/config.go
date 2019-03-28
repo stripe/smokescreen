@@ -94,7 +94,7 @@ func NewConfig() *Config {
 		Log:                     log.New(),
 		Port:                    4750,
 		ExitTimeout:             60 * time.Second,
-		StatsSocketFileMode:     os.FileMode(700),
+		StatsSocketFileMode:     os.FileMode(0700),
 	}
 }
 
