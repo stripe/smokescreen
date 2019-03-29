@@ -410,6 +410,10 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	// can do is close the listening socket when we receive a signal, not accept
 	// new connections, and then exit the program after a timeout.
 
+	if len(config.StatsSocketDir) > 0 {
+		config.StatsServer = StartStatsServer(config)
+	}
+
 	semiGraceful := true
 	kill := make(chan os.Signal, 1)
 	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
@@ -434,6 +438,10 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// semi-gracefully
 		config.Log.WithField("delay", config.ExitTimeout).Info("Waiting before shutting down")
 		time.Sleep(config.ExitTimeout)
+	}
+
+	if config.StatsServer != nil {
+		config.StatsServer.(*StatsServer).Shutdown()
 	}
 }
 

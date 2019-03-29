@@ -12,6 +12,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -37,6 +39,10 @@ type Config struct {
 	Log                          *log.Logger
 	DisabledAclPolicyActions     []string
 	AllowMissingRole             bool
+	StatsSocketDir               string
+	StatsSocketFileMode          os.FileMode
+	StatsServer                  interface{} // StatsServer
+	ConnTracker                  *sync.Map   // The zero Map is empty and ready to use
 }
 
 type missingRoleError struct {
@@ -85,9 +91,11 @@ func NewConfig() *Config {
 	return &Config{
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
-		Log:         log.New(),
-		Port:        4750,
-		ExitTimeout: 60 * time.Second,
+		ConnTracker:             new(sync.Map),
+		Log:                     log.New(),
+		Port:                    4750,
+		ExitTimeout:             60 * time.Second,
+		StatsSocketFileMode:     os.FileMode(0700),
 	}
 }
 
