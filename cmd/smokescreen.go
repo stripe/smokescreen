@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -107,6 +108,11 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "stats-socket-dir",
 			Usage: "Enable connection tracking. Will expose one UDS in the directory mentioned going by the name of `track-{pid}.sock`.",
 		},
+		cli.StringFlag{
+			Name:  "stats-socket-file-mode",
+			Value: "700",
+			Usage: "Set the filemode to `FILE_MODE` on the statistics socket",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -167,6 +173,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("stats-socket-dir") {
 			conf.StatsSocketDir = c.String("stats-socket-dir")
+		}
+
+		if c.IsSet("stats-socket-file-mode") {
+			filemode, err := strconv.ParseInt(c.String("stats-socket-file-mode"), 8, 9)
+			if err != nil {
+				return err
+			}
+			conf.StatsSocketFileMode = os.FileMode(filemode)
 		}
 
 		if c.IsSet("deny-range") {

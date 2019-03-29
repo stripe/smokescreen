@@ -10,10 +10,10 @@ import (
 )
 
 type ConnExt struct {
-	net.Conn     `json:"-"`
-	Config       *Config `json:"-"`
-	Role         string  `json:"role"`
-	OutboundHost string  `json:"outbound"`
+	net.Conn
+	Config       *Config
+	Role         string
+	OutboundHost string
 	StartTime    time.Time
 
 	BytesIn      int
@@ -21,7 +21,7 @@ type ConnExt struct {
 	Wakeups      int
 	LastActivity time.Time
 
-	mutex sync.Mutex `json:"-"`
+	mutex sync.Mutex
 }
 
 func NewConnExt(

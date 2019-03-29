@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -31,6 +32,9 @@ type yamlConfig struct {
 	SupportProxyProtocol bool           `yaml:"support_proxy_protocol"`
 	DenyMessageExtra     string         `yaml:"deny_message_extra"`
 	AllowMissingRole     bool           `yaml:"allow_missing_role"`
+
+	StatsSocketDir      string `yaml:"stats_socket_dir"`
+	StatsSocketFileMode string `yaml:"stats_socket_file_mode"`
 
 	Tls *yamlConfigTls
 
@@ -87,6 +91,20 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	c.SupportProxyProtocol = yc.SupportProxyProtocol
+
+	if yc.StatsSocketDir != "" {
+		c.StatsSocketDir = yc.StatsSocketDir
+	}
+
+	if yc.StatsSocketFileMode != "" {
+		filemode, err := strconv.ParseInt(yc.StatsSocketFileMode, 8, 9)
+
+		if err != nil {
+			c.Log.Fatal(err)
+		}
+
+		c.StatsSocketFileMode = os.FileMode(filemode)
+	}
 
 	if yc.Tls != nil {
 		if yc.Tls.CertFile == "" {
