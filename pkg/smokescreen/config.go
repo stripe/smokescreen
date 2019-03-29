@@ -42,7 +42,7 @@ type Config struct {
 	StatsSocketDir               string
 	StatsSocketFileMode          os.FileMode
 	StatsServer                  interface{} // StatsServer
-	ConnTracker                  sync.Map    // The zero Map is empty and ready to use
+	ConnTracker                  *sync.Map   // The zero Map is empty and ready to use
 }
 
 type missingRoleError struct {
@@ -91,6 +91,7 @@ func NewConfig() *Config {
 	return &Config{
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
+		ConnTracker:             new(sync.Map),
 		Log:                     log.New(),
 		Port:                    4750,
 		ExitTimeout:             60 * time.Second,
