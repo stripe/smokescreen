@@ -30,7 +30,7 @@ func (s *StatsServer) Serve() {
 	ln, err := net.Listen("unix", s.socketPath)
 
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server.")
+		s.config.Log.Fatal("Could not start the reporting server.", err)
 	}
 	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
 
