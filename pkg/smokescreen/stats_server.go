@@ -39,6 +39,7 @@ func (s *StatsServer) Serve() {
 }
 
 func (s *StatsServer) Shutdown() {
+	s.ln.Close()
 	os.Remove(s.socketPath)
 }
 
