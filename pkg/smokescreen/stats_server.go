@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 )
 
 type StatsServer struct {
@@ -45,6 +46,18 @@ func (s *StatsServer) Shutdown() {
 
 func (s *StatsServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.mux.ServeHTTP(w, req)
+}
+
+func (s *StatsServer) GetNumActiveConn() int {
+	n := 0
+	s.config.ConnTracker.Range(func(k, v interface{}) bool {
+		c := k.(*ConnExt)
+		if time.Now().Sub(c.LastActivity) < s.config.IdleThresholdSec {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {

@@ -106,7 +106,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.StringFlag{
 			Name:  "stats-socket-dir",
-			Usage: "Enable connection tracking. Will expose one UDS in the directory mentioned going by the name of `track-{pid}.sock`.",
+			Usage: "Enable connection tracking. Will expose one UDS in `DIR` going by the name of \"track-{pid}.sock\".\n\t\tThis should be an absolute path with all symlinks, if any, resolved.",
 		},
 		cli.StringFlag{
 			Name:  "stats-socket-file-mode",

@@ -43,6 +43,8 @@ type Config struct {
 	StatsSocketFileMode          os.FileMode
 	StatsServer                  interface{} // StatsServer
 	ConnTracker                  *sync.Map   // The zero Map is empty and ready to use
+	IdleThresholdSec			 time.Duration // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
+	WaitForAllIdleSec			 time.Duration // Wait this many seconds before checking (again) to ensure all connections are idle before exiting.
 }
 
 type missingRoleError struct {
@@ -94,8 +96,10 @@ func NewConfig() *Config {
 		ConnTracker:             new(sync.Map),
 		Log:                     log.New(),
 		Port:                    4750,
-		ExitTimeout:             60 * time.Second,
+		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
+		IdleThresholdSec:		 30 * time.Second,
+		WaitForAllIdleSec:       5 * time.Second,
 	}
 }
 

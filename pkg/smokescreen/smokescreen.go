@@ -414,17 +414,17 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		config.StatsServer = StartStatsServer(config)
 	}
 
-	semiGraceful := true
+	graceful := true
 	kill := make(chan os.Signal, 1)
 	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		select {
 		case <-kill:
-			config.Log.Print("quitting semi-gracefully")
+			config.Log.Print("quitting gracefully")
 
 		case <-quit:
 			config.Log.Print("quitting now")
-			semiGraceful = false
+			graceful = false
 		}
 		listener.Close()
 	}()
@@ -433,11 +433,25 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		config.Log.Fatal(err)
 	}
 
-	if semiGraceful {
-		// the program has exited normally, wait 60s in an attempt to shutdown
-		// semi-gracefully
-		config.Log.WithField("delay", config.ExitTimeout).Info("Waiting before shutting down")
-		time.Sleep(config.ExitTimeout)
+	if graceful {
+		// the program has exited normally, wait for all connections to become idle before
+		// continuing in an attempt to shutdown gracefully
+		beginTs := time.Now()
+		alerted := false
+		for {
+			if config.StatsServer.(*StatsServer).GetNumActiveConn() > 0 {
+				config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", config.WaitForAllIdleSec))
+				if time.Now().Sub(beginTs) > config.ExitTimeout && !alerted {
+					config.Log.Info(fmt.Sprintf("We've been waiting for %v to shut down but there are still active connections.", config.ExitTimeout))
+					// Do alerting here
+					alerted = true
+				}
+				time.Sleep(config.WaitForAllIdleSec)
+			} else {
+				config.Log.Info("All connections are idle. Continuing with shutdown...")
+				break
+			}
+		}
 	}
 
 	if config.StatsServer != nil {
