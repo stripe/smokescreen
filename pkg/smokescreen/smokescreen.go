@@ -434,10 +434,11 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 
 	if graceful {
-		// the program has exited normally, wait for all connections to become idle before
-		// continuing in an attempt to shutdown gracefully
+		// The program has exited normally, so wait for all connections to close or become idle before
+		// continuing in an attempt to shutdown gracefully.
 		exit := make(chan bool, 1)
 
+		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
 			config.WgCxns.Wait()
@@ -445,22 +446,24 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			exit <- true
 		}()
 
+		// Sometimes, connections don't close and remain in the idle state. This subroutine
+		// waits until all open connections are idle before sending the exit signal.
 		go func() {
-			config.Log.Print("Waiting for all connections to be idle...")
+			config.Log.Print("Waiting for all connections to become idle...")
 			beginTs := time.Now()
 			for {
 				checkAgainIn := config.StatsServer.(*StatsServer).MaybeIdleIn() // ns
 				if checkAgainIn > 0 {
 					if time.Now().Sub(beginTs) > config.ExitTimeout {
-						config.Log.Info(fmt.Sprintf("Timed out at %v while waiting for all active connections to become idle.", config.ExitTimeout))
+						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
 						exit <- true
 						break
 					} else {
-						config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before again.", checkAgainIn))
+						config.Log.Print(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", checkAgainIn))
 						time.Sleep(checkAgainIn)
 					}
 				} else {
-					config.Log.Info("All connections are idle. Continuing with shutdown...")
+					config.Log.Print("All connections are idle. Continuing with shutdown...")
 					exit <- true
 					break
 				}
@@ -470,6 +473,12 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// Wait for the exit signal.
 		<- exit
 	}
+
+	// Close all open (and idle) connections to send their metrics to Splunk.
+	config.ConnTracker.Range(func(k, v interface{}) bool {
+		k.(*ConnExt).Close()
+		return true
+	})
 
 	if config.StatsServer != nil {
 		config.StatsServer.(*StatsServer).Shutdown()
