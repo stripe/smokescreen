@@ -437,16 +437,15 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// the program has exited normally, wait for all connections to become idle before
 		// continuing in an attempt to shutdown gracefully
 		beginTs := time.Now()
-		alerted := false
 		for {
 			if config.StatsServer.(*StatsServer).GetNumActiveConn() > 0 {
-				config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", config.WaitForAllIdleSec))
-				if time.Now().Sub(beginTs) > config.ExitTimeout && !alerted {
-					config.Log.Info(fmt.Sprintf("We've been waiting for %v to shut down but there are still active connections.", config.ExitTimeout))
-					// Do alerting here
-					alerted = true
+				if time.Now().Sub(beginTs) > config.ExitTimeout {
+					config.Log.Info(fmt.Sprintf("Timed out at %v while waiting for all active connections to become idle.", config.ExitTimeout))
+					break
+				} else {
+					config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", config.WaitForAllIdleSec))
+					time.Sleep(config.WaitForAllIdleSec)
 				}
-				time.Sleep(config.WaitForAllIdleSec)
 			} else {
 				config.Log.Info("All connections are idle. Continuing with shutdown...")
 				break
