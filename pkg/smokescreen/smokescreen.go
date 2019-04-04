@@ -436,21 +436,39 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	if graceful {
 		// the program has exited normally, wait for all connections to become idle before
 		// continuing in an attempt to shutdown gracefully
-		beginTs := time.Now()
-		for {
-			if config.StatsServer.(*StatsServer).GetNumActiveConn() > 0 {
-				if time.Now().Sub(beginTs) > config.ExitTimeout {
-					config.Log.Info(fmt.Sprintf("Timed out at %v while waiting for all active connections to become idle.", config.ExitTimeout))
-					break
+		exit := make(chan bool, 1)
+
+		go func() {
+			config.Log.Print("Waiting for all connections to close...")
+			config.WgCxns.Wait()
+			config.Log.Print("All connections are closed. Continuing with shutdown...")
+			exit <- true
+		}()
+
+		go func() {
+			config.Log.Print("Waiting for all connections to be idle...")
+			beginTs := time.Now()
+			for {
+				checkAgainIn := config.StatsServer.(*StatsServer).MaybeIdleIn() // ns
+				if checkAgainIn > 0 {
+					if time.Now().Sub(beginTs) > config.ExitTimeout {
+						config.Log.Info(fmt.Sprintf("Timed out at %v while waiting for all active connections to become idle.", config.ExitTimeout))
+						exit <- true
+						break
+					} else {
+						config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before again.", checkAgainIn))
+						time.Sleep(checkAgainIn)
+					}
 				} else {
-					config.Log.Info(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", config.WaitForAllIdleSec))
-					time.Sleep(config.WaitForAllIdleSec)
+					config.Log.Info("All connections are idle. Continuing with shutdown...")
+					exit <- true
+					break
 				}
-			} else {
-				config.Log.Info("All connections are idle. Continuing with shutdown...")
-				break
 			}
-		}
+		}()
+
+		// Wait for the exit signal.
+		<- exit
 	}
 
 	if config.StatsServer != nil {

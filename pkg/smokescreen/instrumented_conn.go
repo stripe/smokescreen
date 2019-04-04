@@ -46,6 +46,8 @@ func NewConnExt(
 		config.ConnTracker.Store(ret, nil)
 	}
 
+	config.WgCxns.Add(1)
+
 	return
 }
 
@@ -79,6 +81,9 @@ func (c *ConnExt) Close() error {
 		"duration":    duration,
 		"wakeups":     c.Wakeups,
 	}).Info("CANONICAL-PROXY-CN-CLOSE")
+	
+	c.Config.WgCxns.Done()
+	
 	return c.Conn.Close()
 }
 

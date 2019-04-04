@@ -48,16 +48,22 @@ func (s *StatsServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.mux.ServeHTTP(w, req)
 }
 
-func (s *StatsServer) GetNumActiveConn() int {
-	n := 0
+// Returns the longest amount of time (ns) it will take a currently active connection to become idle.
+// 0 means all connections are idle.
+func (s *StatsServer) MaybeIdleIn() time.Duration {
+	longest := 0 * time.Nanosecond
 	s.config.ConnTracker.Range(func(k, v interface{}) bool {
 		c := k.(*ConnExt)
-		if time.Now().Sub(c.LastActivity) < s.config.IdleThresholdSec {
-			n++
+		c.mutex.Lock()
+		defer c.mutex.Unlock()
+		idleAt := c.LastActivity.Add(s.config.IdleThresholdSec)
+		idleIn := idleAt.Sub(time.Now())
+		if  idleIn > longest {
+			longest = idleIn
 		}
 		return true
 	})
-	return n
+	return longest
 }
 
 func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
