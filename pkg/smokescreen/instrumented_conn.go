@@ -23,7 +23,7 @@ type ConnExt struct {
 
 	mutex sync.Mutex
 
-	isClosed	 bool
+	isClosed     bool
 	errorOnClose error
 }
 

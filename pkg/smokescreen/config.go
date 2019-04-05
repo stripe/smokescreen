@@ -99,7 +99,7 @@ func NewConfig() *Config {
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
 		IdleThresholdSec:        10 * time.Second,
-               WgCxns:                  &sync.WaitGroup{},
+		WgCxns:                  &sync.WaitGroup{},
 	}
 }
 
