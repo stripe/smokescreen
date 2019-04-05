@@ -434,7 +434,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	}
 
 	if graceful {
-		// The program has exited normally, so wait for all connections to close or become idle before
+		// Wait for all connections to close or become idle before
 		// continuing in an attempt to shutdown gracefully.
 		exit := make(chan bool, 1)
 
@@ -474,7 +474,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		<- exit
 	}
 
-	// Close all open (and idle) connections to send their metrics to Splunk.
+	// Close all open (and idle) connections to send their metrics to log.
 	config.ConnTracker.Range(func(k, v interface{}) bool {
 		k.(*ConnExt).Close()
 		return true

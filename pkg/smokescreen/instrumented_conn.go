@@ -22,6 +22,9 @@ type ConnExt struct {
 	LastActivity time.Time
 
 	mutex sync.Mutex
+
+	isClosed	 bool
+	errorOnClose error
 }
 
 func NewConnExt(
@@ -40,6 +43,8 @@ func NewConnExt(
 		0,
 		time.Now(),
 		sync.Mutex{},
+		false,
+		nil,
 	}
 
 	if config.StatsServer != nil {
@@ -52,6 +57,11 @@ func NewConnExt(
 }
 
 func (c *ConnExt) Close() error {
+	if c.isClosed {
+		return c.errorOnClose
+	}
+	c.isClosed = true
+
 	if c.Config.StatsServer != nil {
 		c.Config.ConnTracker.Delete(c)
 	}
@@ -81,10 +91,11 @@ func (c *ConnExt) Close() error {
 		"duration":    duration,
 		"wakeups":     c.Wakeups,
 	}).Info("CANONICAL-PROXY-CN-CLOSE")
-	
+
 	c.Config.WgCxns.Done()
-	
-	return c.Conn.Close()
+
+	c.errorOnClose = c.Conn.Close()
+	return c.errorOnClose
 }
 
 func (c *ConnExt) Read(b []byte) (n int, err error) {
@@ -94,7 +105,12 @@ func (c *ConnExt) Read(b []byte) (n int, err error) {
 	c.LastActivity = time.Now()
 	c.mutex.Unlock()
 
-	return c.Conn.Read(b)
+	n, err = c.Conn.Read(b)
+	if c.isClosed {
+		return 1, nil
+	} else {
+		return n, err
+	}
 }
 
 func (c *ConnExt) Write(b []byte) (n int, err error) {
@@ -104,7 +120,12 @@ func (c *ConnExt) Write(b []byte) (n int, err error) {
 	c.LastActivity = time.Now()
 	c.mutex.Unlock()
 
-	return c.Conn.Write(b)
+	n, err = c.Conn.Write(b)
+	if c.isClosed {
+		return 1, nil
+	} else {
+		return n, err
+	}
 }
 
 func (c *ConnExt) JsonStats() ([]byte, error) {
