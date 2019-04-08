@@ -26,7 +26,7 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:746ba780023237ab20de0e1b141cbe85d12535fae045237d9c003a550f60d77c"
+  digest = "1:c4d81b1b708de2c0216d765bd30d9cf339f75ecd7d4311ab9fde2da6ca9e7a8f"
   name = "github.com/elazarl/goproxy"
   packages = [
     ".",
@@ -34,7 +34,7 @@
     "transport/details",
   ]
   pruneopts = ""
-  revision = "5c4c446c41ebf8520b3fbfce11ffa30c85edc174"
+  revision = "806bae1a599998b57e7ba45b89de7750b320df90"
   source = "git@github.com:stripe/goproxy.git"
 
 [[projects]]
@@ -93,6 +93,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:09972eaa1645553c1cf5b0d2b471aa3aef8d9ab88ca45528e131cd32e8572fb9"
+  name = "golang.org/x/net"
+  packages = [
+    "http/httpproxy",
+    "idna",
+  ]
+  pruneopts = ""
+  revision = "eb5bcb51f2a31c7d5141d810b70815c05d9c9146"
+
+[[projects]]
+  branch = "master"
   digest = "1:307dc7ae5d3161196e1400a6600bae3daef4042e80a15db8d79da90f1130cac3"
   name = "golang.org/x/sys"
   packages = [
@@ -101,6 +112,29 @@
   ]
   pruneopts = ""
   revision = "11551d06cbcc94edc80a0facaccbda56473c19c1"
+
+[[projects]]
+  digest = "1:5acd3512b047305d49e8763eef7ba423901e85d5dd2fd1e71778a0ea8de10bd4"
+  name = "golang.org/x/text"
+  packages = [
+    "collate",
+    "collate/build",
+    "internal/colltab",
+    "internal/gen",
+    "internal/tag",
+    "internal/triegen",
+    "internal/ucd",
+    "language",
+    "secure/bidirule",
+    "transform",
+    "unicode/bidi",
+    "unicode/cldr",
+    "unicode/norm",
+    "unicode/rangetable",
+  ]
+  pruneopts = ""
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
 
 [[projects]]
   digest = "1:e85837cb04b78f61688c6eba93ea9d14f60d611e2aaf8319999b1a60d2dafbfa"
