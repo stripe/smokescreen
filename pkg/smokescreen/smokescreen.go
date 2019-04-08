@@ -414,17 +414,17 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		config.StatsServer = StartStatsServer(config)
 	}
 
-	semiGraceful := true
+	graceful := true
 	kill := make(chan os.Signal, 1)
 	signal.Notify(kill, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		select {
 		case <-kill:
-			config.Log.Print("quitting semi-gracefully")
+			config.Log.Print("quitting gracefully")
 
 		case <-quit:
 			config.Log.Print("quitting now")
-			semiGraceful = false
+			graceful = false
 		}
 		listener.Close()
 	}()
@@ -433,12 +433,52 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		config.Log.Fatal(err)
 	}
 
-	if semiGraceful {
-		// the program has exited normally, wait 60s in an attempt to shutdown
-		// semi-gracefully
-		config.Log.WithField("delay", config.ExitTimeout).Info("Waiting before shutting down")
-		time.Sleep(config.ExitTimeout)
+	if graceful {
+		// Wait for all connections to close or become idle before
+		// continuing in an attempt to shutdown gracefully.
+		exit := make(chan bool, 1)
+
+		// This subroutine blocks until all connections close.
+		go func() {
+			config.Log.Print("Waiting for all connections to close...")
+			config.WgCxns.Wait()
+			config.Log.Print("All connections are closed. Continuing with shutdown...")
+			exit <- true
+		}()
+
+		// Sometimes, connections don't close and remain in the idle state. This subroutine
+		// waits until all open connections are idle before sending the exit signal.
+		go func() {
+			config.Log.Print("Waiting for all connections to become idle...")
+			beginTs := time.Now()
+			for {
+				checkAgainIn := config.StatsServer.(*StatsServer).MaybeIdleIn() // ns
+				if checkAgainIn > 0 {
+					if time.Now().Sub(beginTs) > config.ExitTimeout {
+						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
+						exit <- true
+						break
+					} else {
+						config.Log.Print(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", checkAgainIn))
+						time.Sleep(checkAgainIn)
+					}
+				} else {
+					config.Log.Print("All connections are idle. Continuing with shutdown...")
+					exit <- true
+					break
+				}
+			}
+		}()
+
+		// Wait for the exit signal.
+		<- exit
 	}
+
+	// Close all open (and idle) connections to send their metrics to log.
+	config.ConnTracker.Range(func(k, v interface{}) bool {
+		k.(*ConnExt).Close()
+		return true
+	})
 
 	if config.StatsServer != nil {
 		config.StatsServer.(*StatsServer).Shutdown()
