@@ -68,8 +68,11 @@ func TestClassifyIP(t *testing.T) {
 			t.Errorf("Could not parse IP from string: %s", test.ip)
 			continue
 		}
+		localAddr := net.TCPAddr{
+			IP: localIP,
+		}
 
-		got := classifyIP(conf, localIP)
+		got := classifyAddr(conf, &localAddr)
 		if got != test.expected {
 			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
 		}

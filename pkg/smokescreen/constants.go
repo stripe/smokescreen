@@ -20,7 +20,7 @@ var privateNetworkStrings = [...]string{
 	"fc00::/7",
 }
 
-var PrivateNetworkRanges []net.IPNet
+var PrivateRuleRanges []RuleRange
 
 // Using a globally-shared Regexp can impact performace due to lock contention,
 // but calling Copy() for each connection is much worse, and it looks like
@@ -31,13 +31,13 @@ const hostExtractPattern = "^([^:]*)(:\\d+)?$"
 var hostExtractRE *regexp.Regexp
 
 func init() {
-	PrivateNetworkRanges = make([]net.IPNet, len(privateNetworkStrings))
+	PrivateRuleRanges = make([]RuleRange, len(privateNetworkStrings))
 	for i, s := range privateNetworkStrings {
 		_, rng, err := net.ParseCIDR(s)
 		if err != nil {
 			panic("Couldn't parse internal private network string")
 		}
-		PrivateNetworkRanges[i] = *rng
+		PrivateRuleRanges[i].Net = *rng
 	}
 
 	hostExtractRE = regexp.MustCompile(hostExtractPattern)

@@ -88,29 +88,35 @@ func (t ipType) statsdString() string {
 const errorHeader = "X-Smokescreen-Error"
 const roleHeader = "X-Smokescreen-Role"
 
-func ipIsInSetOfNetworks(nets []net.IPNet, ip net.IP) bool {
-	for _, network := range nets {
-		if network.Contains(ip) {
+func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
+	for _, rng := range ranges {
+		// If the range specifies a port and the port doesn't match,
+		// then this range doesn't match
+		if rng.Port != 0 && addr.Port != rng.Port {
+			continue
+		}
+
+		if rng.Net.Contains(addr.IP) {
 			return true
 		}
 	}
 	return false
 }
 
-func classifyIP(config *Config, ip net.IP) ipType {
-	if !ip.IsGlobalUnicast() || ip.IsLoopback() {
-		if ipIsInSetOfNetworks(config.AllowRanges, ip) {
+func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
+	if !addr.IP.IsGlobalUnicast() || addr.IP.IsLoopback() {
+		if addrIsInRuleRange(config.AllowRanges, addr) {
 			return ipAllowUserConfigured
 		} else {
 			return ipDenyNotGlobalUnicast
 		}
 	}
 
-	if ipIsInSetOfNetworks(config.AllowRanges, ip) {
+	if addrIsInRuleRange(config.AllowRanges, addr) {
 		return ipAllowUserConfigured
-	} else if ipIsInSetOfNetworks(config.DenyRanges, ip) {
+	} else if addrIsInRuleRange(config.DenyRanges, addr) {
 		return ipDenyUserConfigured
-	} else if ipIsInSetOfNetworks(PrivateNetworkRanges, ip) {
+	} else if addrIsInRuleRange(PrivateRuleRanges, addr) {
 		return ipDenyPrivateRange
 	} else {
 		return ipAllowDefault
@@ -125,7 +131,7 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 		return nil, err
 	}
 
-	classification := classifyIP(config, resolved.IP)
+	classification := classifyAddr(config, resolved)
 	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
 
 	if classification.IsAllowed() {

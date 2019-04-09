@@ -330,15 +330,25 @@ func TestSmokescreenIntegration(t *testing.T) {
 		unknownRoleAllowCase := noRoleAllowCase
 		unknownRoleAllowCase.RoleName = "unknown"
 
-		badIPCase := baseCase
-		badIPCase.Host = "127.0.0.2"
-		badIPCase.ExpectAllow = false
-		badIPCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+		badIPRangeCase := baseCase
+		// This must be a global unicast, non-loopback address or other IP rules will
+		// block it regardless of the specific configuration we're trying to test.
+		badIPRangeCase.Host = "1.1.1.1"
+		badIPRangeCase.ExpectAllow = false
+		badIPRangeCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+
+		badIPAddressCase := baseCase
+		// This must be a global unicast, non-loopback address or other IP rules will
+		// block it regardless of the specific configuration we're trying to test.
+		badIPAddressCase.Host = "1.0.0.1"
+		badIPAddressCase.TargetPort = 123
+		badIPAddressCase.ExpectAllow = false
+		badIPAddressCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
 
 		testCases = append(testCases,
 			&unknownRoleAllowCase, &unknownRoleDenyCase,
 			&noRoleAllowCase, &noRoleDenyCase,
-			&badIPCase,
+			&badIPRangeCase, &badIPAddressCase,
 		)
 	}
 
@@ -356,8 +366,9 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		"--listen-ip=127.0.0.1",
 		"--egress-acl-file=testdata/sample_config.yaml",
 		"--additional-error-message-on-deny=moar ctx",
-		"--deny-range=127.0.0.2/32",
+		"--deny-range=1.1.1.1/32",
 		"--allow-range=127.0.0.1/32",
+		"--deny-address=1.0.0.1:123",
 	}
 
 	if useTls {
