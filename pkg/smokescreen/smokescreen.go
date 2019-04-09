@@ -221,12 +221,11 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		ctx.UserData = &ctxUserData{time.Now(), nil}
-		resolved, err := handleConnect(config, ctx)
-		if err != nil {
+		if err := handleConnect(config, ctx); err != nil {
 			ctx.Resp = rejectResponse(ctx.Req, config, err)
 			return goproxy.RejectConnect, ""
 		}
-		return goproxy.OkConnect, resolved.String()
+		return goproxy.OkConnect, host
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -317,7 +316,7 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 	logProxy(config, ctx, "http", toAddr, userData.decision, userData.start, ctx.Error)
 }
 
-func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) {
+func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
 	config.Log.WithFields(
 		logrus.Fields{
 			"remote":         ctx.Req.RemoteAddr,
@@ -335,16 +334,12 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 
 	decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	ctx.UserData.(*ctxUserData).decision = decision
+
 	if !decision.allow {
-		return nil, denyError{errors.New(decision.reason)}
+		return denyError{errors.New(decision.reason)}
 	}
 
-	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
-	if err != nil {
-		return nil, err
-	}
-
-	return resolved, nil
+	return nil
 }
 
 func findListener(ip string, defaultPort uint16) (net.Listener, error) {
@@ -471,7 +466,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		}()
 
 		// Wait for the exit signal.
-		<- exit
+		<-exit
 	}
 
 	// Close all open (and idle) connections to send their metrics to log.
