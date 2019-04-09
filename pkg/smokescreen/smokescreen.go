@@ -155,6 +155,14 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		var err error
 		resolved, err = safeResolve(config, network, addr)
 	if err != nil {
+			if _, ok := err.(denyError); ok {
+				config.Log.WithFields(
+					logrus.Fields{
+						"address": addr,
+						"error":   err,
+					}).Error("unexpected illegal address in dialer")
+			}
+
 		return nil, err
 	}
 	}
@@ -247,6 +255,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 
 		if resp == nil && ctx.Error != nil {
+			logrus.Warnf("rejecting with %#v", ctx.Error)
 			return rejectResponse(ctx.Req, config, ctx.Error)
 		}
 
