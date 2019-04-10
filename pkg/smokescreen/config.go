@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -20,11 +21,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type RuleRange struct {
+	Net  net.IPNet
+	Port int
+}
+
 type Config struct {
 	Ip                           string
 	Port                         uint16
-	DenyRanges                   []net.IPNet
-	AllowRanges                  []net.IPNet
+	DenyRanges                   []RuleRange
+	AllowRanges                  []RuleRange
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	MaintenanceFile              string
@@ -60,28 +66,94 @@ func IsMissingRoleError(err error) bool {
 	return ok
 }
 
-func parseRanges(rangeStrings []string) ([]net.IPNet, error) {
-	outRanges := make([]net.IPNet, len(rangeStrings))
+func parseRanges(rangeStrings []string) ([]RuleRange, error) {
+	outRanges := make([]RuleRange, len(rangeStrings))
 	for i, str := range rangeStrings {
 		_, ipnet, err := net.ParseCIDR(str)
 		if err != nil {
 			return outRanges, err
 		}
-		outRanges[i] = *ipnet
+		outRanges[i].Net = *ipnet
+	}
+	return outRanges, nil
+}
+
+func parseAddresses(addressStrings []string) ([]RuleRange, error) {
+	outRanges := make([]RuleRange, len(addressStrings))
+	for i, str := range addressStrings {
+		ip := net.ParseIP(str)
+		if ip == nil {
+			ipStr, portStr, err := net.SplitHostPort(str)
+			if err != nil {
+				return outRanges, fmt.Errorf("address must be in the form ip[:port], got %s", str)
+			}
+
+			ip = net.ParseIP(ipStr)
+			if ip == nil {
+				return outRanges, fmt.Errorf("invalid IP address '%s'", ipStr)
+			}
+
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return outRanges, fmt.Errorf("invalid port number '%s'", portStr)
+			}
+
+			outRanges[i].Port = port
+		}
+
+		var mask net.IPMask
+		if ip.To4() != nil {
+			mask = net.CIDRMask(32, 32)
+		} else {
+			mask = net.CIDRMask(128, 128)
+		}
+
+		outRanges[i].Net = net.IPNet{
+			IP:   ip,
+			Mask: mask,
+		}
 	}
 	return outRanges, nil
 }
 
 func (config *Config) SetDenyRanges(rangeStrings []string) error {
 	var err error
-	config.DenyRanges, err = parseRanges(rangeStrings)
-	return err
+	ranges, err := parseRanges(rangeStrings)
+	if err != nil {
+		return err
+	}
+	config.DenyRanges = append(config.DenyRanges, ranges...)
+	return nil
 }
 
 func (config *Config) SetAllowRanges(rangeStrings []string) error {
 	var err error
-	config.AllowRanges, err = parseRanges(rangeStrings)
-	return err
+	ranges, err := parseRanges(rangeStrings)
+	if err != nil {
+		return err
+	}
+	config.AllowRanges = append(config.AllowRanges, ranges...)
+	return nil
+}
+
+func (config *Config) SetDenyAddresses(addressStrings []string) error {
+	var err error
+	ranges, err := parseAddresses(addressStrings)
+	if err != nil {
+		return err
+	}
+	config.DenyRanges = append(config.DenyRanges, ranges...)
+	return nil
+}
+
+func (config *Config) SetAllowAddresses(addressStrings []string) error {
+	var err error
+	ranges, err := parseAddresses(addressStrings)
+	if err != nil {
+		return err
+	}
+	config.AllowRanges = append(config.AllowRanges, ranges...)
+	return nil
 }
 
 // RFC 5280,  4.2.1.1

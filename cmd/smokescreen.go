@@ -75,6 +75,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "allow-range",
 			Usage: "Add `RANGE` (in CIDR notation) to list of allowed IP ranges.  Repeatable.",
 		},
+		cli.StringSliceFlag{
+			Name:  "deny-address",
+			Usage: "Add IP[:PORT] to list of blocked IPs.  Repeatable.",
+		},
+		cli.StringSliceFlag{
+			Name:  "allow-address",
+			Usage: "Add IP[:PORT] to list of allowed IPs.  Repeatable.",
+		},
 		cli.StringFlag{
 			Name:  "egress-acl-file",
 			Usage: "Validate egress traffic against `FILE`",
@@ -191,6 +199,18 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("allow-range") {
 			if err := conf.SetAllowRanges(c.StringSlice("allow-range")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("deny-address") {
+			if err := conf.SetDenyAddresses(c.StringSlice("deny-address")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("allow-address") {
+			if err := conf.SetAllowAddresses(c.StringSlice("allow-address")); err != nil {
 				return err
 			}
 		}
