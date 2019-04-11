@@ -99,6 +99,7 @@ func (c *ConnExt) Close() error {
 }
 
 func (c *ConnExt) Read(b []byte) (n int, err error) {
+	fmt.Printf("Read %d", len(b))
 	c.mutex.Lock()
 	c.BytesIn += len(b)
 	c.Wakeups += 1
