@@ -90,6 +90,8 @@ type YamlEgressAclConfiguration struct {
 	Services []ServiceRule `yaml:"services"`
 	Default  *ServiceRule  `yaml:"default"`
 	Version  string        `yaml:"version"`
+	GlobalDenyList []string `yaml:"global_deny_list"` // domains which will be blocked even in report mode
+	GlobalAllowList []string `yaml:"global_allow_list"` // domains which will be allowed for every host type
 }
 
 func (yamlConf *YamlEgressAclConfiguration) ValidateConfig() error {

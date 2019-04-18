@@ -137,6 +137,8 @@ func TestLoadFromYaml(t *testing.T) {
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Services))
+		a.Equal(2, len(acl.GlobalDenyList))
+		a.Equal(3, len(acl.GlobalAllowList))
 	}
 
 	// Load a broken config
