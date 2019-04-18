@@ -89,12 +89,12 @@ var testCases = map[string]struct {
 		EgressAclDecisionAllow,
 		"other",
 	},
-	"allow from global allowlist known service": {
+	"allow from global allowlist enforce service": {
 		"sample_config_with_global.yaml",
-		"report-dummy-srv",
+		"enforce-dummy-srv",
 		"goodexample1.com",
 		EgressAclDecisionAllow,
-		"security",
+		"usersec",
 	},
 	"allow from global allowlist unknown service": {
 		"sample_config_with_global.yaml",
@@ -103,7 +103,7 @@ var testCases = map[string]struct {
 		EgressAclDecisionAllow,
 		"other",
 	},
-	"deny from global denylist known service": {
+	"deny from global denylist report service": {
 		"sample_config_with_global.yaml",
 		"report-dummy-srv",
 		"badexample1.com",
@@ -116,6 +116,13 @@ var testCases = map[string]struct {
 		"badexample2.com",
 		EgressAclDecisionDeny,
 		"other",
+	},
+	"deny from global denylist open service": {
+		"sample_config_with_global.yaml",
+		"open-dummy-srv",
+		"badexample2.com",
+		EgressAclDecisionDeny,
+		"automation",
 	},
 }
 

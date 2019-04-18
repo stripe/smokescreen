@@ -35,24 +35,6 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 
 	defaultRuleUsed := rule == ew.Default
 
-	switch rule.Policy {
-	case ConfigEnforcementPolicyReport:
-		action = EgressAclDecisionAllowAndReport
-	case ConfigEnforcementPolicyEnforce:
-		action = EgressAclDecisionDeny
-	case ConfigEnforcementPolicyOpen:
-		return EgressAclDecisionAllow, defaultRuleUsed, nil
-	default:
-		return 0, defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
-	}
-
-	// if the host matches any of the rule's allowed domains, allow
-	for _, domainGlob := range rule.DomainGlob {
-		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionAllow, defaultRuleUsed, nil
-		}
-	}
-
 	// if the host matches any of the global allow list, allow
 	for _, domainGlob := range ew.GlobalAllowList {
 		if hostMatchesGlob(toHost, domainGlob) {
@@ -65,6 +47,24 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 		if hostMatchesGlob(toHost, domainGlob) {
 			return EgressAclDecisionDeny, defaultRuleUsed, nil
 		}
+	}
+
+	// if the host matches any of the rule's allowed domains, allow
+	for _, domainGlob := range rule.DomainGlob {
+		if hostMatchesGlob(toHost, domainGlob) {
+			return EgressAclDecisionAllow, defaultRuleUsed, nil
+		}
+	}
+
+	switch rule.Policy {
+	case ConfigEnforcementPolicyReport:
+		action = EgressAclDecisionAllowAndReport
+	case ConfigEnforcementPolicyEnforce:
+		action = EgressAclDecisionDeny
+	case ConfigEnforcementPolicyOpen:
+		return EgressAclDecisionAllow, defaultRuleUsed, nil
+	default:
+		return 0, defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
 	}
 
 	// use the decision from rule.Policy
