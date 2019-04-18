@@ -27,7 +27,15 @@ services:
 
 default:
     project: other
-    action: enforce
+    action: report
     allowed_domains:
       - default.example.com
 
+global_allow_list:
+  - goodexample1.com
+  - goodexample2.com
+  - goodexample3.com
+
+global_deny_list:
+  - badexample1.com
+  - badexample2.com

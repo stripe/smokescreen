@@ -89,6 +89,41 @@ var testCases = map[string]struct {
 		EgressAclDecisionAllow,
 		"other",
 	},
+	"allow from global allowlist enforce service": {
+		"sample_config_with_global.yaml",
+		"enforce-dummy-srv",
+		"goodexample1.com",
+		EgressAclDecisionAllow,
+		"usersec",
+	},
+	"allow from global allowlist unknown service": {
+		"sample_config_with_global.yaml",
+		"unknown-service",
+		"goodexample2.com",
+		EgressAclDecisionAllow,
+		"other",
+	},
+	"deny from global denylist report service": {
+		"sample_config_with_global.yaml",
+		"report-dummy-srv",
+		"badexample1.com",
+		EgressAclDecisionDeny,
+		"security",
+	},
+	"deny from global denylist unknown service": {
+		"sample_config_with_global.yaml",
+		"unknown-service",
+		"badexample2.com",
+		EgressAclDecisionDeny,
+		"other",
+	},
+	"deny from global denylist open service": {
+		"sample_config_with_global.yaml",
+		"open-dummy-srv",
+		"badexample2.com",
+		EgressAclDecisionDeny,
+		"automation",
+	},
 }
 
 func TestServiceDecideAndProject(t *testing.T) {
@@ -137,6 +172,18 @@ func TestLoadFromYaml(t *testing.T) {
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Services))
+		a.Equal(0, len(acl.GlobalDenyList))
+		a.Equal(0, len(acl.GlobalAllowList))
+	}
+
+    // Load a sane config with global lists
+	{
+		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config_with_global.yaml")
+		a.Nil(err)
+		a.NotNil(acl)
+		a.Equal(4, len(acl.Services))
+		a.Equal(2, len(acl.GlobalDenyList))
+		a.Equal(3, len(acl.GlobalAllowList))
 	}
 
 	// Load a broken config

@@ -132,6 +132,17 @@ A host can be specified with or without a globbing prefix
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/testdata/sample_config.yaml) is a sample ACL.
 
+
+#### Global Allow/Deny Lists
+Optionally, you may specify a global allow list and a global deny list in your ACL config.
+This overrides the settings for any individual ACL entry, including the action.
+For example, specifying `example.com` in your global_allow_list will allow traffic for that domain on a host, even if that host is set to `enforce` and does not specify `example.com` in its allowed domains.
+Similarly, specifying `malicious.com` in your global_deny_list will deny traffic for that domain on a host, even if that host is set to `report` or `open`, regardless of whether or not that host specifies `malicious.com` in its allowed domains.
+
+
+[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
+
+
 # Contributors
 
  - Aditya Mukerjee
