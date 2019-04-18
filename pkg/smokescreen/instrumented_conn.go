@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -109,9 +110,9 @@ func (c *ConnExt) Read(b []byte) (n int, err error) {
 	n, err = c.Conn.Read(b)
 
 	if c.isClosed {
-		return 0, nil
+		return 0, io.EOF
 	}
-	
+
 	return n, err
 }
 
@@ -125,7 +126,7 @@ func (c *ConnExt) Write(b []byte) (n int, err error) {
 	n, err = c.Conn.Write(b)
 
 	if c.isClosed {
-		return 0, nil
+		return 0, io.EOF
 	}
 
 	return n, err
