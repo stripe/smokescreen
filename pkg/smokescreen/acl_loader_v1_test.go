@@ -89,6 +89,34 @@ var testCases = map[string]struct {
 		EgressAclDecisionAllow,
 		"other",
 	},
+	"allow from global allowlist known service": {
+		"sample_config.yaml",
+		"report-dummy-srv",
+		"goodexample1.com",
+		EgressAclDecisionAllow,
+		"security",
+	},
+	"allow from global allowlist unknown service": {
+		"sample_config.yaml",
+		"unknown-service",
+		"goodexample2.com",
+		EgressAclDecisionAllow,
+		"other",
+	},
+	"deny from global denylist known service": {
+		"sample_config.yaml",
+		"report-dummy-srv",
+		"badexample1.com",
+		EgressAclDecisionDeny,
+		"security",
+	},
+	"deny from global denylist unknown service": {
+		"sample_config.yaml",
+		"unknown-service",
+		"badexample2.com",
+		EgressAclDecisionDeny,
+		"other",
+	},
 }
 
 func TestServiceDecideAndProject(t *testing.T) {
