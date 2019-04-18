@@ -90,28 +90,28 @@ var testCases = map[string]struct {
 		"other",
 	},
 	"allow from global allowlist known service": {
-		"default_report.yaml",
+		"sample_config_with_global.yaml",
 		"report-dummy-srv",
 		"goodexample1.com",
 		EgressAclDecisionAllow,
 		"security",
 	},
 	"allow from global allowlist unknown service": {
-		"default_report.yaml",
+		"sample_config_with_global.yaml",
 		"unknown-service",
 		"goodexample2.com",
 		EgressAclDecisionAllow,
 		"other",
 	},
 	"deny from global denylist known service": {
-		"default_report.yaml",
+		"sample_config_with_global.yaml",
 		"report-dummy-srv",
 		"badexample1.com",
 		EgressAclDecisionDeny,
 		"security",
 	},
 	"deny from global denylist unknown service": {
-		"default_report.yaml",
+		"sample_config_with_global.yaml",
 		"unknown-service",
 		"badexample2.com",
 		EgressAclDecisionDeny,
@@ -171,7 +171,7 @@ func TestLoadFromYaml(t *testing.T) {
 
     // Load a sane config with global lists
 	{
-		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/default_report.yaml")
+		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config_with_global.yaml")
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Services))
