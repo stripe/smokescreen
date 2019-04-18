@@ -60,6 +60,7 @@ func (c *ConnExt) Close() error {
 	if c.isClosed {
 		return c.errorOnClose
 	}
+
 	c.isClosed = true
 
 	if c.Config.StatsServer != nil {
@@ -106,11 +107,8 @@ func (c *ConnExt) Read(b []byte) (n int, err error) {
 	c.mutex.Unlock()
 
 	n, err = c.Conn.Read(b)
-	if c.isClosed {
-		return 1, nil
-	} else {
-		return n, err
-	}
+
+	return n, err
 }
 
 func (c *ConnExt) Write(b []byte) (n int, err error) {
@@ -121,11 +119,8 @@ func (c *ConnExt) Write(b []byte) (n int, err error) {
 	c.mutex.Unlock()
 
 	n, err = c.Conn.Write(b)
-	if c.isClosed {
-		return 1, nil
-	} else {
-		return n, err
-	}
+
+	return n, err
 }
 
 func (c *ConnExt) JsonStats() ([]byte, error) {
