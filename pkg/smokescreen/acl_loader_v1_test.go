@@ -103,6 +103,13 @@ var testCases = map[string]struct {
 		EgressAclDecisionAllow,
 		"other",
 	},
+	"allow despite global denylist with allowed domains override": {
+		"sample_config_with_global.yaml",
+		"enforce-dummy-srv",
+		"badexample1.com",
+		EgressAclDecisionAllow,
+		"usersec",
+	},
 	"deny from global denylist report service": {
 		"sample_config_with_global.yaml",
 		"report-dummy-srv",
@@ -121,6 +128,13 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"badexample2.com",
+		EgressAclDecisionDeny,
+		"automation",
+	},
+	"deny from conflicting lists open service": {
+		"sample_config_with_global.yaml",
+		"open-dummy-srv",
+		"conflictingexample.com",
 		EgressAclDecisionDeny,
 		"automation",
 	},
@@ -182,8 +196,8 @@ func TestLoadFromYaml(t *testing.T) {
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Services))
-		a.Equal(2, len(acl.GlobalDenyList))
-		a.Equal(3, len(acl.GlobalAllowList))
+		a.Equal(3, len(acl.GlobalDenyList))
+		a.Equal(4, len(acl.GlobalAllowList))
 	}
 
 	// Load a broken config

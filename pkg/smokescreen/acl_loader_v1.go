@@ -35,8 +35,8 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 
 	defaultRuleUsed := rule == ew.Default
 
-	// if the host matches any of the global allow list, allow
-	for _, domainGlob := range ew.GlobalAllowList {
+	// if the host matches any of the rule's allowed domains, allow
+	for _, domainGlob := range rule.DomainGlob {
 		if hostMatchesGlob(toHost, domainGlob) {
 			return EgressAclDecisionAllow, defaultRuleUsed, nil
 		}
@@ -49,8 +49,8 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 		}
 	}
 
-	// if the host matches any of the rule's allowed domains, allow
-	for _, domainGlob := range rule.DomainGlob {
+	// if the host matches any of the global allow list, allow
+	for _, domainGlob := range ew.GlobalAllowList {
 		if hostMatchesGlob(toHost, domainGlob) {
 			return EgressAclDecisionAllow, defaultRuleUsed, nil
 		}
