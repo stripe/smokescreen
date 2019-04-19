@@ -288,6 +288,17 @@ func logProxy(
 		fields["dest_port"] = toAddress.Port
 	}
 
+	// attempt to retrieve information about the host originating the proxy request
+	fields["src_host_common_name"] = "unknown"
+	fields["src_host_organization_unit"] = "unknown"
+	if ctx.Req.TLS != nil && len(ctx.Req.TLS.PeerCertificates) > 0 {
+		fields["src_host_common_name"] = ctx.Req.TLS.PeerCertificates[0].Subject.CommonName
+		var ou_entries = ctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
+		if ou_entries != nil && len(ou_entries) > 0 {
+			fields["src_host_organization_unit"] = ou_entries[0]
+		}
+	}
+
 	if decision != nil {
 		fields["role"] = decision.role
 		fields["project"] = decision.project
