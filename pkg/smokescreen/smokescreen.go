@@ -279,10 +279,6 @@ func logProxy(
 		"content_length": contentLength,
 	}
 
-	if _, ok := err.(denyError); !ok && err != nil {
-		fields["error"] = err
-	}
-
 	if toAddress != nil {
 		fields["dest_ip"] = toAddress.IP.String()
 		fields["dest_port"] = toAddress.Port
@@ -311,9 +307,13 @@ func logProxy(
 	}
 	fields["allow"] = allow
 
+	if err != nil && allow == false {
+		fields["error"] = err.Error()
+	}
+
 	entry := config.Log.WithFields(fields)
 	var logMethod func(...interface{})
-	if _, ok := fields["error"]; ok {
+	if _, ok := err.(denyError); !ok && err != nil {
 		logMethod = entry.Error
 	} else if allow {
 		logMethod = entry.Info
