@@ -18,19 +18,19 @@ type EgressAclRule struct {
 }
 
 type EgressAclConfig struct {
-	Services map[string]EgressAclRule
-	Default  *EgressAclRule
-	GlobalDenyList []string
+	Services        map[string]EgressAclRule
+	Default         *EgressAclRule
+	GlobalDenyList  []string
 	GlobalAllowList []string
 }
 
-func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, bool, error) {
+func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, string, bool, error) {
 	var action EgressAclDecision
 
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
 		action = EgressAclDecisionDeny
-		return action, false, nil
+		return action, "", false, nil
 	}
 
 	defaultRuleUsed := rule == ew.Default
@@ -38,21 +38,21 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	// if the host matches any of the rule's allowed domains, allow
 	for _, domainGlob := range rule.DomainGlob {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionAllow, defaultRuleUsed, nil
+			return EgressAclDecisionAllow, "if the host matches any of the rule's allowed domains, allow", defaultRuleUsed, nil
 		}
 	}
 
 	// if the host matches any of the global deny list, deny
 	for _, domainGlob := range ew.GlobalDenyList {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionDeny, defaultRuleUsed, nil
+			return EgressAclDecisionDeny, "if the host matches any of the global deny list, deny", defaultRuleUsed, nil
 		}
 	}
 
 	// if the host matches any of the global allow list, allow
 	for _, domainGlob := range ew.GlobalAllowList {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionAllow, defaultRuleUsed, nil
+			return EgressAclDecisionAllow, "if the host matches any of the global allow list, allow", defaultRuleUsed, nil
 		}
 	}
 
@@ -62,16 +62,16 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	case ConfigEnforcementPolicyEnforce:
 		action = EgressAclDecisionDeny
 	case ConfigEnforcementPolicyOpen:
-		return EgressAclDecisionAllow, defaultRuleUsed, nil
+		return EgressAclDecisionAllow, "", defaultRuleUsed, nil
 	default:
-		return 0, defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
+		return 0, "", defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
 	}
 
 	// use the decision from rule.Policy
-	return action, defaultRuleUsed, nil
+	return action, "", defaultRuleUsed, nil
 }
 
-func hostMatchesGlob(toHost string, domainGlob string) (bool) {
+func hostMatchesGlob(toHost string, domainGlob string) bool {
 	if len(domainGlob) > 0 && domainGlob[0] == '*' {
 		postfix := domainGlob[1:]
 		if strings.HasSuffix(toHost, postfix) {
@@ -112,11 +112,11 @@ type ServiceRule struct {
 }
 
 type YamlEgressAclConfiguration struct {
-	Services []ServiceRule `yaml:"services"`
-	Default  *ServiceRule  `yaml:"default"`
-	Version  string        `yaml:"version"`
-	GlobalDenyList []string `yaml:"global_deny_list"` // domains which will be blocked even in report mode
-	GlobalAllowList []string `yaml:"global_allow_list"` // domains which will be allowed for every host type
+	Services        []ServiceRule `yaml:"services"`
+	Default         *ServiceRule  `yaml:"default"`
+	Version         string        `yaml:"version"`
+	GlobalDenyList  []string      `yaml:"global_deny_list"`  // domains which will be blocked even in report mode
+	GlobalAllowList []string      `yaml:"global_allow_list"` // domains which will be allowed for every host type
 }
 
 func (yamlConf *YamlEgressAclConfiguration) ValidateConfig() error {

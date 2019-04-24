@@ -488,7 +488,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		}()
 
 		// Wait for the exit signal.
-		<- exit
+		<-exit
 	}
 
 	// Close all open (and idle) connections to send their metrics to log.
@@ -556,7 +556,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
 
-	action, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
+	action, reason, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -564,7 +564,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
-		decision.reason = "acl.decide error"
+		decision.reason = reason
 		return decision
 	}
 
