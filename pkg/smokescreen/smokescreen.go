@@ -123,21 +123,21 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	}
 }
 
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
+func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
 	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
 		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
-		return nil, err
+		return nil, "", err
 	}
 
 	classification := classifyAddr(config, resolved)
 	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
 
 	if classification.IsAllowed() {
-		return resolved, nil
+		return resolved, classification.String(), nil
 	}
-	return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
+	return nil, "", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
@@ -148,7 +148,7 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		outboundHost = v.decision.outboundHost
 	}
 
-	resolved, err := safeResolve(config, network, addr)
+	resolved, _, err := safeResolve(config, network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 		return nil, denyError{errors.New(decision.reason)}
 	}
 
-	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
+	resolved, decision.reason, err = safeResolve(config, "tcp", ctx.Req.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -577,12 +577,12 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 
 	switch action {
 	case EgressAclDecisionDeny:
-		decision.reason = "Role is not allowed to access this host"
+		decision.reason = reason
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
 	case EgressAclDecisionAllowAndReport:
-		decision.reason = "Role is not allowed to access this host but report_only is true"
+		decision.reason = reason
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
@@ -590,7 +590,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	case EgressAclDecisionAllow:
 		// Well, everything is going as expected.
 		decision.allow = true
-		decision.reason = "Role is allowed to access this host"
+		decision.reason = reason
 		decision.enforceWouldDeny = false
 		config.StatsdClient.Incr("acl.allow", tags, 1)
 	default:
