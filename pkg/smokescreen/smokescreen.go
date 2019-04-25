@@ -571,8 +571,6 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	tags := []string{
 		fmt.Sprintf("role:%s", decision.role),
 		fmt.Sprintf("def_rule:%t", defaultRuleUsed),
-		fmt.Sprintf("project:%s", decision.project),
-		fmt.Sprintf("dest_domain:%s", destination),
 	}
 
 	switch action {
