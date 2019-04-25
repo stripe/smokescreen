@@ -30,7 +30,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	rule := ew.ruleForService(fromService)
 	if rule == nil {
 		action = EgressAclDecisionDeny
-		return action, "", false, nil
+		return action, "no rule matched", false, nil
 	}
 
 	defaultRuleUsed := rule == ew.Default
@@ -38,21 +38,21 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	// if the host matches any of the rule's allowed domains, allow
 	for _, domainGlob := range rule.DomainGlob {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionAllow, "if the host matches any of the rule's allowed domains, allow", defaultRuleUsed, nil
+			return EgressAclDecisionAllow, "host matched allowed domain in rule", defaultRuleUsed, nil
 		}
 	}
 
 	// if the host matches any of the global deny list, deny
 	for _, domainGlob := range ew.GlobalDenyList {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionDeny, "if the host matches any of the global deny list, deny", defaultRuleUsed, nil
+			return EgressAclDecisionDeny, "host matched rule in global deny list", defaultRuleUsed, nil
 		}
 	}
 
 	// if the host matches any of the global allow list, allow
 	for _, domainGlob := range ew.GlobalAllowList {
 		if hostMatchesGlob(toHost, domainGlob) {
-			return EgressAclDecisionAllow, "if the host matches any of the global allow list, allow", defaultRuleUsed, nil
+			return EgressAclDecisionAllow, "host matched rule in global allow list", defaultRuleUsed, nil
 		}
 	}
 
@@ -62,13 +62,13 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclD
 	case ConfigEnforcementPolicyEnforce:
 		action = EgressAclDecisionDeny
 	case ConfigEnforcementPolicyOpen:
-		return EgressAclDecisionAllow, "", defaultRuleUsed, nil
+		return EgressAclDecisionAllow, "rule has open enforcement policy", defaultRuleUsed, nil
 	default:
-		return 0, "", defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
+		return 0, "unexpected policy value", defaultRuleUsed, fmt.Errorf("unexpected policy value for (%s -> %s): %d", fromService, toHost, rule.Policy)
 	}
 
 	// use the decision from rule.Policy
-	return action, "", defaultRuleUsed, nil
+	return action, "default rule used", defaultRuleUsed, nil
 }
 
 func hostMatchesGlob(toHost string, domainGlob string) bool {

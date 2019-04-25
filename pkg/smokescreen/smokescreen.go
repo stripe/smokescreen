@@ -123,7 +123,7 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	}
 }
 
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
+func safeResolve(config *Config, network, addr string) (tcp_address *net.TCPAddr, string, error) {
 	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
@@ -137,7 +137,7 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 	if classification.IsAllowed() {
 		return resolved, classification.String(), nil
 	}
-	return nil, "", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
+	return nil, "destination address was denied by rule, see error", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
