@@ -24,7 +24,7 @@ type EgressAclConfig struct {
 	GlobalAllowList []string
 }
 
-func (ew *EgressAclConfig) Decide(fromService string, toHost string) (EgressAclDecision, string, bool, error) {
+func (ew *EgressAclConfig) Decide(fromService string, toHost string) (decision EgressAclDecision, reason string, isDefaultRule bool, err error) {
 	var action EgressAclDecision
 
 	rule := ew.ruleForService(fromService)
@@ -84,7 +84,7 @@ func hostMatchesGlob(toHost string, domainGlob string) bool {
 	return false
 }
 
-func (ew *EgressAclConfig) Project(fromService string) (string, error) {
+func (ew *EgressAclConfig) Project(fromService string) (project string, err error) {
 	service := ew.ruleForService(fromService)
 	if service == nil {
 		return "", fmt.Errorf("unknown role: '%s'", fromService)
