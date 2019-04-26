@@ -34,7 +34,7 @@ var testCases = map[string]struct {
 		"enforce-dummy-srv",
 		"www.example1.com",
 		EgressAclDecisionDeny,
-		"default rule used",
+		"default rule policy used",
 		"usersec",
 	},
 	"allowed by list when reporting": {
@@ -50,7 +50,7 @@ var testCases = map[string]struct {
 		"report-dummy-srv",
 		"example1.com",
 		EgressAclDecisionAllowAndReport,
-		"default rule used",
+		"default rule policy used",
 		"security",
 	},
 	"allowed when open": {
@@ -66,7 +66,7 @@ var testCases = map[string]struct {
 		"dummy-glob",
 		"shouldbreak.com",
 		EgressAclDecisionDeny,
-		"default rule used",
+		"default rule policy used",
 		"phony",
 	},
 	"deny by glob missing subdomain": {
@@ -74,7 +74,7 @@ var testCases = map[string]struct {
 		"dummy-glob",
 		"example.com",
 		EgressAclDecisionDeny,
-		"default rule used",
+		"default rule policy used",
 		"phony",
 	},
 	"allow by glob": {
@@ -90,7 +90,7 @@ var testCases = map[string]struct {
 		"unknown-service",
 		"nope.example.com",
 		EgressAclDecisionDeny,
-		"default rule used",
+		"default rule policy used",
 		"other",
 	},
 	"allow from default list": {

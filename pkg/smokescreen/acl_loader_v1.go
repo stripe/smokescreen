@@ -68,7 +68,7 @@ func (ew *EgressAclConfig) Decide(fromService string, toHost string) (decision E
 	}
 
 	// use the decision from rule.Policy
-	return action, "default rule used", defaultRuleUsed, nil
+	return action, "default rule policy used", defaultRuleUsed, nil
 }
 
 func hostMatchesGlob(toHost string, domainGlob string) bool {
