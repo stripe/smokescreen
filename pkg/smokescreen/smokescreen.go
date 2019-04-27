@@ -148,7 +148,8 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		outboundHost = v.decision.outboundHost
 	}
 
-	resolved, _, err := safeResolve(config, network, addr)
+	resolved, reason, err := safeResolve(config, network, addr)
+	userdata.(*ctxUserData).decision.reason = reason
 	if err != nil {
 		return nil, err
 	}
