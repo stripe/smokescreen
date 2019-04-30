@@ -34,6 +34,7 @@ type ipType int
 
 type aclDecision struct {
 	reason, role, project, outboundHost string
+	resolvedAddr                        *net.TCPAddr
 	allow                               bool
 	enforceWouldDeny                    bool
 }
@@ -142,15 +143,28 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
 	var role, outboundHost string
+	var resolved *net.TCPAddr
 
 	if v, ok := userdata.(*ctxUserData); ok {
 		role = v.decision.role
 		outboundHost = v.decision.outboundHost
+		resolved = v.decision.resolvedAddr
 	}
 
-	resolved, err := safeResolve(config, network, addr)
+	if resolved == nil || addr != outboundHost || network != "tcp" {
+		var err error
+		resolved, err = safeResolve(config, network, addr)
 	if err != nil {
+			if _, ok := err.(denyError); ok {
+				config.Log.WithFields(
+					logrus.Fields{
+						"address": addr,
+						"error":   err,
+					}).Error("unexpected illegal address in dialer")
+			}
+
 		return nil, err
+	}
 	}
 
 	config.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
@@ -227,12 +241,12 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		ctx.UserData = &ctxUserData{time.Now(), nil}
-		resolved, err := handleConnect(config, ctx)
+		err := handleConnect(config, ctx)
 		if err != nil {
 			ctx.Resp = rejectResponse(ctx.Req, config, err)
 			return goproxy.RejectConnect, ""
 		}
-		return goproxy.OkConnect, resolved.String()
+		return goproxy.OkConnect, host
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -241,6 +255,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 
 		if resp == nil && ctx.Error != nil {
+			logrus.Warnf("rejecting with %#v", ctx.Error)
 			return rejectResponse(ctx.Req, config, ctx.Error)
 		}
 
@@ -334,7 +349,7 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 	logProxy(config, ctx, "http", toAddr, userData.decision, userData.start, ctx.Error)
 }
 
-func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) {
+func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
 	config.Log.WithFields(
 		logrus.Fields{
 			"remote":         ctx.Req.RemoteAddr,
@@ -343,25 +358,14 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) (*net.TCPAddr, error) 
 	start := time.Now()
 
 	// Check if requesting role is allowed to talk to remote
-	var resolved *net.TCPAddr
-	var err error
-	var decision *aclDecision
-	defer func() {
-		logProxy(config, ctx, "connect", resolved, decision, start, err)
-	}()
-
-	decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+	decision := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	ctx.UserData.(*ctxUserData).decision = decision
+	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, start, nil)
 	if !decision.allow {
-		return nil, denyError{errors.New(decision.reason)}
+		return denyError{errors.New(decision.reason)}
 	}
 
-	resolved, err = safeResolve(config, "tcp", ctx.Req.Host)
-	if err != nil {
-		return nil, err
-	}
-
-	return resolved, nil
+	return nil
 }
 
 func findListener(ip string, defaultPort uint16) (net.Listener, error) {
@@ -488,7 +492,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		}()
 
 		// Wait for the exit signal.
-		<- exit
+		<-exit
 	}
 
 	// Close all open (and idle) connections to send their metrics to log.
@@ -601,5 +605,17 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		decision.reason = "Internal error"
 		config.StatsdClient.Incr("acl.unknown_error", tags, 1)
 	}
+
+	if decision.allow {
+		resolved, err := safeResolve(config, "tcp", outboundHost)
+		if err != nil {
+			decision.reason = fmt.Sprintf("%s. %s", err.Error(), decision.reason)
+			decision.allow = false
+			decision.enforceWouldDeny = true
+		} else {
+			decision.resolvedAddr = resolved
+		}
+	}
+
 	return decision
 }

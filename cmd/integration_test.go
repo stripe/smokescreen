@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"testing"
 
@@ -55,14 +56,15 @@ func testRFRCert(req *http.Request) (string, error) {
 }
 
 type TestCase struct {
-	ExpectAllow bool
-	OverTls     bool
-	OverConnect bool
-	ProxyURL    string
-	TargetPort  int
-	RandomTrace int
-	Host        string
-	RoleName    string
+	ExpectAllow   bool
+	OverTls       bool
+	OverConnect   bool
+	ProxyURL      string
+	TargetPort    int
+	RandomTrace   int
+	Host          string
+	RoleName      string
+	UpstreamProxy string
 }
 
 func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
@@ -114,6 +116,27 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 		a.Contains(entry.Data, "requested_host")
 		a.Equal(fmt.Sprintf("%s:%d", test.Host, test.TargetPort), entry.Data["requested_host"])
 	}
+}
+
+func conformIllegalProxyResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+	r := require.New(t)
+	a := assert.New(t)
+	t.Logf("HTTP Response: %#v", resp)
+
+	r.NoError(err)
+
+	var expectStatus int
+	if test.OverConnect {
+		expectStatus = 502
+	} else {
+		expectStatus = 503
+
+	}
+	a.Equal(expectStatus, resp.StatusCode)
+
+	entry := findLogEntry(logs, "unexpected illegal address in dialer")
+	r.NotNil(entry)
+	a.Equal("127.0.0.2:80", entry.Data["address"])
 }
 
 func generateRoleForAction(action smokescreen.ConfigEnforcementPolicy) string {
@@ -236,15 +259,17 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 	return req
 }
 
-func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hook) {
+func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hook) (*http.Response, error) {
 	t.Logf("Executing Request for test case %#v", test)
 
 	logHook.Reset()
 	client := generateClientForTest(t, test)
 	req := generateRequestForTest(t, test)
 
-	resp, err := client.Do(req)
-	conformResult(t, test, resp, err, logHook.AllEntries())
+	os.Setenv("http_proxy", test.UpstreamProxy)
+	os.Setenv("https_proxy", test.UpstreamProxy)
+
+	return client.Do(req)
 }
 
 func TestSmokescreenIntegration(t *testing.T) {
@@ -252,7 +277,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	dummyServer := NewDummyServer()
 	outsideListener, err := net.Listen("tcp4", "127.0.0.1:")
-	outsideListenerUrl, err := url.Parse(fmt.Sprintf("//%s", outsideListener.Addr().String()))
+	outsideListenerUrl, err := url.Parse(fmt.Sprintf("http://%s", outsideListener.Addr().String()))
 	r.NoError(err)
 	outsideListenerPort, err := strconv.Atoi(outsideListenerUrl.Port())
 	r.NoError(err)
@@ -345,19 +370,57 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPAddressCase.ExpectAllow = false
 		badIPAddressCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
 
+		proxyCase := baseCase
+		// We expect this URL to always return a non-200 status code so that
+		// this test will fail if we're not respecting the UpstreamProxy setting
+		// and instead going straight to this host.
+		proxyCase.Host = "aws.s3.amazonaws.com"
+		proxyCase.UpstreamProxy = outsideListenerUrl.String()
+		proxyCase.ExpectAllow = true
+		proxyCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+
 		testCases = append(testCases,
 			&unknownRoleAllowCase, &unknownRoleDenyCase,
 			&noRoleAllowCase, &noRoleDenyCase,
 			&badIPRangeCase, &badIPAddressCase,
+			&proxyCase,
 		)
 	}
 
 	for _, testCase := range testCases {
 		t.Run("", func(t *testing.T) {
 			testCase.RandomTrace = rand.Int()
-			executeRequestForTest(t, testCase, &logHook)
+			resp, err := executeRequestForTest(t, testCase, &logHook)
+			conformResult(t, testCase, resp, err, logHook.AllEntries())
 		})
 	}
+
+	// Passing an illegal upstream proxy value is not designed to be an especially well
+	// handled error so it would fail many of the checks in our other tests. We really
+	// only care to ensure that these requests never succeed.
+	for _, overConnect := range overConnectDomain {
+		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
+			testCase := &TestCase{
+				OverConnect:   overConnect,
+				ProxyURL:      servers[false].URL,
+				TargetPort:    outsideListenerPort,
+				Host:          "google.com",
+				UpstreamProxy: "http://127.0.0.2:80",
+				RoleName:      generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen),
+			}
+			resp, err := executeRequestForTest(t, testCase, &logHook)
+			conformIllegalProxyResult(t, testCase, resp, err, logHook.AllEntries())
+		})
+	}
+}
+
+func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
+	for _, entry := range entries {
+		if entry.Message == msg {
+			return entry
+		}
+	}
+	return nil
 }
 
 func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest.Server, error) {
