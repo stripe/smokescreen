@@ -154,7 +154,7 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 	if resolved == nil || addr != outboundHost || network != "tcp" {
 		var err error
 		resolved, err = safeResolve(config, network, addr)
-	if err != nil {
+		if err != nil {
 			if _, ok := err.(denyError); ok {
 				config.Log.WithFields(
 					logrus.Fields{
@@ -163,8 +163,8 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 					}).Error("unexpected illegal address in dialer")
 			}
 
-		return nil, err
-	}
+			return nil, err
+		}
 	}
 
 	config.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
@@ -221,14 +221,18 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		userData := ctxUserData{time.Now(), nil}
 		ctx.UserData = &userData
 
+		if strings.LastIndex(req.Host, ":") <= strings.LastIndex(req.Host, "]") {
+			req.Host = net.JoinHostPort(req.Host, "80")
+		}
+
 		config.Log.WithFields(
 			logrus.Fields{
-				"source_ip":      ctx.Req.RemoteAddr,
-				"requested_host": ctx.Req.Host,
-				"url":            ctx.Req.RequestURI,
+				"source_ip":      req.RemoteAddr,
+				"requested_host": req.Host,
+				"url":            req.RequestURI,
 			}).Debug("received HTTP proxy request")
 
-		userData.decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		userData.decision = checkIfRequestShouldBeProxied(config, req, req.Host)
 		req.Header.Del(roleHeader)
 		if !userData.decision.allow {
 			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
@@ -537,6 +541,23 @@ func getRole(config *Config, req *http.Request) (string, error) {
 }
 
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) *aclDecision {
+	decision := checkACLsForRequest(config, req, outboundHost)
+
+	if decision.allow {
+		resolved, err := safeResolve(config, "tcp", outboundHost)
+		if err != nil {
+			decision.reason = fmt.Sprintf("%s. %s", err.Error(), decision.reason)
+			decision.allow = false
+			decision.enforceWouldDeny = true
+		} else {
+			decision.resolvedAddr = resolved
+		}
+	}
+
+	return decision
+}
+
+func checkACLsForRequest(config *Config, req *http.Request, outboundHost string) *aclDecision {
 	decision := &aclDecision{
 		outboundHost: outboundHost,
 	}
@@ -604,17 +625,6 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
 		config.StatsdClient.Incr("acl.unknown_error", tags, 1)
-	}
-
-	if decision.allow {
-		resolved, err := safeResolve(config, "tcp", outboundHost)
-		if err != nil {
-			decision.reason = fmt.Sprintf("%s. %s", err.Error(), decision.reason)
-			decision.allow = false
-			decision.enforceWouldDeny = true
-		} else {
-			decision.resolvedAddr = resolved
-		}
 	}
 
 	return decision
