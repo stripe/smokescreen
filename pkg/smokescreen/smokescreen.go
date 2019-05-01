@@ -221,6 +221,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		userData := ctxUserData{time.Now(), nil}
 		ctx.UserData = &userData
 
+		if strings.LastIndex(req.Host, ":") <= strings.LastIndex(req.Host, "]") {
+			req.Host = net.JoinHostPort(req.Host, "80")
+		}
+
 		config.Log.WithFields(
 			logrus.Fields{
 				"source_ip":      req.RemoteAddr,
