@@ -223,12 +223,12 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		config.Log.WithFields(
 			logrus.Fields{
-				"source_ip":      ctx.Req.RemoteAddr,
-				"requested_host": ctx.Req.Host,
-				"url":            ctx.Req.RequestURI,
+				"source_ip":      req.RemoteAddr,
+				"requested_host": req.Host,
+				"url":            req.RequestURI,
 			}).Debug("received HTTP proxy request")
 
-		userData.decision = checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+		userData.decision = checkIfRequestShouldBeProxied(config, req, req.Host)
 		req.Header.Del(roleHeader)
 		if !userData.decision.allow {
 			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
