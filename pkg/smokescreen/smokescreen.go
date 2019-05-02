@@ -293,8 +293,6 @@ func logProxy(
 
 	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 
-	allow := false
-
 	fields := logrus.Fields{
 		"proxy_type":     proxyType,
 		"src_host":       fromHost,
@@ -328,7 +326,7 @@ func logProxy(
 		fields["allow"] = decision.allow
 	}
 
-	if err != nil && allow == false {
+	if err != nil {
 		fields["error"] = err.Error()
 	}
 
@@ -336,7 +334,7 @@ func logProxy(
 	var logMethod func(...interface{})
 	if _, ok := err.(denyError); !ok && err != nil {
 		logMethod = entry.Error
-	} else if allow {
+	} else if decision != nil && decision.allow {
 		logMethod = entry.Info
 	} else {
 		logMethod = entry.Warn
