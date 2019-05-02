@@ -142,7 +142,7 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 }
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
-	var role, outboundHost string
+	var role, outboundHost, reason string
 	var resolved *net.TCPAddr
 
 	if v, ok := userdata.(*ctxUserData); ok {
@@ -545,9 +545,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	decision := checkACLsForRequest(config, req, outboundHost)
 
 	if decision.allow {
-		resolved, err := safeResolve(config, "tcp", outboundHost)
+		resolved, reason, err := safeResolve(config, "tcp", outboundHost)
 		if err != nil {
-			decision.reason = fmt.Sprintf("%s. %s", err.Error(), decision.reason)
+			decision.reason = fmt.Sprintf("%s. %s", err.Error(), reason)
 			decision.allow = false
 			decision.enforceWouldDeny = true
 		} else {
