@@ -2,10 +2,11 @@
 
 package smokescreen
 
-import "github.com/stretchr/testify/assert"
 import (
 	"path"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -17,6 +18,7 @@ var dummyConf = &Config{
 var testCases = map[string]struct {
 	yamlFile, service, host string
 	expectDecision          EgressAclDecision
+	expectDecisionReason    string
 	expectProject           string
 }{
 	"allowed by list when enforcing": {
@@ -24,6 +26,7 @@ var testCases = map[string]struct {
 		"enforce-dummy-srv",
 		"example1.com",
 		EgressAclDecisionAllow,
+		"host matched allowed domain in rule",
 		"usersec",
 	},
 	"disallowed when enforcing": {
@@ -31,6 +34,7 @@ var testCases = map[string]struct {
 		"enforce-dummy-srv",
 		"www.example1.com",
 		EgressAclDecisionDeny,
+		"default rule policy used",
 		"usersec",
 	},
 	"allowed by list when reporting": {
@@ -38,6 +42,7 @@ var testCases = map[string]struct {
 		"report-dummy-srv",
 		"example3.com",
 		EgressAclDecisionAllow,
+		"host matched allowed domain in rule",
 		"security",
 	},
 	"reported when reporting": {
@@ -45,6 +50,7 @@ var testCases = map[string]struct {
 		"report-dummy-srv",
 		"example1.com",
 		EgressAclDecisionAllowAndReport,
+		"default rule policy used",
 		"security",
 	},
 	"allowed when open": {
@@ -52,6 +58,7 @@ var testCases = map[string]struct {
 		"open-dummy-srv",
 		"anythingisgoodreally.com",
 		EgressAclDecisionAllow,
+		"rule has open enforcement policy",
 		"automation",
 	},
 	"deny by glob": {
@@ -59,6 +66,7 @@ var testCases = map[string]struct {
 		"dummy-glob",
 		"shouldbreak.com",
 		EgressAclDecisionDeny,
+		"default rule policy used",
 		"phony",
 	},
 	"deny by glob missing subdomain": {
@@ -66,6 +74,7 @@ var testCases = map[string]struct {
 		"dummy-glob",
 		"example.com",
 		EgressAclDecisionDeny,
+		"default rule policy used",
 		"phony",
 	},
 	"allow by glob": {
@@ -73,6 +82,7 @@ var testCases = map[string]struct {
 		"dummy-glob",
 		"api.example.com",
 		EgressAclDecisionAllow,
+		"host matched allowed domain in rule",
 		"phony",
 	},
 	"deny from default": {
@@ -80,6 +90,7 @@ var testCases = map[string]struct {
 		"unknown-service",
 		"nope.example.com",
 		EgressAclDecisionDeny,
+		"default rule policy used",
 		"other",
 	},
 	"allow from default list": {
@@ -87,6 +98,7 @@ var testCases = map[string]struct {
 		"unknown-service",
 		"default.example.com",
 		EgressAclDecisionAllow,
+		"host matched allowed domain in rule",
 		"other",
 	},
 	"allow from global allowlist enforce service": {
@@ -94,6 +106,7 @@ var testCases = map[string]struct {
 		"enforce-dummy-srv",
 		"goodexample1.com",
 		EgressAclDecisionAllow,
+		"host matched rule in global allow list",
 		"usersec",
 	},
 	"allow from global allowlist unknown service": {
@@ -101,6 +114,7 @@ var testCases = map[string]struct {
 		"unknown-service",
 		"goodexample2.com",
 		EgressAclDecisionAllow,
+		"host matched rule in global allow list",
 		"other",
 	},
 	"allow despite global denylist with allowed domains override": {
@@ -108,6 +122,7 @@ var testCases = map[string]struct {
 		"enforce-dummy-srv",
 		"badexample1.com",
 		EgressAclDecisionAllow,
+		"host matched allowed domain in rule",
 		"usersec",
 	},
 	"deny from global denylist report service": {
@@ -115,6 +130,7 @@ var testCases = map[string]struct {
 		"report-dummy-srv",
 		"badexample1.com",
 		EgressAclDecisionDeny,
+		"host matched rule in global deny list",
 		"security",
 	},
 	"deny from global denylist unknown service": {
@@ -122,6 +138,7 @@ var testCases = map[string]struct {
 		"unknown-service",
 		"badexample2.com",
 		EgressAclDecisionDeny,
+		"host matched rule in global deny list",
 		"other",
 	},
 	"deny from global denylist open service": {
@@ -129,6 +146,7 @@ var testCases = map[string]struct {
 		"open-dummy-srv",
 		"badexample2.com",
 		EgressAclDecisionDeny,
+		"host matched rule in global deny list",
 		"automation",
 	},
 	"deny from conflicting lists open service": {
@@ -136,6 +154,7 @@ var testCases = map[string]struct {
 		"open-dummy-srv",
 		"conflictingexample.com",
 		EgressAclDecisionDeny,
+		"host matched rule in global deny list",
 		"automation",
 	},
 }
@@ -153,9 +172,10 @@ func TestServiceDecideAndProject(t *testing.T) {
 			a.NoError(err)
 			a.Equal(testCase.expectProject, proj)
 
-			decision, _, err := acl.Decide(testCase.service, testCase.host)
+			decision, reason, _, err := acl.Decide(testCase.service, testCase.host)
 			a.NoError(err)
 			a.Equal(testCase.expectDecision, decision)
+			a.Equal(testCase.expectDecisionReason, reason)
 		})
 	}
 }
@@ -171,7 +191,7 @@ func TestUnknownServiceWithoutDefault(t *testing.T) {
 	a.Equal("unknown role: 'unk'", err.Error())
 	a.Empty(proj)
 
-	decision, usedDefaultRule, err := acl.Decide("unk", "example.com")
+	decision, _, usedDefaultRule, err := acl.Decide("unk", "example.com")
 	a.Equal(EgressAclDecisionDeny, decision)
 	a.False(usedDefaultRule)
 	a.Nil(err)
@@ -190,7 +210,7 @@ func TestLoadFromYaml(t *testing.T) {
 		a.Equal(0, len(acl.GlobalAllowList))
 	}
 
-    // Load a sane config with global lists
+	// Load a sane config with global lists
 	{
 		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config_with_global.yaml")
 		a.Nil(err)

@@ -124,25 +124,25 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	}
 }
 
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, error) {
+func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
 	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
 		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
-		return nil, err
+		return nil, "", err
 	}
 
 	classification := classifyAddr(config, resolved)
 	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
 
 	if classification.IsAllowed() {
-		return resolved, nil
+		return resolved, classification.String(), nil
 	}
-	return nil, denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
+	return nil, "destination address was denied by rule, see error", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
-	var role, outboundHost string
+	var role, outboundHost, reason string
 	var resolved *net.TCPAddr
 
 	if v, ok := userdata.(*ctxUserData); ok {
@@ -153,7 +153,8 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 
 	if resolved == nil || addr != outboundHost || network != "tcp" {
 		var err error
-		resolved, err = safeResolve(config, network, addr)
+		resolved, reason, err = safeResolve(config, network, addr)
+		userdata.(*ctxUserData).decision.reason = reason
 		if err != nil {
 			if _, ok := err.(denyError); ok {
 				config.Log.WithFields(
@@ -544,9 +545,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	decision := checkACLsForRequest(config, req, outboundHost)
 
 	if decision.allow {
-		resolved, err := safeResolve(config, "tcp", outboundHost)
+		resolved, reason, err := safeResolve(config, "tcp", outboundHost)
 		if err != nil {
-			decision.reason = fmt.Sprintf("%s. %s", err.Error(), decision.reason)
+			decision.reason = fmt.Sprintf("%s. %s", err.Error(), reason)
 			decision.allow = false
 			decision.enforceWouldDeny = true
 		} else {
@@ -581,7 +582,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
 
-	action, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
+	action, reason, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -589,7 +590,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
-		decision.reason = "acl.decide error"
+		decision.reason = reason
 		return decision
 	}
 
@@ -601,12 +602,12 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 
 	switch action {
 	case EgressAclDecisionDeny:
-		decision.reason = "Role is not allowed to access this host"
+		decision.reason = reason
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
 	case EgressAclDecisionAllowAndReport:
-		decision.reason = "Role is not allowed to access this host but report_only is true"
+		decision.reason = reason
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
@@ -614,7 +615,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	case EgressAclDecisionAllow:
 		// Well, everything is going as expected.
 		decision.allow = true
-		decision.reason = "Role is allowed to access this host"
+		decision.reason = reason
 		decision.enforceWouldDeny = false
 		config.StatsdClient.Incr("acl.allow", tags, 1)
 	default:
