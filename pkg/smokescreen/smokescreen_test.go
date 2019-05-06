@@ -3,6 +3,7 @@
 package smokescreen
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -11,7 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var allowRanges = []string{
@@ -97,33 +101,22 @@ func TestClassifyAddr(t *testing.T) {
 }
 
 func TestClearsErrorHeader(t *testing.T) {
-	a := assert.New(t)
+	r := require.New(t)
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	conf := NewConfig()
-	conf.Port = 39381
-	a.NoError(conf.SetAllowRanges(allowRanges))
-	conf.ConnectTimeout = 10 * time.Second
-	conf.ExitTimeout = 10 * time.Second
-	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
-
-	proxy := BuildProxy(conf)
-	proxySrv := httptest.NewServer(proxy)
+	proxySrv, _, err := proxyServer()
+	r.NoError(err)
 	defer proxySrv.Close()
 
 	// Create a http.Client that uses our proxy
 	client, err := proxyClient(proxySrv.URL)
-	if err != nil {
-		t.Fatalf("could not build proxy client: %s", err)
-	}
+	r.NoError(err)
 
 	// Talk "through" the proxy to our malicious upstream that sets the
 	// error header.
 	resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
-	if err != nil {
-		t.Fatalf("could not make request through proxy: %s", err)
-	}
+	r.NoError(err)
 
 	// Should succeed
 	if resp.StatusCode != 200 {
@@ -141,6 +134,79 @@ func TestClearsErrorHeader(t *testing.T) {
 	}
 }
 
+var invalidHostCases = []struct {
+	scheme    string
+	expectErr bool
+	proxyType string
+}{
+	{"http", false, "http"},
+	{"https", true, "connect"},
+}
+
+func TestInvalidHost(t *testing.T) {
+	for _, testCase := range invalidHostCases {
+		t.Run(testCase.scheme, func(t *testing.T) {
+			a := assert.New(t)
+			r := require.New(t)
+
+			proxySrv, logHook, err := proxyServer()
+			require.NoError(t, err)
+			defer proxySrv.Close()
+
+			// Create a http.Client that uses our proxy
+			client, err := proxyClient(proxySrv.URL)
+			r.NoError(err)
+
+			resp, err := client.Get(fmt.Sprintf("%s://neversaynever.stripe.com", testCase.scheme))
+			if testCase.expectErr {
+				r.EqualError(err, "Get https://neversaynever.stripe.com: Service Unavailable")
+			} else {
+				r.NoError(err)
+				r.Equal(http.StatusServiceUnavailable, resp.StatusCode)
+			}
+
+			entry := findCanonicalProxyDecision(logHook.AllEntries())
+			r.NotNil(entry)
+
+			if a.Contains(entry.Data, "allow") {
+				a.Equal(true, entry.Data["allow"])
+			}
+			if a.Contains(entry.Data, "error") {
+				a.Contains(entry.Data["error"], "no such host")
+			}
+			if a.Contains(entry.Data, "proxy_type") {
+				a.Contains(entry.Data["proxy_type"], testCase.proxyType)
+			}
+		})
+	}
+}
+
+func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
+	for _, entry := range logs {
+		if entry.Message == LOGLINE_CANONICAL_PROXY_DECISION {
+			return entry
+		}
+	}
+	return nil
+}
+
+func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
+	var logHook logrustest.Hook
+
+	conf := NewConfig()
+	conf.Port = 39381
+	if err := conf.SetAllowRanges(allowRanges); err != nil {
+		return nil, nil, err
+	}
+	conf.ConnectTimeout = 10 * time.Second
+	conf.ExitTimeout = 10 * time.Second
+	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+	conf.Log.AddHook(&logHook)
+
+	proxy := BuildProxy(conf)
+	return httptest.NewServer(proxy), &logHook, nil
+}
+
 func proxyClient(proxy string) (*http.Client, error) {
 	proxyUrl, err := url.Parse(proxy)
 	if err != nil {
@@ -149,12 +215,7 @@ func proxyClient(proxy string) (*http.Client, error) {
 
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyUrl),
-			Dial: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).Dial,
+			Proxy:                 http.ProxyURL(proxyUrl),
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},

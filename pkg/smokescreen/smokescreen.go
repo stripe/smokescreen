@@ -233,8 +233,13 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				"url":            req.RequestURI,
 			}).Debug("received HTTP proxy request")
 
-		userData.decision = checkIfRequestShouldBeProxied(config, req, req.Host)
+		decision, err := checkIfRequestShouldBeProxied(config, req, req.Host)
+		userData.decision = decision
 		req.Header.Del(roleHeader)
+		if err != nil {
+			ctx.Error = err
+			return req, rejectResponse(req, config, err)
+		}
 		if !userData.decision.allow {
 			return req, rejectResponse(req, config, denyError{errors.New(userData.decision.reason)})
 		}
@@ -288,8 +293,6 @@ func logProxy(
 
 	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 
-	allow := err == nil
-
 	fields := logrus.Fields{
 		"proxy_type":     proxyType,
 		"src_host":       fromHost,
@@ -320,14 +323,10 @@ func logProxy(
 		fields["project"] = decision.project
 		fields["decision_reason"] = decision.reason
 		fields["enforce_would_deny"] = decision.enforceWouldDeny
-
-		if !decision.allow {
-			allow = false
-		}
+		fields["allow"] = decision.allow
 	}
-	fields["allow"] = allow
 
-	if err != nil && allow == false {
+	if err != nil {
 		fields["error"] = err.Error()
 	}
 
@@ -335,7 +334,7 @@ func logProxy(
 	var logMethod func(...interface{})
 	if _, ok := err.(denyError); !ok && err != nil {
 		logMethod = entry.Error
-	} else if allow {
+	} else if decision != nil && decision.allow {
 		logMethod = entry.Info
 	} else {
 		logMethod = entry.Warn
@@ -363,9 +362,12 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
 	start := time.Now()
 
 	// Check if requesting role is allowed to talk to remote
-	decision := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
+	decision, err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	ctx.UserData.(*ctxUserData).decision = decision
-	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, start, nil)
+	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, start, err)
+	if err != nil {
+		return err
+	}
 	if !decision.allow {
 		return denyError{errors.New(decision.reason)}
 	}
@@ -541,12 +543,15 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) *aclDecision {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, error) {
 	decision := checkACLsForRequest(config, req, outboundHost)
 
 	if decision.allow {
 		resolved, reason, err := safeResolve(config, "tcp", outboundHost)
 		if err != nil {
+			if _, ok := err.(denyError); !ok {
+				return decision, err
+			}
 			decision.reason = fmt.Sprintf("%s. %s", err.Error(), reason)
 			decision.allow = false
 			decision.enforceWouldDeny = true
@@ -555,7 +560,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}
 	}
 
-	return decision
+	return decision, nil
 }
 
 func checkACLsForRequest(config *Config, req *http.Request, outboundHost string) *aclDecision {
