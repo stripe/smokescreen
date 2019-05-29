@@ -159,7 +159,7 @@ func TestInvalidHost(t *testing.T) {
 
 			resp, err := client.Get(fmt.Sprintf("%s://neversaynever.stripe.com", testCase.scheme))
 			if testCase.expectErr {
-				r.EqualError(err, "Get https://neversaynever.stripe.com: Service Unavailable")
+				r.EqualError(err, "Get https://neversaynever.stripe.com: Request Rejected by Proxy")
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusServiceUnavailable, resp.StatusCode)
