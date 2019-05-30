@@ -200,6 +200,7 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 		goproxy.ContentTypeText,
 		http.StatusServiceUnavailable,
 		msg+"\n")
+	resp.Status = "Request Rejected by Proxy" // change the default status message
 	resp.ProtoMajor = req.ProtoMajor
 	resp.ProtoMinor = req.ProtoMinor
 	resp.Header.Set(errorHeader, msg)
