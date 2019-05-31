@@ -198,7 +198,7 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 
 	resp := goproxy.NewResponse(req,
 		goproxy.ContentTypeText,
-		http.StatusServiceUnavailable,
+		http.StatusProxyAuthRequired,
 		msg+"\n")
 	resp.Status = "Request Rejected by Proxy" // change the default status message
 	resp.ProtoMajor = req.ProtoMajor

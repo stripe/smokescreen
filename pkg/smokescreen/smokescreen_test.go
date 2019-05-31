@@ -162,7 +162,7 @@ func TestInvalidHost(t *testing.T) {
 				r.EqualError(err, "Get https://neversaynever.stripe.com: Request Rejected by Proxy")
 			} else {
 				r.NoError(err)
-				r.Equal(http.StatusServiceUnavailable, resp.StatusCode)
+				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
