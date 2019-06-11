@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/armon/go-proxyproto"
+	proxyproto "github.com/armon/go-proxyproto"
 	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
@@ -223,8 +223,17 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		userData := ctxUserData{time.Now(), nil}
 		ctx.UserData = &userData
 
-		if strings.LastIndex(req.Host, ":") <= strings.LastIndex(req.Host, "]") {
-			req.Host = net.JoinHostPort(req.Host, "80")
+		// Build an address parsable by net.ResolveTCPAddr
+		remoteAddr := req.Host
+		if strings.LastIndex(remoteAddr, ":") <= strings.LastIndex(remoteAddr, "]") {
+			switch req.URL.Scheme {
+			case "http":
+				remoteAddr = net.JoinHostPort(remoteAddr, "80")
+			case "https":
+				remoteAddr = net.JoinHostPort(remoteAddr, "443")
+			default:
+				remoteAddr = net.JoinHostPort(remoteAddr, "0")
+			}
 		}
 
 		config.Log.WithFields(
@@ -234,7 +243,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				"url":            req.RequestURI,
 			}).Debug("received HTTP proxy request")
 
-		decision, err := checkIfRequestShouldBeProxied(config, req, req.Host)
+		decision, err := checkIfRequestShouldBeProxied(config, req, remoteAddr)
 		userData.decision = decision
 		req.Header.Del(roleHeader)
 		if err != nil {
