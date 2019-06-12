@@ -134,6 +134,43 @@ func TestClearsErrorHeader(t *testing.T) {
 	}
 }
 
+func TestConsistentHostHeader(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	hostCh := make(chan string)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+		hostCh <- r.Host
+	}))
+	defer ts.Close()
+
+	// Custom proxy config for the "remote" httptest.NewServer
+	conf := NewConfig()
+	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
+	r.NoError(err)
+
+	proxy := BuildProxy(conf)
+	proxySrv := httptest.NewServer(proxy)
+
+	client, err := proxyClient(proxySrv.URL)
+	r.NoError(err)
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	r.NoError(err)
+
+	expectedHostHeader := req.Host
+	go client.Do(req)
+
+	select {
+	case receivedHostHeader := <-hostCh:
+		a.Equal(expectedHostHeader, receivedHostHeader)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for client request")
+	}
+}
+
 var invalidHostCases = []struct {
 	scheme    string
 	expectErr bool
