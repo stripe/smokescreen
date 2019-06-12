@@ -224,15 +224,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		ctx.UserData = &userData
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteAddr := req.Host
-		if strings.LastIndex(remoteAddr, ":") <= strings.LastIndex(remoteAddr, "]") {
+		remoteHost := req.Host
+		if strings.LastIndex(remoteHost, ":") <= strings.LastIndex(remoteHost, "]") {
 			switch req.URL.Scheme {
 			case "http":
-				remoteAddr = net.JoinHostPort(remoteAddr, "80")
+				remoteHost = net.JoinHostPort(remoteHost, "80")
 			case "https":
-				remoteAddr = net.JoinHostPort(remoteAddr, "443")
+				remoteHost = net.JoinHostPort(remoteHost, "443")
 			default:
-				remoteAddr = net.JoinHostPort(remoteAddr, "0")
+				remoteHost = net.JoinHostPort(remoteHost, "0")
 			}
 		}
 
@@ -243,7 +243,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				"url":            req.RequestURI,
 			}).Debug("received HTTP proxy request")
 
-		decision, err := checkIfRequestShouldBeProxied(config, req, remoteAddr)
+		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
 		userData.decision = decision
 		req.Header.Del(roleHeader)
 		if err != nil {
