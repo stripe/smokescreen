@@ -171,6 +171,38 @@ func TestConsistentHostHeader(t *testing.T) {
 	}
 }
 
+func TestHealthcheck(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	healthcheckCh := make(chan string)
+
+	testHealthcheck := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+		healthcheckCh <- "OK"
+	})
+
+	conf := NewConfig()
+	conf.Healthcheck = testHealthcheck
+	conf.Port = 39381
+
+	quit := make(chan interface{})
+	go StartWithConfig(conf, quit)
+
+	go func() {
+		select {
+		case healthy := <-healthcheckCh:
+			a.Equal("OK", healthy)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for client request")
+		}
+	}()
+
+	resp, err := http.Get("http://localhost:39381/healthcheck")
+	r.NoError(err)
+	a.Equal(http.StatusOK, resp.StatusCode)
+}
+
 var invalidHostCases = []struct {
 	scheme    string
 	expectErr bool
