@@ -171,6 +171,29 @@ func TestConsistentHostHeader(t *testing.T) {
 	}
 }
 
+func TestIsShuttingDownValue(t *testing.T) {
+	a := assert.New(t)
+
+	conf := NewConfig()
+	conf.Port = 39381
+
+	quit := make(chan interface{})
+	go StartWithConfig(conf, quit)
+
+	// These sleeps are not ideal, but there is a race with checking the
+	// IsShuttingDown value from these tests. The server has to bootstrap
+	// itself with an initial value before it returns false, and has to
+	// set the value to true after we send on the quit channel.
+	time.Sleep(500 * time.Millisecond)
+	a.Equal(false, conf.IsShuttingDown.Load())
+
+	quit <- true
+
+	time.Sleep(500 * time.Millisecond)
+	a.Equal(true, conf.IsShuttingDown.Load())
+
+}
+
 func TestHealthcheck(t *testing.T) {
 	r := require.New(t)
 	a := assert.New(t)
