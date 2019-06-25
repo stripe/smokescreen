@@ -212,6 +212,9 @@ func TestHealthcheck(t *testing.T) {
 	quit := make(chan interface{})
 	go StartWithConfig(conf, quit)
 
+	// Give the server time to start
+	time.Sleep(500 * time.Millisecond)
+
 	go func() {
 		select {
 		case healthy := <-healthcheckCh:
