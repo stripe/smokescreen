@@ -206,14 +206,17 @@ func TestHealthcheck(t *testing.T) {
 	})
 
 	conf := NewConfig()
-	conf.Healthcheck = testHealthcheck
-	conf.Port = 39381
 
-	quit := make(chan interface{})
-	go StartWithConfig(conf, quit)
+	// We set this here so that we can deterministically test the Healthcheck
+	// handler. Otherwise we would have to call StartWithConfig() in a goroutine,
+	// which creates a race between the test and the listener accepting
+	// connections.
+	handler := HealthcheckMiddleware{
+		Proxy:       BuildProxy(conf),
+		Healthcheck: testHealthcheck,
+	}
 
-	// Give the server time to start
-	time.Sleep(500 * time.Millisecond)
+	server := httptest.NewServer(handler)
 
 	go func() {
 		select {
@@ -224,7 +227,7 @@ func TestHealthcheck(t *testing.T) {
 		}
 	}()
 
-	resp, err := http.Get("http://localhost:39381/healthcheck")
+	resp, err := http.Get(fmt.Sprintf("%s/healthcheck", server.URL))
 	r.NoError(err)
 	a.Equal(http.StatusOK, resp.StatusCode)
 }
