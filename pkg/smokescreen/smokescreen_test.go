@@ -212,9 +212,6 @@ func TestHealthcheck(t *testing.T) {
 	quit := make(chan interface{})
 	go StartWithConfig(conf, quit)
 
-	// Give the server time to start
-	time.Sleep(500 * time.Millisecond)
-
 	go func() {
 		select {
 		case healthy := <-healthcheckCh:
@@ -224,7 +221,15 @@ func TestHealthcheck(t *testing.T) {
 		}
 	}()
 
-	resp, err := http.Get("http://localhost:39381/healthcheck")
+	tr := http.Transport{
+		Dial: dialerTimeout,
+	}
+
+	client := http.Client{
+		Transport: &tr,
+	}
+
+	resp, err := client.Get("http://localhost:39381/healthcheck")
 	r.NoError(err)
 	a.Equal(http.StatusOK, resp.StatusCode)
 }
@@ -315,4 +320,9 @@ func proxyClient(proxy string) (*http.Client, error) {
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}, nil
+}
+
+func dialerTimeout(network, addr string) (net.Conn, error) {
+	to := time.Duration(5 * time.Second)
+	return net.DialTimeout(network, addr, to)
 }
