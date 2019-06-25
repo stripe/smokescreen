@@ -38,6 +38,12 @@ below:
 
 Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to avoid problems with keepalive connections present under newer versions of the upstream project.
 
+Smokescreen is built and tested using the following Go releases:
+
+- go1.10
+- go1.11
+- go1.12
+
 [dep]: https://github.com/golang/dep
 
 
