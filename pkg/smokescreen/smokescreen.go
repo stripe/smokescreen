@@ -412,16 +412,15 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	var handler http.Handler = proxy
-	if config.MaintenanceFile != "" {
+
+	if config.Healthcheck != nil {
 		handler = &HealthcheckMiddleware{
-			App:             handler,
-			MaintenanceFile: config.MaintenanceFile,
-			StatsdClient:    config.StatsdClient,
+			Proxy:       handler,
+			Healthcheck: config.Healthcheck,
 		}
 	}
 
 	// TLS support
-
 	if config.TlsConfig != nil {
 		listener = tls.NewListener(listener, config.TlsConfig)
 	}
@@ -430,6 +429,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		Handler: handler,
 	}
 
+	config.IsShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 	return
 }
@@ -470,6 +470,8 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 		config.Log.Fatal(err)
 	}
+
+	config.IsShuttingDown.Store(true)
 
 	if graceful {
 		// Wait for all connections to close or become idle before

@@ -58,8 +58,6 @@ Here are the options you can give Smokescreen:
    --listen-port PORT                         listen on port PORT.
                                                 This argument is ignored when running under Einhorn. (default: 4750)
    --timeout DURATION                         Time out after DURATION when connecting. (default: 10s)
-   --maintenance-file FILE                    Watch FILE for maintenance mode.
-                                                HTTP(S) requests to /healthcheck return 404 if the file's permissions are set to 000.
    --proxy-protocol                           Enable PROXY protocol support.
    --deny-range RANGE                         Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
    --allow-range RANGE                        Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.

@@ -26,7 +26,6 @@ type yamlConfig struct {
 	AllowRanges          []string       `yaml:"allow_ranges"`
 	ConnectTimeout       time.Duration  `yaml:"connect_timeout"`
 	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
-	MaintenanceFile      string         `yaml:"maintenance_file"`
 	StatsdAddress        string         `yaml:"statsd_address"`
 	EgressAclFile        string         `yaml:"acl_file"`
 	SupportProxyProtocol bool           `yaml:"support_proxy_protocol"`
@@ -69,13 +68,6 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.ConnectTimeout = yc.ConnectTimeout
 	if yc.ExitTimeout != nil {
 		c.ExitTimeout = *yc.ExitTimeout
-	}
-
-	c.MaintenanceFile = yc.MaintenanceFile
-	if c.MaintenanceFile != "" {
-		if _, err = os.Stat(c.MaintenanceFile); err != nil {
-			return err
-		}
 	}
 
 	err = c.SetupStatsd(yc.StatsdAddress)

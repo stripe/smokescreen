@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -33,7 +34,6 @@ type Config struct {
 	AllowRanges                  []RuleRange
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
-	MaintenanceFile              string
 	StatsdClient                 *statsd.Client
 	EgressAcl                    EgressAcl
 	SupportProxyProtocol         bool
@@ -47,10 +47,12 @@ type Config struct {
 	AllowMissingRole             bool
 	StatsSocketDir               string
 	StatsSocketFileMode          os.FileMode
-	StatsServer                  interface{} // StatsServer
-	ConnTracker                  *sync.Map   // The zero Map is empty and ready to use
-	IdleThresholdSec             time.Duration // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
+	StatsServer                  interface{}     // StatsServer
+	ConnTracker                  *sync.Map       // The zero Map is empty and ready to use
+	IdleThresholdSec             time.Duration   // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
 	WgCxns                       *sync.WaitGroup // This wait group tracks *open* (active & idle) connections for graceful shutdown.
+	Healthcheck                  http.Handler    // User defined http.Handler for optional requests to a /healthcheck endpoint
+	IsShuttingDown               atomic.Value    // Stores a boolean value indicating whether the proxy is actively shutting down
 }
 
 type missingRoleError struct {
@@ -172,6 +174,7 @@ func NewConfig() *Config {
 		StatsSocketFileMode:     os.FileMode(0700),
 		IdleThresholdSec:        10 * time.Second,
 		WgCxns:                  &sync.WaitGroup{},
+		IsShuttingDown:          atomic.Value{},
 	}
 }
 
