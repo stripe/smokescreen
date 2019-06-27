@@ -34,7 +34,6 @@ type Config struct {
 	AllowRanges                  []RuleRange
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
-	MaintenanceFile              string
 	StatsdClient                 *statsd.Client
 	EgressAcl                    EgressAcl
 	SupportProxyProtocol         bool
