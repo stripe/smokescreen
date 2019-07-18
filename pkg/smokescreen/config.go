@@ -47,7 +47,7 @@ type Config struct {
 	AllowMissingRole             bool
 	StatsSocketDir               string
 	StatsSocketFileMode          os.FileMode
-	StatsServer                  interface{}     // StatsServer
+	StatsServer                  *StatsServer    // StatsServer
 	ConnTracker                  *sync.Map       // The zero Map is empty and ready to use
 	IdleThresholdSec             time.Duration   // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
 	WgCxns                       *sync.WaitGroup // This wait group tracks *open* (active & idle) connections for graceful shutdown.
