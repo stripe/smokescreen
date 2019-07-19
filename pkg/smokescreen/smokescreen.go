@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -464,14 +465,27 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("quitting now")
 			graceful = false
 		}
-		listener.Close()
-	}()
-	err := server.Serve(listener)
-	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-		config.Log.Fatal(err)
-	}
+		config.IsShuttingDown.Store(true)
 
-	config.IsShuttingDown.Store(true)
+		// Shutdown() will block until all connections are closed unless we
+		// provide it with a cancellation context.
+		timeout := config.ExitTimeout
+		if !graceful {
+			timeout = 10 * time.Second
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		err := server.Shutdown(ctx)
+		if err != nil {
+			config.Log.Errorf("error shutting down http server: %v", err)
+		}
+	}()
+
+	if err := server.Serve(listener); err != http.ErrServerClosed {
+		config.Log.Errorf("http serve error: %v", err)
+	}
 
 	if graceful {
 		// Wait for all connections to close or become idle before
@@ -492,7 +506,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("Waiting for all connections to become idle...")
 			beginTs := time.Now()
 			for {
-				checkAgainIn := config.StatsServer.(*StatsServer).MaybeIdleIn() // ns
+				checkAgainIn := config.StatsServer.MaybeIdleIn() // ns
 				if checkAgainIn > 0 {
 					if time.Now().Sub(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
@@ -521,7 +535,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	})
 
 	if config.StatsServer != nil {
-		config.StatsServer.(*StatsServer).Shutdown()
+		config.StatsServer.Shutdown()
 	}
 }
 
