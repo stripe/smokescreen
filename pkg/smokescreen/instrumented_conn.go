@@ -93,9 +93,13 @@ func (c *ConnExt) Close() error {
 	c.Config.StatsdClient.Histogram("cn.bytes_in", float64(c.BytesIn), tags, 1)
 	c.Config.StatsdClient.Histogram("cn.bytes_out", float64(c.BytesOut), tags, 1)
 
-	idle := c.Idle()
-	if !idle {
-		c.Config.StatsdClient.Incr("cn.terminated_active", tags, 1)
+	// This helps us track when we kill active connections during a shutdown
+	var idle bool
+	if c.Config.IsShuttingDown.Load() == true {
+		idle = c.Idle()
+		if !idle {
+			c.Config.StatsdClient.Incr("cn.terminated_active", tags, 1)
+		}
 	}
 
 	c.Config.Log.WithFields(logrus.Fields{
