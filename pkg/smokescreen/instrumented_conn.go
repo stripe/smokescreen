@@ -3,10 +3,11 @@ package smokescreen
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type ConnExt struct {
@@ -56,6 +57,17 @@ func NewConnExt(
 	return
 }
 
+// Idle returns true when the connection's last activity occured before the
+// configured idle threshold.
+//
+// Idle should be called with the connection's lock held.
+func (c *ConnExt) Idle() bool {
+	if time.Since(c.LastActivity) > c.Config.IdleThresholdSec {
+		return true
+	}
+	return false
+}
+
 func (c *ConnExt) Close() error {
 	if c.isClosed {
 		return c.errorOnClose
@@ -81,6 +93,15 @@ func (c *ConnExt) Close() error {
 	c.Config.StatsdClient.Histogram("cn.bytes_in", float64(c.BytesIn), tags, 1)
 	c.Config.StatsdClient.Histogram("cn.bytes_out", float64(c.BytesOut), tags, 1)
 
+	// This helps us track when we kill active connections during a shutdown
+	idle := true
+	if c.Config.IsShuttingDown.Load() == true {
+		idle = c.Idle()
+		if !idle {
+			c.Config.StatsdClient.Incr("cn.active_at_termination", tags, 1)
+		}
+	}
+
 	c.Config.Log.WithFields(logrus.Fields{
 		"bytes_in":    c.BytesIn,
 		"bytes_out":   c.BytesOut,
@@ -91,6 +112,7 @@ func (c *ConnExt) Close() error {
 		"end_time":    endTime.UTC(),
 		"duration":    duration,
 		"wakeups":     c.Wakeups,
+		"idle":        idle,
 	}).Info("CANONICAL-PROXY-CN-CLOSE")
 
 	c.Config.WgCxns.Done()
