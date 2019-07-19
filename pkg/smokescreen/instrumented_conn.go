@@ -94,11 +94,11 @@ func (c *ConnExt) Close() error {
 	c.Config.StatsdClient.Histogram("cn.bytes_out", float64(c.BytesOut), tags, 1)
 
 	// This helps us track when we kill active connections during a shutdown
-	killed := false
+	idle := true
 	if c.Config.IsShuttingDown.Load() == true {
-		if !c.Idle() {
-			killed = true
-			c.Config.StatsdClient.Incr("cn.killed", tags, 1)
+		idle = c.Idle()
+		if !idle {
+			c.Config.StatsdClient.Incr("cn.active_at_termination", tags, 1)
 		}
 	}
 
@@ -112,7 +112,7 @@ func (c *ConnExt) Close() error {
 		"end_time":    endTime.UTC(),
 		"duration":    duration,
 		"wakeups":     c.Wakeups,
-		"killed":      killed,
+		"idle":        idle,
 	}).Info("CANONICAL-PROXY-CN-CLOSE")
 
 	c.Config.WgCxns.Done()
