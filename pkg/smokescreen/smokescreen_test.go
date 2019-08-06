@@ -16,6 +16,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 var allowRanges = []string{
@@ -148,6 +149,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -300,6 +302,7 @@ func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 	conf.Log.AddHook(&logHook)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log)
 
 	proxy := BuildProxy(conf)
 	return httptest.NewServer(proxy), &logHook, nil

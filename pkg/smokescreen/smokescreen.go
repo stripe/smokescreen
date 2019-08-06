@@ -17,6 +17,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 const (
@@ -177,7 +178,7 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		return nil, err
 	} else {
 		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-		return NewConnExt(conn, config, role, outboundHost, time.Now()), nil
+		return config.ConnTracker.NewInstrumentedConn(conn, role, outboundHost), nil
 	}
 }
 
@@ -426,6 +427,9 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		listener = tls.NewListener(listener, config.TlsConfig)
 	}
 
+	// Setup connection tracking
+	config.ConnTracker = conntrack.NewTracker(config.IdleThresholdSec, config.StatsdClient, config.Log)
+
 	server := http.Server{
 		Handler: handler,
 	}
@@ -495,7 +499,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
-			config.WgCxns.Wait()
+			config.ConnTracker.Wg.Wait()
 			config.Log.Print("All connections are closed. Continuing with shutdown...")
 			exit <- true
 		}()
@@ -530,7 +534,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 
 	// Close all open (and idle) connections to send their metrics to log.
 	config.ConnTracker.Range(func(k, v interface{}) bool {
-		k.(*ConnExt).Close()
+		k.(*conntrack.InstrumentedConn).Close()
 		return true
 	})
 
