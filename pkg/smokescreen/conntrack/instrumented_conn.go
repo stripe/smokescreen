@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -18,10 +19,10 @@ type InstrumentedConn struct {
 	tracker *Tracker
 
 	Start        time.Time
-	LastActivity time.Time
+	LastActivity *int64 // Unix nano
 
-	BytesIn  int
-	BytesOut int
+	BytesIn  *uint64
+	BytesOut *uint64
 
 	sync.Mutex
 
@@ -30,12 +31,18 @@ type InstrumentedConn struct {
 }
 
 func (t *Tracker) NewInstrumentedConn(conn net.Conn, role, outboundHost string) *InstrumentedConn {
+	now := time.Now().UnixNano()
+	bytesIn := uint64(0)
+	bytesOut := uint64(0)
+
 	ic := &InstrumentedConn{
 		Conn:         conn,
 		Role:         role,
-		Start:        time.Now(),
-		LastActivity: time.Now(),
 		tracker:      t,
+		Start:        time.Now(),
+		LastActivity: &now,
+		BytesIn:      &bytesIn,
+		BytesOut:     &bytesOut,
 	}
 
 	ic.tracker.Store(ic, nil)
@@ -64,8 +71,8 @@ func (ic *InstrumentedConn) Close() error {
 
 	ic.tracker.statsc.Incr("cn.close", tags, 1)
 	ic.tracker.statsc.Histogram("cn.duration", duration, tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_in", float64(ic.BytesIn), tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_out", float64(ic.BytesOut), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_in", float64(*ic.BytesIn), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_out", float64(*ic.BytesOut), tags, 1)
 
 	ic.tracker.Log.WithFields(logrus.Fields{
 		"bytes_in":    ic.BytesIn,
@@ -85,19 +92,15 @@ func (ic *InstrumentedConn) Close() error {
 }
 
 func (ic *InstrumentedConn) Read(b []byte) (n int, err error) {
-	ic.Lock()
-	ic.BytesIn += len(b)
-	ic.LastActivity = time.Now()
-	ic.Unlock()
+	atomic.AddUint64(ic.BytesIn, uint64(len(b)))
+	atomic.StoreInt64(ic.LastActivity, time.Now().UnixNano())
 
 	return ic.Conn.Read(b)
 }
 
 func (ic *InstrumentedConn) Write(b []byte) (n int, err error) {
-	ic.Lock()
-	ic.BytesOut += len(b)
-	ic.LastActivity = time.Now()
-	ic.Unlock()
+	atomic.AddUint64(ic.BytesOut, uint64(len(b)))
+	atomic.StoreInt64(ic.LastActivity, time.Now().UnixNano())
 
 	return ic.Conn.Write(b)
 }
@@ -108,8 +111,8 @@ func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
 		Role                     string    `json:"role"`
 		Rhost                    string    `json:"rhost"`
 		Created                  time.Time `json:"created"`
-		BytesIn                  int       `json:"bytesIn"`
-		BytesOut                 int       `json:"bytesOut"`
+		BytesIn                  uint64    `json:"bytesIn"`
+		BytesOut                 uint64    `json:"bytesOut"`
 		SecondsSinceLastActivity float64   `json:"secondsSinceLastActivity"`
 	}
 
@@ -121,9 +124,9 @@ func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
 		Role:                     ic.Role,
 		Rhost:                    ic.OutboundHost,
 		Created:                  ic.Start,
-		BytesIn:                  ic.BytesIn,
-		BytesOut:                 ic.BytesOut,
-		SecondsSinceLastActivity: time.Now().Sub(ic.LastActivity).Seconds(),
+		BytesIn:                  *ic.BytesIn,
+		BytesOut:                 *ic.BytesOut,
+		SecondsSinceLastActivity: time.Now().Sub(time.Unix(0, *ic.LastActivity)).Seconds(),
 	}
 
 	return json.Marshal(s)

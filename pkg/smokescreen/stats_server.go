@@ -59,7 +59,8 @@ func (s *StatsServer) MaybeIdleIn() time.Duration {
 		c.Lock()
 		defer c.Unlock()
 
-		idleAt := c.LastActivity.Add(s.config.IdleThresholdSec)
+		last := time.Unix(0, *c.LastActivity)
+		idleAt := last.Add(s.config.IdleThresholdSec)
 		idleIn := idleAt.Sub(time.Now())
 		if idleIn > longest {
 			longest = idleIn
