@@ -84,7 +84,7 @@ func (ic *InstrumentedConn) Close() error {
 	}
 
 	ic.tracker.Log.WithFields(logrus.Fields{
-		"active":      idle,
+		"idle":        idle,
 		"bytes_in":    ic.BytesIn,
 		"bytes_out":   ic.BytesOut,
 		"role":        ic.Role,
