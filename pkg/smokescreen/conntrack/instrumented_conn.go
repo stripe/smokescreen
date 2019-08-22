@@ -109,21 +109,11 @@ func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
-	type stats = struct {
-		Id                       string    `json:"id"`
-		Role                     string    `json:"role"`
-		Rhost                    string    `json:"rhost"`
-		Created                  time.Time `json:"created"`
-		BytesIn                  uint64    `json:"bytesIn"`
-		BytesOut                 uint64    `json:"bytesOut"`
-		SecondsSinceLastActivity float64   `json:"secondsSinceLastActivity"`
-	}
-
+func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 	ic.Lock()
 	defer ic.Unlock()
 
-	s := stats{
+	return &InstrumentedConnStats{
 		Id:                       fmt.Sprintf("%d", &ic),
 		Role:                     ic.Role,
 		Rhost:                    ic.OutboundHost,
@@ -132,6 +122,8 @@ func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
 		BytesOut:                 *ic.BytesOut,
 		SecondsSinceLastActivity: time.Now().Sub(time.Unix(0, *ic.LastActivity)).Seconds(),
 	}
+}
 
-	return json.Marshal(s)
+func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
+	return json.Marshal(ic.Stats())
 }
