@@ -51,7 +51,7 @@ type Config struct {
 	ConnTracker                  *conntrack.Tracker
 	IdleThresholdSec             time.Duration // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
 	Healthcheck                  http.Handler  // User defined http.Handler for optional requests to a /healthcheck endpoint
-	IsShuttingDown               atomic.Value  // Stores a boolean value indicating whether the proxy is actively shutting down
+	ShuttingDown                 atomic.Value  // Stores a boolean value indicating whether the proxy is actively shutting down
 }
 
 type missingRoleError struct {
@@ -171,7 +171,7 @@ func NewConfig() *Config {
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
 		IdleThresholdSec:        10 * time.Second,
-		IsShuttingDown:          atomic.Value{},
+		ShuttingDown:            atomic.Value{},
 	}
 }
 

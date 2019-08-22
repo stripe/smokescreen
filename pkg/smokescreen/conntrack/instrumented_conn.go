@@ -74,7 +74,17 @@ func (ic *InstrumentedConn) Close() error {
 	ic.tracker.statsc.Histogram("cn.bytes_in", float64(*ic.BytesIn), tags, 1)
 	ic.tracker.statsc.Histogram("cn.bytes_out", float64(*ic.BytesOut), tags, 1)
 
+	// Track when we terminate active connections during a shutdown
+	idle := true
+	if ic.tracker.ShuttingDown.Load() == true {
+		idle = ic.Idle()
+		if !idle {
+			ic.tracker.statsc.Incr("cn.active_at_termination", tags, 1)
+		}
+	}
+
 	ic.tracker.Log.WithFields(logrus.Fields{
+		"active":      idle,
 		"bytes_in":    ic.BytesIn,
 		"bytes_out":   ic.BytesOut,
 		"role":        ic.Role,
@@ -107,6 +117,17 @@ func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	atomic.AddUint64(ic.BytesOut, uint64(n))
 
 	return n, err
+}
+
+// Idle returns true when the connection's last activity occured before the
+// configured idle threshold.
+//
+// Idle should be called with the connection's lock held.
+func (ic *InstrumentedConn) Idle() bool {
+	if time.Since(time.Unix(0, *ic.LastActivity)) > ic.tracker.IdleThreshold {
+		return true
+	}
+	return false
 }
 
 func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {

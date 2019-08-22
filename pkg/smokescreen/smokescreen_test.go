@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -149,7 +150,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log, atomic.Value{})
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -173,7 +174,7 @@ func TestConsistentHostHeader(t *testing.T) {
 	}
 }
 
-func TestIsShuttingDownValue(t *testing.T) {
+func TestShuttingDownValue(t *testing.T) {
 	a := assert.New(t)
 
 	conf := NewConfig()
@@ -183,16 +184,16 @@ func TestIsShuttingDownValue(t *testing.T) {
 	go StartWithConfig(conf, quit)
 
 	// These sleeps are not ideal, but there is a race with checking the
-	// IsShuttingDown value from these tests. The server has to bootstrap
+	// ShuttingDown value from these tests. The server has to bootstrap
 	// itself with an initial value before it returns false, and has to
 	// set the value to true after we send on the quit channel.
 	time.Sleep(500 * time.Millisecond)
-	a.Equal(false, conf.IsShuttingDown.Load())
+	a.Equal(false, conf.ShuttingDown.Load())
 
 	quit <- true
 
 	time.Sleep(500 * time.Millisecond)
-	a.Equal(true, conf.IsShuttingDown.Load())
+	a.Equal(true, conf.ShuttingDown.Load())
 
 }
 
@@ -302,7 +303,7 @@ func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log, atomic.Value{})
 
 	proxy := BuildProxy(conf)
 	return httptest.NewServer(proxy), &logHook, nil

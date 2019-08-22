@@ -428,13 +428,13 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	// Setup connection tracking
-	config.ConnTracker = conntrack.NewTracker(config.IdleThresholdSec, config.StatsdClient, config.Log)
+	config.ConnTracker = conntrack.NewTracker(config.IdleThresholdSec, config.StatsdClient, config.Log, config.ShuttingDown)
 
 	server := http.Server{
 		Handler: handler,
 	}
 
-	config.IsShuttingDown.Store(false)
+	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 	return
 }
@@ -469,7 +469,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("quitting now")
 			graceful = false
 		}
-		config.IsShuttingDown.Store(true)
+		config.ShuttingDown.Store(true)
 
 		// Shutdown() will block until all connections are closed unless we
 		// provide it with a cancellation context.

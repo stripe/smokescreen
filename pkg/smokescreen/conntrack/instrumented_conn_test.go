@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer ln.Close()
 
 	tr := NewTestTracker()
 	sent := []byte("X-Smokescreen-Test")
@@ -51,7 +53,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	icReader := tr.NewInstrumentedConn(conn, "test", "localhost")
+	icReader := tr.NewInstrumentedConn(conn, "testBytesInOut", "localhost")
 
 	go func() {
 		defer wg.Done()
@@ -72,6 +74,22 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	assert.Equal(uint64(len(sent)), *icReader.BytesIn)
 }
 
+func TestInstrumentedConnIdle(t *testing.T) {
+	assert := assert.New(t)
+
+	tr := NewTestTracker()
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testIdle", "localhost")
+
+	ic.Write([]byte("egress"))
+	assert.False(ic.Idle())
+
+	time.Sleep(time.Second * 1)
+	assert.True(ic.Idle())
+}
+
 func NewTestTracker() *Tracker {
-	return NewTracker(time.Second*1, nil, logrus.New())
+	sd := atomic.Value{}
+	sd.Store(false)
+
+	return NewTracker(time.Millisecond*500, nil, logrus.New(), sd)
 }
