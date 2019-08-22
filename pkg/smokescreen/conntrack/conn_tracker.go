@@ -11,7 +11,7 @@ import (
 type Tracker struct {
 	*sync.Map
 	Wg            *sync.WaitGroup
-	IdleThreshold time.Duration // A connection is idle if it has been inactive (no bytes transferred) for this many seconds.
+	IdleThreshold time.Duration // A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
 	Log           *logrus.Logger
 	statsc        *statsd.Client
 }

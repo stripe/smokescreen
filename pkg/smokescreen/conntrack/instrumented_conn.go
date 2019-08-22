@@ -91,18 +91,22 @@ func (ic *InstrumentedConn) Close() error {
 	return ic.CloseError
 }
 
-func (ic *InstrumentedConn) Read(b []byte) (n int, err error) {
-	atomic.AddUint64(ic.BytesIn, uint64(len(b)))
+func (ic *InstrumentedConn) Read(b []byte) (int, error) {
 	atomic.StoreInt64(ic.LastActivity, time.Now().UnixNano())
 
-	return ic.Conn.Read(b)
+	n, err := ic.Conn.Read(b)
+	atomic.AddUint64(ic.BytesIn, uint64(n))
+
+	return n, err
 }
 
-func (ic *InstrumentedConn) Write(b []byte) (n int, err error) {
-	atomic.AddUint64(ic.BytesOut, uint64(len(b)))
+func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	atomic.StoreInt64(ic.LastActivity, time.Now().UnixNano())
 
-	return ic.Conn.Write(b)
+	n, err := ic.Conn.Write(b)
+	atomic.AddUint64(ic.BytesOut, uint64(n))
+
+	return n, err
 }
 
 func (ic *InstrumentedConn) JsonStats() ([]byte, error) {
