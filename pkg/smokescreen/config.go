@@ -14,12 +14,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
 	log "github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 type RuleRange struct {
@@ -47,12 +47,11 @@ type Config struct {
 	AllowMissingRole             bool
 	StatsSocketDir               string
 	StatsSocketFileMode          os.FileMode
-	StatsServer                  *StatsServer    // StatsServer
-	ConnTracker                  *sync.Map       // The zero Map is empty and ready to use
-	IdleThresholdSec             time.Duration   // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
-	WgCxns                       *sync.WaitGroup // This wait group tracks *open* (active & idle) connections for graceful shutdown.
-	Healthcheck                  http.Handler    // User defined http.Handler for optional requests to a /healthcheck endpoint
-	IsShuttingDown               atomic.Value    // Stores a boolean value indicating whether the proxy is actively shutting down
+	StatsServer                  *StatsServer // StatsServer
+	ConnTracker                  *conntrack.Tracker
+	IdleThreshold                time.Duration // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
+	Healthcheck                  http.Handler  // User defined http.Handler for optional requests to a /healthcheck endpoint
+	ShuttingDown                 atomic.Value  // Stores a boolean value indicating whether the proxy is actively shutting down
 }
 
 type missingRoleError struct {
@@ -167,14 +166,12 @@ func NewConfig() *Config {
 	return &Config{
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
-		ConnTracker:             new(sync.Map),
 		Log:                     log.New(),
 		Port:                    4750,
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
-		IdleThresholdSec:        10 * time.Second,
-		WgCxns:                  &sync.WaitGroup{},
-		IsShuttingDown:          atomic.Value{},
+		IdleThreshold:           10 * time.Second,
+		ShuttingDown:            atomic.Value{},
 	}
 }
 

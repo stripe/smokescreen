@@ -5,7 +5,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"time"
+
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 type StatsServer struct {
@@ -48,24 +49,6 @@ func (s *StatsServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.mux.ServeHTTP(w, req)
 }
 
-// Returns the longest amount of time (ns) it will take a currently active connection to become idle.
-// 0 means all connections are idle.
-func (s *StatsServer) MaybeIdleIn() time.Duration {
-	longest := 0 * time.Nanosecond
-	s.config.ConnTracker.Range(func(k, v interface{}) bool {
-		c := k.(*ConnExt)
-		c.mutex.Lock()
-		defer c.mutex.Unlock()
-		idleAt := c.LastActivity.Add(s.config.IdleThresholdSec)
-		idleIn := idleAt.Sub(time.Now())
-		if idleIn > longest {
-			longest = idleIn
-		}
-		return true
-	})
-	return longest
-}
-
 func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Write([]byte{
@@ -80,7 +63,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 			rw.Write([]byte{byte(','), byte('\n')})
 		}
 		firstRun = false
-		instrumentedConn := k.(*ConnExt)
+		instrumentedConn := k.(*conntrack.InstrumentedConn)
 		repr, err := instrumentedConn.JsonStats()
 
 		if err != nil {

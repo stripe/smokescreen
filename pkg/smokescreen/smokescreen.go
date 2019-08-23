@@ -17,6 +17,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 const (
@@ -177,7 +178,7 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		return nil, err
 	} else {
 		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-		return NewConnExt(conn, config, role, outboundHost, time.Now()), nil
+		return config.ConnTracker.NewInstrumentedConn(conn, role, outboundHost), nil
 	}
 }
 
@@ -426,11 +427,14 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		listener = tls.NewListener(listener, config.TlsConfig)
 	}
 
+	// Setup connection tracking
+	config.ConnTracker = conntrack.NewTracker(config.IdleThreshold, config.StatsdClient, config.Log, config.ShuttingDown)
+
 	server := http.Server{
 		Handler: handler,
 	}
 
-	config.IsShuttingDown.Store(false)
+	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 	return
 }
@@ -465,7 +469,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("quitting now")
 			graceful = false
 		}
-		config.IsShuttingDown.Store(true)
+		config.ShuttingDown.Store(true)
 
 		// Shutdown() will block until all connections are closed unless we
 		// provide it with a cancellation context.
@@ -495,7 +499,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
-			config.WgCxns.Wait()
+			config.ConnTracker.Wg.Wait()
 			config.Log.Print("All connections are closed. Continuing with shutdown...")
 			exit <- true
 		}()
@@ -506,7 +510,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("Waiting for all connections to become idle...")
 			beginTs := time.Now()
 			for {
-				checkAgainIn := config.StatsServer.MaybeIdleIn() // ns
+				checkAgainIn := config.ConnTracker.MaybeIdleIn()
 				if checkAgainIn > 0 {
 					if time.Now().Sub(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
@@ -530,7 +534,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 
 	// Close all open (and idle) connections to send their metrics to log.
 	config.ConnTracker.Range(func(k, v interface{}) bool {
-		k.(*ConnExt).Close()
+		k.(*conntrack.InstrumentedConn).Close()
 		return true
 	})
 
