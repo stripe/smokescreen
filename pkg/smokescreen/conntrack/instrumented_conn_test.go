@@ -17,7 +17,7 @@ import (
 func TestInstrumentedConnByteCounting(t *testing.T) {
 	assert := assert.New(t)
 
-	addr := "localhost:8888"
+	addr := "localhost:0"
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 		assert.Equal(uint64(len(sent)), *icWriter.BytesOut)
 	}()
 
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.Dial("tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}

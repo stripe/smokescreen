@@ -150,7 +150,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, nil, conf.Log, atomic.Value{})
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -303,7 +303,7 @@ func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleThresholdSec, nil, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, nil, conf.Log, atomic.Value{})
 
 	proxy := BuildProxy(conf)
 	return httptest.NewServer(proxy), &logHook, nil

@@ -428,7 +428,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	// Setup connection tracking
-	config.ConnTracker = conntrack.NewTracker(config.IdleThresholdSec, config.StatsdClient, config.Log, config.ShuttingDown)
+	config.ConnTracker = conntrack.NewTracker(config.IdleThreshold, config.StatsdClient, config.Log, config.ShuttingDown)
 
 	server := http.Server{
 		Handler: handler,
