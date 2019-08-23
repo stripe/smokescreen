@@ -510,7 +510,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			config.Log.Print("Waiting for all connections to become idle...")
 			beginTs := time.Now()
 			for {
-				checkAgainIn := config.StatsServer.MaybeIdleIn() // ns
+				checkAgainIn := config.ConnTracker.MaybeIdleIn()
 				if checkAgainIn > 0 {
 					if time.Now().Sub(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))

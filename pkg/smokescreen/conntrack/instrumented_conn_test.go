@@ -4,11 +4,9 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,7 +22,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	}
 	defer ln.Close()
 
-	tr := NewTestTracker()
+	tr := NewTestTracker(time.Millisecond * 500)
 	sent := []byte("X-Smokescreen-Test")
 
 	var wg sync.WaitGroup
@@ -77,19 +75,12 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 func TestInstrumentedConnIdle(t *testing.T) {
 	assert := assert.New(t)
 
-	tr := NewTestTracker()
+	tr := NewTestTracker(time.Millisecond)
 	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testIdle", "localhost")
 
 	ic.Write([]byte("egress"))
 	assert.False(ic.Idle())
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second)
 	assert.True(ic.Idle())
-}
-
-func NewTestTracker() *Tracker {
-	sd := atomic.Value{}
-	sd.Store(false)
-
-	return NewTracker(time.Millisecond*500, nil, logrus.New(), sd)
 }
