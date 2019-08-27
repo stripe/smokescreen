@@ -32,6 +32,7 @@ type Config struct {
 	Port                         uint16
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
+	Resolver                     *net.Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	StatsdClient                 *statsd.Client

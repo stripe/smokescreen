@@ -135,16 +135,13 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	// Use the default resolver for now
-	r := &net.Resolver{}
 	ctx := context.Background()
-
-	resolvedPort, err := r.LookupPort(ctx, network, port)
+	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
 		return nil, err
 	}
 
-	ips, err := r.LookupIPAddr(ctx, host)
+	ips, err := config.Resolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
 	}
