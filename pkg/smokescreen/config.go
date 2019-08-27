@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -155,6 +156,23 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 		return err
 	}
 	config.AllowRanges = append(config.AllowRanges, ranges...)
+	return nil
+}
+
+func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
+	// TODO: support round-robin between multiple addresses
+	if len(resolverAddresses) != 1 {
+		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
+	}
+	addr := net.JoinHostPort(resolverAddresses[0], "53")
+	r := net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, "udp", addr)
+		},
+	}
+	config.Resolver = &r
 	return nil
 }
 
