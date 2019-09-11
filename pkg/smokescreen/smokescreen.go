@@ -17,6 +17,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
+	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
@@ -617,7 +618,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
 
-	action, reason, defaultRuleUsed, err := config.EgressAcl.Decide(role, destination)
+	aclDecision, err := config.EgressAcl.Decide(role, destination)
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -625,39 +626,37 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
-		decision.reason = reason
+		decision.reason = aclDecision.Reason
 		return decision
 	}
 
 	tags := []string{
 		fmt.Sprintf("role:%s", decision.role),
-		fmt.Sprintf("def_rule:%t", defaultRuleUsed),
+		fmt.Sprintf("def_rule:%t", aclDecision.Default),
 		fmt.Sprintf("project:%s", decision.project),
 	}
 
-	switch action {
-	case EgressAclDecisionDeny:
-		decision.reason = reason
+	decision.reason = aclDecision.Reason
+	switch aclDecision.Result {
+	case acl.Deny:
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
-	case EgressAclDecisionAllowAndReport:
-		decision.reason = reason
+	case acl.AllowAndReport:
 		decision.enforceWouldDeny = true
 		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
 
-	case EgressAclDecisionAllow:
+	case acl.Allow:
 		// Well, everything is going as expected.
 		decision.allow = true
-		decision.reason = reason
 		decision.enforceWouldDeny = false
 		config.StatsdClient.Incr("acl.allow", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
 			"destination": destination,
-			"action":      action,
+			"action":      aclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
 		config.StatsdClient.Incr("acl.unknown_error", tags, 1)

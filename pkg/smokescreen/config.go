@@ -19,6 +19,7 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	log "github.com/sirupsen/logrus"
+	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
@@ -35,7 +36,7 @@ type Config struct {
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	StatsdClient                 *statsd.Client
-	EgressAcl                    EgressAcl
+	EgressAcl                    *acl.ACL
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
 	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
@@ -268,7 +269,8 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
-	egressAcl, err := LoadYamlAclFromFilePath(config, aclFile)
+
+	egressAcl, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
 	if err != nil {
 		log.Print(err)
 		return err

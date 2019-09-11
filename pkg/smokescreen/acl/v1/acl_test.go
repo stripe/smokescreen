@@ -1,23 +1,18 @@
 // +build !nounit
 
-package smokescreen
+package acl
 
 import (
 	"path"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-
-	log "github.com/sirupsen/logrus"
 )
-
-var dummyConf = &Config{
-	Log: log.New(),
-}
 
 var testCases = map[string]struct {
 	yamlFile, service, host string
-	expectDecision          EgressAclDecision
+	expectDecision          DecisionResult
 	expectDecisionReason    string
 	expectProject           string
 }{
@@ -25,7 +20,7 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"enforce-dummy-srv",
 		"example1.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched allowed domain in rule",
 		"usersec",
 	},
@@ -33,15 +28,15 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"enforce-dummy-srv",
 		"www.example1.com",
-		EgressAclDecisionDeny,
-		"default rule policy used",
+		Deny,
+		"rule has enforce policy",
 		"usersec",
 	},
 	"allowed by list when reporting": {
 		"sample_config.yaml",
 		"report-dummy-srv",
 		"example3.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched allowed domain in rule",
 		"security",
 	},
@@ -49,15 +44,15 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"report-dummy-srv",
 		"example1.com",
-		EgressAclDecisionAllowAndReport,
-		"default rule policy used",
+		AllowAndReport,
+		"rule has allow and report policy",
 		"security",
 	},
 	"allowed when open": {
 		"sample_config.yaml",
 		"open-dummy-srv",
 		"anythingisgoodreally.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"rule has open enforcement policy",
 		"automation",
 	},
@@ -65,23 +60,23 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"dummy-glob",
 		"shouldbreak.com",
-		EgressAclDecisionDeny,
-		"default rule policy used",
+		Deny,
+		"rule has enforce policy",
 		"phony",
 	},
 	"deny by glob missing subdomain": {
 		"sample_config.yaml",
 		"dummy-glob",
 		"example.com",
-		EgressAclDecisionDeny,
-		"default rule policy used",
+		Deny,
+		"rule has enforce policy",
 		"phony",
 	},
 	"allow by glob": {
 		"sample_config.yaml",
 		"dummy-glob",
 		"api.example.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched allowed domain in rule",
 		"phony",
 	},
@@ -89,7 +84,7 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"unknown-service",
 		"nope.example.com",
-		EgressAclDecisionDeny,
+		Deny,
 		"default rule policy used",
 		"other",
 	},
@@ -97,7 +92,7 @@ var testCases = map[string]struct {
 		"sample_config.yaml",
 		"unknown-service",
 		"default.example.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched allowed domain in rule",
 		"other",
 	},
@@ -105,7 +100,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"enforce-dummy-srv",
 		"goodexample1.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched rule in global allow list",
 		"usersec",
 	},
@@ -113,7 +108,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"unknown-service",
 		"goodexample2.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched rule in global allow list",
 		"other",
 	},
@@ -121,7 +116,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"enforce-dummy-srv",
 		"badexample1.com",
-		EgressAclDecisionAllow,
+		Allow,
 		"host matched allowed domain in rule",
 		"usersec",
 	},
@@ -129,7 +124,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"report-dummy-srv",
 		"badexample1.com",
-		EgressAclDecisionDeny,
+		Deny,
 		"host matched rule in global deny list",
 		"security",
 	},
@@ -137,7 +132,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"unknown-service",
 		"badexample2.com",
-		EgressAclDecisionDeny,
+		Deny,
 		"host matched rule in global deny list",
 		"other",
 	},
@@ -145,7 +140,7 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"badexample2.com",
-		EgressAclDecisionDeny,
+		Deny,
 		"host matched rule in global deny list",
 		"automation",
 	},
@@ -153,17 +148,19 @@ var testCases = map[string]struct {
 		"sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"conflictingexample.com",
-		EgressAclDecisionDeny,
+		Deny,
 		"host matched rule in global deny list",
 		"automation",
 	},
 }
 
-func TestServiceDecideAndProject(t *testing.T) {
+func TestACLDecision(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			a := assert.New(t)
-			acl, err := LoadYamlAclFromFilePath(dummyConf, path.Join("testdata", testCase.yamlFile))
+
+			yl := NewYAMLLoader(path.Join("testdata", testCase.yamlFile))
+			acl, err := New(logrus.New(), yl, []string{})
 
 			a.NoError(err)
 			a.NotNil(acl)
@@ -172,92 +169,58 @@ func TestServiceDecideAndProject(t *testing.T) {
 			a.NoError(err)
 			a.Equal(testCase.expectProject, proj)
 
-			decision, reason, _, err := acl.Decide(testCase.service, testCase.host)
+			d, err := acl.Decide(testCase.service, testCase.host)
 			a.NoError(err)
-			a.Equal(testCase.expectDecision, decision)
-			a.Equal(testCase.expectDecisionReason, reason)
+			a.Equal(testCase.expectDecision, d.Result)
+			a.Equal(testCase.expectDecisionReason, d.Reason)
 		})
 	}
 }
 
-func TestUnknownServiceWithoutDefault(t *testing.T) {
+func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a := assert.New(t)
-	acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/no_default.yaml")
+
+	yl := NewYAMLLoader("testdata/no_default.yaml")
+	acl, err := New(logrus.New(), yl, []string{})
 
 	a.NoError(err)
 	a.NotNil(acl)
 
 	proj, err := acl.Project("unk")
-	a.Equal("unknown role: 'unk'", err.Error())
+	a.Equal("no rule for service: unk", err.Error())
 	a.Empty(proj)
 
-	decision, _, usedDefaultRule, err := acl.Decide("unk", "example.com")
-	a.Equal(EgressAclDecisionDeny, decision)
-	a.False(usedDefaultRule)
+	d, err := acl.Decide("unk", "example.com")
+	a.Equal(Deny, d.Result)
+	a.False(d.Default)
 	a.Nil(err)
 }
 
-func TestLoadFromYaml(t *testing.T) {
+func TestACLAddPolicyDisabled(t *testing.T) {
 	a := assert.New(t)
 
-	// Load a sane config
-	{
-		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config.yaml")
-		a.Nil(err)
-		a.NotNil(acl)
-		a.Equal(4, len(acl.Services))
-		a.Equal(0, len(acl.GlobalDenyList))
-		a.Equal(0, len(acl.GlobalAllowList))
+	acl := &ACL{}
+
+	acl.DisablePolicies([]string{"open"})
+	r := Rule{
+		project:     "security",
+		policy:      Open,
+		domainGlobs: []string{"stripe.com"},
 	}
 
-	// Load a sane config with global lists
-	{
-		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config_with_global.yaml")
-		a.Nil(err)
-		a.NotNil(acl)
-		a.Equal(4, len(acl.Services))
-		a.Equal(3, len(acl.GlobalDenyList))
-		a.Equal(4, len(acl.GlobalAllowList))
-	}
-
-	// Load a broken config
-	{
-		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/broken_config.yaml")
-		a.NotNil(err)
-		a.Nil(acl)
-	}
-
-	// Load a config that contains an unknown action
-	{
-		acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/unknown_action.yaml")
-		a.Nil(err)
-		a.NotNil(acl)
-	}
+	a.Error(acl.Add("acl", r))
 }
 
-func TestLoadYamlWithInvalidGlob(t *testing.T) {
+func TestACLAddInvalidDomain(t *testing.T) {
 	a := assert.New(t)
 
-	acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/contains_invalid_glob.yaml")
-	a.Nil(err)
-	a.Equal(0, len(acl.Services))
-}
+	acl := &ACL{}
 
-func TestLoadYamlWithInvalidMiddleGlob(t *testing.T) {
-	a := assert.New(t)
+	r := Rule{
+		project:     "security",
+		policy:      Open,
+		domainGlobs: []string{"*.*.stripe.com"},
+	}
 
-	acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/contains_middle_glob.yaml")
-	a.Nil(err)
-	a.Equal(0, len(acl.Services))
-}
-
-func TestLoadYamlWithDisabledAclAction(t *testing.T) {
-	a := assert.New(t)
-	dummyConf.DisabledAclPolicyActions = []string{"enforce"}
-	defer func() { dummyConf.DisabledAclPolicyActions = []string{} }()
-	acl, err := LoadYamlAclFromFilePath(dummyConf, "testdata/sample_config.yaml")
-	a.Nil(err)
-	a.NotNil(acl)
-	a.Equal(2, len(acl.Services))
-	a.Nil(acl.Default)
+	a.Error(acl.Add("acl", r))
 }
