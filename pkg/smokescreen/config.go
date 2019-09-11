@@ -161,9 +161,15 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 
 func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 	// TODO: support round-robin between multiple addresses
-	if len(resolverAddresses) != 1 {
+	if len(resolverAddresses) > 1 {
 		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
 	}
+
+	// No resolver specified, use the system resolver
+	if len(resolverAddresses) == 0 {
+		return nil
+	}
+
 	addr := net.JoinHostPort(resolverAddresses[0], "53")
 	r := net.Resolver{
 		PreferGo: true,
