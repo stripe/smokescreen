@@ -12,6 +12,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 // Process command line args into a configuration object.  If the "--help" or
@@ -241,6 +242,9 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				return err
 			}
 		}
+
+		// Setup the connection tracker
+		conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, conf.StatsdClient, conf.Log, conf.ShuttingDown)
 
 		configToReturn = conf
 		return nil

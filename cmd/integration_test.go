@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
+	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 )
 
 type DummyHandler struct{}
@@ -139,13 +140,13 @@ func conformIllegalProxyResult(t *testing.T, test *TestCase, resp *http.Response
 	a.Equal("127.0.0.2:80", entry.Data["address"])
 }
 
-func generateRoleForAction(action smokescreen.ConfigEnforcementPolicy) string {
+func generateRoleForAction(action acl.EnforcementPolicy) string {
 	switch action {
-	case smokescreen.ConfigEnforcementPolicyOpen:
+	case acl.Open:
 		return "open"
-	case smokescreen.ConfigEnforcementPolicyReport:
+	case acl.Report:
 		return "report"
-	case smokescreen.ConfigEnforcementPolicyEnforce:
+	case acl.Enforce:
 		return "enforce"
 	}
 	panic("unknown-mode")
@@ -297,10 +298,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 	overTlsDomain := []bool{true, false}
 	overConnectDomain := []bool{true, false}
 	authorizedHostsDomain := []bool{true, false}
-	actionsDomain := []smokescreen.ConfigEnforcementPolicy{
-		smokescreen.ConfigEnforcementPolicyEnforce,
-		smokescreen.ConfigEnforcementPolicyReport,
-		smokescreen.ConfigEnforcementPolicyOpen,
+	actionsDomain := []acl.EnforcementPolicy{
+		acl.Enforce,
+		acl.Report,
+		acl.Open,
 	}
 
 	var testCases []*TestCase
@@ -322,7 +323,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 				for _, action := range actionsDomain {
 					testCase := &TestCase{
-						ExpectAllow: authorizedHost || action != smokescreen.ConfigEnforcementPolicyEnforce,
+						ExpectAllow: authorizedHost || action != acl.Enforce,
 						OverTls:     overTls,
 						OverConnect: overConnect,
 						ProxyURL:    servers[overTls].URL,
@@ -360,7 +361,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		// block it regardless of the specific configuration we're trying to test.
 		badIPRangeCase.Host = "1.1.1.1"
 		badIPRangeCase.ExpectAllow = false
-		badIPRangeCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+		badIPRangeCase.RoleName = generateRoleForAction(acl.Open)
 
 		badIPAddressCase := baseCase
 		// This must be a global unicast, non-loopback address or other IP rules will
@@ -368,7 +369,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPAddressCase.Host = "1.0.0.1"
 		badIPAddressCase.TargetPort = 123
 		badIPAddressCase.ExpectAllow = false
-		badIPAddressCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+		badIPAddressCase.RoleName = generateRoleForAction(acl.Open)
 
 		proxyCase := baseCase
 		// We expect this URL to always return a non-200 status code so that
@@ -377,7 +378,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		proxyCase.Host = "aws.s3.amazonaws.com"
 		proxyCase.UpstreamProxy = outsideListenerUrl.String()
 		proxyCase.ExpectAllow = true
-		proxyCase.RoleName = generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen)
+		proxyCase.RoleName = generateRoleForAction(acl.Open)
 
 		testCases = append(testCases,
 			&unknownRoleAllowCase, &unknownRoleDenyCase,
@@ -406,7 +407,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 				TargetPort:    outsideListenerPort,
 				Host:          "google.com",
 				UpstreamProxy: "http://127.0.0.2:80",
-				RoleName:      generateRoleForAction(smokescreen.ConfigEnforcementPolicyOpen),
+				RoleName:      generateRoleForAction(acl.Open),
 			}
 			resp, err := executeRequestForTest(t, testCase, &logHook)
 			conformIllegalProxyResult(t, testCase, resp, err, logHook.AllEntries())
