@@ -8,18 +8,18 @@ import (
 )
 
 type ACL struct {
-	rules            map[string]Rule
-	defaultRule      *Rule
-	globalDenyList   []string
-	globalAllowList  []string
-	disabledPolicies []EnforcementPolicy
+	Rules            map[string]Rule
+	DefaultRule      *Rule
+	GlobalDenyList   []string
+	GlobalAllowList  []string
+	DisabledPolicies []EnforcementPolicy
 	*logrus.Logger
 }
 
 type Rule struct {
-	project     string
-	policy      EnforcementPolicy
-	domainGlobs []string
+	Project     string
+	Policy      EnforcementPolicy
+	DomainGlobs []string
 }
 
 type Decision struct {
@@ -43,7 +43,7 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 
 	acl.Logger = logger
 
-	if acl.defaultRule == nil {
+	if acl.DefaultRule == nil {
 		acl.Warn("no default rule set")
 	}
 	return acl, nil
@@ -52,17 +52,17 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 // Add associates a rule with the specified service after verifying the rule's
 // policy and domains are valid.
 func (acl *ACL) Add(svc string, r Rule) error {
-	err := acl.PolicyDisabled(svc, r.policy)
+	err := acl.PolicyDisabled(svc, r.Policy)
 	if err != nil {
 		return err
 	}
 
-	err = acl.ValidateDomains(r.domainGlobs)
+	err = acl.ValidateDomains(r.DomainGlobs)
 	if err != nil {
 		return err
 	}
 
-	acl.rules[svc] = r
+	acl.Rules[svc] = r
 	return nil
 }
 
@@ -81,10 +81,10 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 		return d, nil
 	}
 
-	d.Default = rule == acl.defaultRule
+	d.Default = rule == acl.DefaultRule
 
 	// if the host matches any of the rule's allowed domains, allow
-	for _, dg := range rule.domainGlobs {
+	for _, dg := range rule.DomainGlobs {
 		if hostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
 			return d, nil
@@ -92,7 +92,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 	}
 
 	// if the host matches any of the global deny list, deny
-	for _, dg := range acl.globalDenyList {
+	for _, dg := range acl.GlobalDenyList {
 		if hostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Deny, "host matched rule in global deny list"
 			return d, nil
@@ -100,7 +100,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 	}
 
 	// if the host matches any of the global allow list, allow
-	for _, dg := range acl.globalAllowList {
+	for _, dg := range acl.GlobalAllowList {
 		if hostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched rule in global allow list"
 			return d, nil
@@ -108,7 +108,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 	}
 
 	var err error
-	switch rule.policy {
+	switch rule.Policy {
 	case Report:
 		d.Result, d.Reason = AllowAndReport, "rule has allow and report policy"
 	case Enforce:
@@ -117,7 +117,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 		d.Result, d.Reason = Allow, "rule has open enforcement policy"
 	default:
 		d.Result, d.Reason = Unknown, "unexpected policy value"
-		err = fmt.Errorf("unexpected policy value for (%s -> %s): %d", service, host, rule.policy)
+		err = fmt.Errorf("unexpected policy value for (%s -> %s): %d", service, host, rule.Policy)
 	}
 
 	if d.Default {
@@ -136,7 +136,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 		if err != nil {
 			return err
 		}
-		acl.disabledPolicies = append(acl.disabledPolicies, p)
+		acl.DisabledPolicies = append(acl.DisabledPolicies, p)
 	}
 	return nil
 }
@@ -144,12 +144,12 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // Validate checks that the ACL that every rule has a conformant domain glob
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
-	for svc, r := range acl.rules {
-		err := acl.ValidateDomains(r.domainGlobs)
+	for svc, r := range acl.Rules {
+		err := acl.ValidateDomains(r.DomainGlobs)
 		if err != nil {
 			return err
 		}
-		err = acl.PolicyDisabled(svc, r.policy)
+		err = acl.PolicyDisabled(svc, r.Policy)
 		if err != nil {
 			return err
 		}
@@ -185,7 +185,7 @@ func (acl *ACL) ValidateDomains(domains []string) error {
 
 // PolicyDisabled checks if an EnforcementPolicy is disabled at the ACL level
 func (acl *ACL) PolicyDisabled(svc string, p EnforcementPolicy) error {
-	for _, dp := range acl.disabledPolicies {
+	for _, dp := range acl.DisabledPolicies {
 		if dp == p {
 			return fmt.Errorf("rule for svc:%v utilizes a disabled policy:%v", svc, p)
 		}
@@ -199,16 +199,16 @@ func (acl *ACL) Project(service string) (string, error) {
 	if rule == nil {
 		return "", fmt.Errorf("no rule for service: %v", service)
 	}
-	return rule.project, nil
+	return rule.Project, nil
 }
 
 // Rule returns the configured rule for a service, or the default rule if none
 // is configured.
 func (acl *ACL) Rule(service string) *Rule {
-	if service, ok := acl.rules[service]; ok {
+	if service, ok := acl.Rules[service]; ok {
 		return &service
 	}
-	return acl.defaultRule
+	return acl.DefaultRule
 }
 
 func hostMatchesGlob(host string, domainGlob string) bool {

@@ -16,9 +16,9 @@ func TestYAMLLoader(t *testing.T) {
 		acl, err := New(logrus.New(), yl, []string{})
 		a.Nil(err)
 		a.NotNil(acl)
-		a.Equal(4, len(acl.rules))
-		a.Equal(0, len(acl.globalDenyList))
-		a.Equal(0, len(acl.globalAllowList))
+		a.Equal(4, len(acl.Rules))
+		a.Equal(0, len(acl.GlobalDenyList))
+		a.Equal(0, len(acl.GlobalAllowList))
 	}
 
 	// Load a sane config with global lists
@@ -27,9 +27,9 @@ func TestYAMLLoader(t *testing.T) {
 		acl, err := New(logrus.New(), yl, []string{})
 		a.Nil(err)
 		a.NotNil(acl)
-		a.Equal(4, len(acl.rules))
-		a.Equal(3, len(acl.globalDenyList))
-		a.Equal(4, len(acl.globalAllowList))
+		a.Equal(4, len(acl.Rules))
+		a.Equal(3, len(acl.GlobalDenyList))
+		a.Equal(4, len(acl.GlobalAllowList))
 	}
 
 	// Load a broken config

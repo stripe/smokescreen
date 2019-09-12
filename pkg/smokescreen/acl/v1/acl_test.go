@@ -203,9 +203,9 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 
 	acl.DisablePolicies([]string{"open"})
 	r := Rule{
-		project:     "security",
-		policy:      Open,
-		domainGlobs: []string{"stripe.com"},
+		Project:     "security",
+		Policy:      Open,
+		DomainGlobs: []string{"stripe.com"},
 	}
 
 	a.Error(acl.Add("acl", r))
@@ -217,9 +217,9 @@ func TestACLAddInvalidDomain(t *testing.T) {
 	acl := &ACL{}
 
 	r := Rule{
-		project:     "security",
-		policy:      Open,
-		domainGlobs: []string{"*.*.stripe.com"},
+		Project:     "security",
+		Policy:      Open,
+		DomainGlobs: []string{"*.*.stripe.com"},
 	}
 
 	a.Error(acl.Add("acl", r))

@@ -59,7 +59,7 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 
 func (yl *YAMLLoader) ACLFromConfig(cfg *YAMLACLConfig) (*ACL, error) {
 	acl := ACL{
-		rules: make(map[string]Rule),
+		Rules: make(map[string]Rule),
 	}
 
 	if cfg.Services == nil {
@@ -73,9 +73,9 @@ func (yl *YAMLLoader) ACLFromConfig(cfg *YAMLACLConfig) (*ACL, error) {
 		}
 
 		r := Rule{
-			project:     v.Project,
-			policy:      p,
-			domainGlobs: v.AllowedHosts,
+			Project:     v.Project,
+			Policy:      p,
+			DomainGlobs: v.AllowedHosts,
 		}
 
 		err = acl.Add(v.Name, r)
@@ -90,21 +90,21 @@ func (yl *YAMLLoader) ACLFromConfig(cfg *YAMLACLConfig) (*ACL, error) {
 			return nil, err
 		}
 
-		acl.defaultRule = &Rule{
-			project:     cfg.Default.Project,
-			policy:      p,
-			domainGlobs: cfg.Default.AllowedHosts,
+		acl.DefaultRule = &Rule{
+			Project:     cfg.Default.Project,
+			Policy:      p,
+			DomainGlobs: cfg.Default.AllowedHosts,
 		}
 	}
 
-	acl.globalAllowList = []string{}
-	acl.globalDenyList = []string{}
+	acl.GlobalAllowList = []string{}
+	acl.GlobalDenyList = []string{}
 
 	if cfg.GlobalAllowList != nil {
-		acl.globalAllowList = cfg.GlobalAllowList
+		acl.GlobalAllowList = cfg.GlobalAllowList
 	}
 	if cfg.GlobalDenyList != nil {
-		acl.globalDenyList = cfg.GlobalDenyList
+		acl.GlobalDenyList = cfg.GlobalDenyList
 	}
 
 	return &acl, nil
