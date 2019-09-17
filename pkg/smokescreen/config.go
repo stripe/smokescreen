@@ -170,7 +170,12 @@ func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 		return nil
 	}
 
-	addr := net.JoinHostPort(resolverAddresses[0], "53")
+	addr := resolverAddresses[0]
+	_, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+
 	r := net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
