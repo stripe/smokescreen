@@ -126,9 +126,39 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	}
 }
 
+func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) {
+	if network != "tcp" {
+		return nil, fmt.Errorf("unknown network type %q", network)
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
+	if err != nil {
+		return nil, err
+	}
+
+	ips, err := config.Resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) < 1 {
+		return nil, fmt.Errorf("no IPs resolved")
+	}
+
+	return &net.TCPAddr{
+		IP:   ips[0].IP,
+		Zone: ips[0].Zone,
+		Port: resolvedPort,
+	}, nil
+}
+
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
 	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
-	resolved, err := net.ResolveTCPAddr(network, addr)
+	resolved, err := resolveTCPAddr(config, network, addr)
 	if err != nil {
 		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
 		return nil, "", err

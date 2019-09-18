@@ -302,6 +302,7 @@ func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
 	conf.ConnectTimeout = 10 * time.Second
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+	conf.Resolver = &net.Resolver{}
 	conf.Log.AddHook(&logHook)
 	conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, nil, conf.Log, atomic.Value{})
 
