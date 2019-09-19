@@ -84,6 +84,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "egress-acl-file",
 			Usage: "Validate egress traffic against `FILE`",
 		},
+		cli.StringSliceFlag{
+			Name:  "resolver-address",
+			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable.",
+		},
 		cli.StringFlag{
 			Name:  "statsd-address",
 			Value: "127.0.0.1:8200",
@@ -198,6 +202,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("deny-address") {
 			if err := conf.SetDenyAddresses(c.StringSlice("deny-address")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("resolver-address") {
+			if err := conf.SetResolverAddresses(c.StringSlice("resolver-address")); err != nil {
 				return err
 			}
 		}

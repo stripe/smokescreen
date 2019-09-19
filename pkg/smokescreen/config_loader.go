@@ -24,6 +24,7 @@ type yamlConfig struct {
 	Port                 *uint16
 	DenyRanges           []string       `yaml:"deny_ranges"`
 	AllowRanges          []string       `yaml:"allow_ranges"`
+	Resolvers            []string       `yaml:"resolver_addresses"`
 	ConnectTimeout       time.Duration  `yaml:"connect_timeout"`
 	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
 	StatsdAddress        string         `yaml:"statsd_address"`
@@ -61,6 +62,11 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	err = c.SetAllowRanges(yc.AllowRanges)
+	if err != nil {
+		return err
+	}
+
+	err = c.SetResolverAddresses(yc.Resolvers)
 	if err != nil {
 		return err
 	}

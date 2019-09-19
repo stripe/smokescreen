@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -33,6 +34,7 @@ type Config struct {
 	Port                         uint16
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
+	Resolver                     *net.Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	StatsdClient                 *statsd.Client
@@ -155,6 +157,34 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 		return err
 	}
 	config.AllowRanges = append(config.AllowRanges, ranges...)
+	return nil
+}
+
+func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
+	// TODO: support round-robin between multiple addresses
+	if len(resolverAddresses) > 1 {
+		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
+	}
+
+	// No resolver specified, use the system resolver
+	if len(resolverAddresses) == 0 {
+		return nil
+	}
+
+	addr := resolverAddresses[0]
+	_, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+
+	r := net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, "udp", addr)
+		},
+	}
+	config.Resolver = &r
 	return nil
 }
 
