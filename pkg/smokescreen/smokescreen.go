@@ -652,7 +652,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		decision.allow = true
 		decision.reason = reason
 		decision.enforceWouldDeny = false
-		config.StatsdClient.Incr("acl.allow", tags, 1)
+    config.StatsdClient.Incr("acl.deny", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
