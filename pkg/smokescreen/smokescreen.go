@@ -128,6 +128,8 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
 	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
+	config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
+
 	resolved, err := net.ResolveTCPAddr(network, addr)
 	if err != nil {
 		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
