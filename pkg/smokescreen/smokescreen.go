@@ -613,7 +613,6 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	}
 
 	decision.role = role
-	decision.project, _ = config.EgressAcl.Project(role)
 
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
@@ -633,7 +632,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	tags := []string{
 		fmt.Sprintf("role:%s", decision.role),
 		fmt.Sprintf("def_rule:%t", aclDecision.Default),
-		fmt.Sprintf("project:%s", decision.project),
+		fmt.Sprintf("project:%s", aclDecision.Project),
 	}
 
 	decision.reason = aclDecision.Reason

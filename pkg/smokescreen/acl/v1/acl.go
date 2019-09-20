@@ -7,6 +7,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Decider interface {
+	Decide(service, host string) (Decision, error)
+}
+
 type ACL struct {
 	Rules            map[string]Rule
 	DefaultRule      *Rule
@@ -26,6 +30,7 @@ type Decision struct {
 	Reason  string
 	Default bool
 	Result  DecisionResult
+	Project string
 }
 
 func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, error) {
@@ -81,6 +86,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 		return d, nil
 	}
 
+	d.Project = rule.Project
 	d.Default = rule == acl.DefaultRule
 
 	// if the host matches any of the rule's allowed domains, allow
