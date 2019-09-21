@@ -32,6 +32,11 @@ type YAMLRule struct {
 	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
+func (yc *YAMLACLConfig) ValidateConfig() error {
+	_, err := yc.Generate()
+	return err
+}
+
 func (yl *YAMLLoader) Load() (*ACL, error) {
 	f, err := os.Open(yl.path)
 	if err != nil {
@@ -54,10 +59,10 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 		return nil, fmt.Errorf("expected version \"v1\" got %#v", yamlConfig.Version)
 	}
 
-	return yl.ACLFromConfig(&yamlConfig)
+	return yamlConfig.Generate()
 }
 
-func (yl *YAMLLoader) ACLFromConfig(cfg *YAMLACLConfig) (*ACL, error) {
+func (cfg *YAMLACLConfig) Generate() (*ACL, error) {
 	acl := ACL{
 		Rules: make(map[string]Rule),
 	}
