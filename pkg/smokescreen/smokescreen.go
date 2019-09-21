@@ -629,7 +629,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		outboundHost: outboundHost,
 	}
 
-	if config.EgressAcl == nil {
+	if config.EgressACL == nil {
 		decision.allow = true
 		decision.reason = "Egress ACL is not configured"
 		return decision
@@ -647,7 +647,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
 	destination := submatch[1]
 
-	aclDecision, err := config.EgressAcl.Decide(role, destination)
+	aclDecision, err := config.EgressACL.Decide(role, destination)
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,

@@ -38,7 +38,7 @@ type Config struct {
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	StatsdClient                 *statsd.Client
-	EgressAcl                    *acl.ACL
+	EgressACL                    acl.Decider
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
 	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
@@ -294,18 +294,18 @@ func (config *Config) SetupStatsd(addr string) error {
 
 func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
-		config.EgressAcl = nil
+		config.EgressACL = nil
 		return nil
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
 
-	egressAcl, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
 	if err != nil {
 		log.Print(err)
 		return err
 	}
-	config.EgressAcl = egressAcl
+	config.EgressACL = egressACL
 
 	return nil
 }
