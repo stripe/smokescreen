@@ -12,6 +12,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
+	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
 // Process command line args into a configuration object.  If the "--help" or
@@ -82,6 +83,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		cli.StringFlag{
 			Name:  "egress-acl-file",
 			Usage: "Validate egress traffic against `FILE`",
+		},
+		cli.StringSliceFlag{
+			Name:  "resolver-address",
+			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable.",
 		},
 		cli.StringFlag{
 			Name:  "statsd-address",
@@ -201,6 +206,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
+		if c.IsSet("resolver-address") {
+			if err := conf.SetResolverAddresses(c.StringSlice("resolver-address")); err != nil {
+				return err
+			}
+		}
+
 		if c.IsSet("allow-address") {
 			if err := conf.SetAllowAddresses(c.StringSlice("allow-address")); err != nil {
 				return err
@@ -241,6 +252,9 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				return err
 			}
 		}
+
+		// Setup the connection tracker
+		conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, conf.StatsdClient, conf.Log, conf.ShuttingDown)
 
 		configToReturn = conf
 		return nil
