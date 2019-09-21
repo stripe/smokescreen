@@ -33,7 +33,7 @@ type YAMLRule struct {
 }
 
 func (yc *YAMLACLConfig) ValidateConfig() error {
-	_, err := yc.Generate()
+	_, err := yc.Load()
 	return err
 }
 
@@ -59,10 +59,10 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 		return nil, fmt.Errorf("expected version \"v1\" got %#v", yamlConfig.Version)
 	}
 
-	return yamlConfig.Generate()
+	return yamlConfig.Load()
 }
 
-func (cfg *YAMLACLConfig) Generate() (*ACL, error) {
+func (cfg *YAMLACLConfig) Load() (*ACL, error) {
 	acl := ACL{
 		Rules: make(map[string]Rule),
 	}
