@@ -210,18 +210,22 @@ func TestClearsTraceIDHeader(t *testing.T) {
 		respCh <- true
 	}()
 
-	for i := 0; i < 2; i++ {
-		select {
-		case receivedTraceIDCh := <-headerCh:
-			a.Empty(receivedTraceIDCh)
-		case <-time.After(3 * time.Second):
-			t.Fatal("timed out waiting for client request")
-		case <-respCh:
-			entry := findCanonicalProxyDecision(logHook.AllEntries())
-			r.NotNil(entry)
-			a.NotEmpty(entry.Data["smokescreen_trace_id"])
-		}
+	select {
+	case receivedTraceIDCh := <-headerCh:
+		a.Empty(receivedTraceIDCh)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for client request")
 	}
+
+	select {
+	case <-respCh:
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+		a.NotEmpty(entry.Data["smokescreen_trace_id"])
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for server response")
+	}
+
 }
 
 func TestShuttingDownValue(t *testing.T) {

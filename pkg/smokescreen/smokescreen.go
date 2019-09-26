@@ -44,6 +44,7 @@ type aclDecision struct {
 type ctxUserData struct {
 	start    time.Time
 	decision *aclDecision
+	traceId  string
 }
 
 type denyError struct {
@@ -253,7 +254,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		userData := ctxUserData{time.Now(), nil}
+		userData := ctxUserData{time.Now(), nil, ""}
 		ctx.UserData = &userData
 
 		// Build an address parsable by net.ResolveTCPAddr
@@ -281,10 +282,11 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		userData.decision = decision
 		req.Header.Del(roleHeader)
 
-		if req.Header.Get(traceHeader) == "" {
+		if v := req.Header.Get(traceHeader); v == "" {
 			config.StatsdClient.Incr("req.missing_trace_id", []string{}, 1)
 		} else {
 			req.Header.Del(traceHeader)
+			userData.traceId = v
 		}
 
 		if err != nil {
@@ -301,8 +303,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		ctx.UserData = &ctxUserData{time.Now(), nil}
+		ctx.UserData = &ctxUserData{time.Now(), nil, ""}
 		err := handleConnect(config, ctx)
+
+		if ctx.Req.Header.Get(traceHeader) == "" {
+			config.StatsdClient.Incr("req.missing_trace_id", []string{}, 1)
+		} else {
+			ctx.Req.Header.Del(traceHeader)
+		}
+
 		if err != nil {
 			ctx.Resp = rejectResponse(ctx.Req, config, err)
 			return goproxy.RejectConnect, ""
@@ -334,6 +343,7 @@ func logProxy(
 	proxyType string,
 	toAddress *net.TCPAddr,
 	decision *aclDecision,
+	traceID string,
 	start time.Time,
 	err error,
 ) {
@@ -351,7 +361,7 @@ func logProxy(
 		"requested_host":       ctx.Req.Host,
 		"start_time":           start.Unix(),
 		"content_length":       contentLength,
-		"smokescreen_trace_id": ctx.Req.Header.Get(traceHeader),
+		"smokescreen_trace_id": traceID,
 	}
 
 	if toAddress != nil {
@@ -402,7 +412,7 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 
 	userData := ctx.UserData.(*ctxUserData)
 
-	logProxy(config, ctx, "http", toAddr, userData.decision, userData.start, ctx.Error)
+	logProxy(config, ctx, "http", toAddr, userData.decision, userData.traceId, userData.start, ctx.Error)
 }
 
 func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
@@ -417,7 +427,8 @@ func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
 	// Check if requesting role is allowed to talk to remote
 	decision, err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	ctx.UserData.(*ctxUserData).decision = decision
-	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, start, err)
+	ctx.UserData.(*ctxUserData).traceId = ctx.Req.Header.Get(traceHeader)
+	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, ctx.Req.Header.Get(traceHeader), start, err)
 	if err != nil {
 		return err
 	}
