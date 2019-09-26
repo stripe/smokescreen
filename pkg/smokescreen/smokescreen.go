@@ -271,9 +271,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		config.Log.WithFields(
 			logrus.Fields{
-				"source_ip":      req.RemoteAddr,
-				"requested_host": req.Host,
-				"url":            req.RequestURI,
+				"source_ip":            req.RemoteAddr,
+				"requested_host":       req.Host,
+				"url":                  req.RequestURI,
+				"smokescreen_trace_id": req.Header.Get(traceHeader),
 			}).Debug("received HTTP proxy request")
 
 		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
@@ -407,8 +408,9 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
 	config.Log.WithFields(
 		logrus.Fields{
-			"remote":         ctx.Req.RemoteAddr,
-			"requested_host": ctx.Req.Host,
+			"remote":               ctx.Req.RemoteAddr,
+			"requested_host":       ctx.Req.Host,
+			"smokescreen_trace_id": ctx.Req.Header.Get(traceHeader),
 		}).Debug("received CONNECT proxy request")
 	start := time.Now()
 
