@@ -174,6 +174,44 @@ func TestConsistentHostHeader(t *testing.T) {
 	}
 }
 
+func TestClearsTraceIDHeader(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	headerCh := make(chan string)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+		headerCh <- r.Header.Get("X-Smokescreen-Trace-ID")
+	}))
+	defer ts.Close()
+
+	// Custom proxy config for the "remote" httptest.NewServer
+	conf := NewConfig()
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, nil, conf.Log, atomic.Value{})
+	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
+	r.NoError(err)
+
+	proxy := BuildProxy(conf)
+	proxySrv := httptest.NewServer(proxy)
+
+	client, err := proxyClient(proxySrv.URL)
+	r.NoError(err)
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	r.NoError(err)
+	req.Header.Set("X-Smokescreen-Trace-ID", "7fa4587f-7362-4515-ba44-e44490241af0")
+
+	go client.Do(req)
+
+	select {
+	case receivedTraceIDCh := <-headerCh:
+		a.Empty(receivedTraceIDCh)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for client request")
+	}
+}
+
 func TestShuttingDownValue(t *testing.T) {
 	a := assert.New(t)
 

@@ -90,6 +90,7 @@ func (t ipType) statsdString() string {
 
 const errorHeader = "X-Smokescreen-Error"
 const roleHeader = "X-Smokescreen-Role"
+const traceHeader = "X-Smokescreen-Trace-ID"
 
 func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 	for _, rng := range ranges {
@@ -278,6 +279,13 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
 		userData.decision = decision
 		req.Header.Del(roleHeader)
+
+		if req.Header.Get(traceHeader) == "" {
+			config.StatsdClient.Incr("req.missing_trace_id", []string{}, 1)
+		} else {
+			req.Header.Del(traceHeader)
+		}
+
 		if err != nil {
 			ctx.Error = err
 			return req, rejectResponse(req, config, err)
