@@ -344,12 +344,13 @@ func logProxy(
 	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
 
 	fields := logrus.Fields{
-		"proxy_type":     proxyType,
-		"src_host":       fromHost,
-		"src_port":       fromPort,
-		"requested_host": ctx.Req.Host,
-		"start_time":     start.Unix(),
-		"content_length": contentLength,
+		"proxy_type":           proxyType,
+		"src_host":             fromHost,
+		"src_port":             fromPort,
+		"requested_host":       ctx.Req.Host,
+		"start_time":           start.Unix(),
+		"content_length":       contentLength,
+		"smokescreen_trace_id": ctx.Req.Header.Get(traceHeader),
 	}
 
 	if toAddress != nil {

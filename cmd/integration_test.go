@@ -71,7 +71,6 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 	t.Logf("HTTP Response: %#v", resp)
 
 	a := assert.New(t)
-	// a.Empty(resp.Header.Get("X-Smokescreen-Trace-ID"))
 	if test.ExpectAllow {
 		if !a.NoError(err) {
 			return
@@ -255,7 +254,6 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 		req.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
 		req.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 	}
-	//req.Header.Set("X-Smokescreen-Trace-ID", "7fa4587f-7362-4515-ba44-e44490241af0")
 
 	t.Logf("HTTP Request: %#v", req)
 	return req
