@@ -203,7 +203,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
 	r.NoError(err)
-	req.Header.Set("X-Smokescreen-Trace-ID", "7fa4587f-7362-4515-ba44-e44490241af0")
+	req.Header.Set("X-Smokescreen-Trace-ID", "6c4aa514e3da13ef")
 
 	go func() {
 		client.Do(req)
