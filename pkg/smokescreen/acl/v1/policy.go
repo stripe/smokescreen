@@ -12,14 +12,14 @@ const (
 )
 
 func (d DecisionResult) String() string {
-	return [...]string{"Unknown", "Allow", "AllowAndReport", "Deny"}[d]
+	return [...]string{"Allow", "AllowAndReport", "Deny"}[d]
 }
 
 // EnforcementPolicy represents what the policy is for a service
 type EnforcementPolicy int
 
 const (
-	Unknown = iota
+	Unknown EnforcementPolicy = iota
 	Open
 	Report
 	Enforce

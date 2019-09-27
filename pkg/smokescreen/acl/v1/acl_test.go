@@ -214,7 +214,9 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 func TestACLAddInvalidDomain(t *testing.T) {
 	a := assert.New(t)
 
-	acl := &ACL{}
+	acl := &ACL{
+		Rules: make(map[string]Rule),
+	}
 
 	r := Rule{
 		Project:     "security",
@@ -223,4 +225,22 @@ func TestACLAddInvalidDomain(t *testing.T) {
 	}
 
 	a.Error(acl.Add("acl", r))
+}
+
+func TestACLAddExistingRule(t *testing.T) {
+	a := assert.New(t)
+
+	acl := &ACL{
+		Rules: make(map[string]Rule),
+	}
+	svc := "stripe"
+
+	r := Rule{
+		Project:     "security",
+		Policy:      Open,
+		DomainGlobs: []string{"*.stripe.com"},
+	}
+
+	a.NoError(acl.Add(svc, r))
+	a.Error(acl.Add(svc, r))
 }

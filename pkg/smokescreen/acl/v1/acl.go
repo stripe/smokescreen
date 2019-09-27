@@ -49,13 +49,14 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 	acl.Logger = logger
 
 	if acl.DefaultRule == nil {
-		acl.Warn("no default rule set")
+		acl.Warn("no default rule set. any services without a rule will be denied.")
 	}
 	return acl, nil
 }
 
 // Add associates a rule with the specified service after verifying the rule's
-// policy and domains are valid.
+// policy and domains are valid. Add returns an error if the service rule
+// already exists.
 func (acl *ACL) Add(svc string, r Rule) error {
 	err := acl.PolicyDisabled(svc, r.Policy)
 	if err != nil {
@@ -67,6 +68,9 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
+	if _, ok := acl.Rules[svc]; ok {
+		return fmt.Errorf("rule already exists for service %v", svc)
+	}
 	acl.Rules[svc] = r
 	return nil
 }
@@ -122,7 +126,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 	case Open:
 		d.Result, d.Reason = Allow, "rule has open enforcement policy"
 	default:
-		d.Result, d.Reason = Unknown, "unexpected policy value"
+		d.Result, d.Reason = Deny, "unexpected policy value"
 		err = fmt.Errorf("unexpected policy value for (%s -> %s): %d", service, host, rule.Policy)
 	}
 
@@ -175,7 +179,7 @@ func (acl *ACL) ValidateDomains(domains []string) error {
 		}
 
 		if !strings.HasPrefix(d, "*.") && strings.HasPrefix(d, "*") {
-			return fmt.Errorf("glob must represent a full prefix (sub)domain")
+			return fmt.Errorf("%v: domain glob must represent a full prefix (sub)domain", d)
 		}
 
 		domainToCheck := d
@@ -183,7 +187,7 @@ func (acl *ACL) ValidateDomains(domains []string) error {
 			domainToCheck = domainToCheck[1:]
 		}
 		if strings.Contains(domainToCheck, "*") {
-			return fmt.Errorf("globs are only supported as prefix")
+			return fmt.Errorf("%v: domain globs are only supported as prefix", d)
 		}
 	}
 	return nil
