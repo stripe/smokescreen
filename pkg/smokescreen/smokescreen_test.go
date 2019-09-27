@@ -221,7 +221,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	case <-respCh:
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
-		a.NotEmpty(entry.Data["smokescreen_trace_id"])
+		a.NotEmpty(entry.Data["trace_id"])
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for server response")
 	}
