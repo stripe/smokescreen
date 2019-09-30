@@ -17,7 +17,7 @@ func NewYAMLLoader(path string) *YAMLLoader {
 	return &YAMLLoader{path}
 }
 
-type YAMLACLConfig struct {
+type YAMLConfig struct {
 	Services        []YAMLRule `yaml:"services"`
 	Default         *YAMLRule  `yaml:"default"`
 	Version         string     `yaml:"version"`
@@ -32,7 +32,7 @@ type YAMLRule struct {
 	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
-func (yc *YAMLACLConfig) ValidateConfig() error {
+func (yc *YAMLConfig) ValidateConfig() error {
 	_, err := yc.Load()
 	return err
 }
@@ -49,7 +49,7 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 		return nil, fmt.Errorf("could not load acl configuration")
 	}
 
-	yamlConfig := YAMLACLConfig{}
+	yamlConfig := YAMLConfig{}
 	err = yaml.Unmarshal(yamlFile, &yamlConfig)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 	return yamlConfig.Load()
 }
 
-func (cfg *YAMLACLConfig) Load() (*ACL, error) {
+func (cfg *YAMLConfig) Load() (*ACL, error) {
 	acl := ACL{
 		Rules: make(map[string]Rule),
 	}
