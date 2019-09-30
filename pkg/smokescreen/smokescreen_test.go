@@ -174,6 +174,60 @@ func TestConsistentHostHeader(t *testing.T) {
 	}
 }
 
+func TestClearsTraceIDHeader(t *testing.T) {
+	r := require.New(t)
+	a := assert.New(t)
+
+	headerCh := make(chan string)
+	respCh := make(chan bool)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+		headerCh <- r.Header.Get("X-Smokescreen-Trace-ID")
+	}))
+	defer ts.Close()
+
+	// Custom proxy config for the "remote" httptest.NewServer
+	var logHook logrustest.Hook
+	conf := NewConfig()
+	conf.Log.AddHook(&logHook)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleThreshold, nil, conf.Log, atomic.Value{})
+	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
+	r.NoError(err)
+
+	proxy := BuildProxy(conf)
+	proxySrv := httptest.NewServer(proxy)
+
+	client, err := proxyClient(proxySrv.URL)
+	r.NoError(err)
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	r.NoError(err)
+	req.Header.Set("X-Smokescreen-Trace-ID", "6c4aa514e3da13ef")
+
+	go func() {
+		client.Do(req)
+		respCh <- true
+	}()
+
+	select {
+	case receivedTraceIDCh := <-headerCh:
+		a.Empty(receivedTraceIDCh)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for client request")
+	}
+
+	select {
+	case <-respCh:
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+		a.NotEmpty(entry.Data["trace_id"])
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for server response")
+	}
+
+}
+
 func TestShuttingDownValue(t *testing.T) {
 	a := assert.New(t)
 
