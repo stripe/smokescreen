@@ -281,14 +281,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
 		userData.decision = decision
-		req.Header.Del(roleHeader)
+		userData.traceId = req.Header.Get(traceHeader)
 
-		if v := req.Header.Get(traceHeader); v == "" {
-			config.StatsdClient.Incr("req.missing_trace_id", []string{}, 1)
-		} else {
-			req.Header.Del(traceHeader)
-			userData.traceId = v
-		}
+		req.Header.Del(roleHeader)
+		req.Header.Del(traceHeader)
 
 		if err != nil {
 			ctx.Error = err
@@ -305,14 +301,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		ctx.UserData = &ctxUserData{time.Now(), nil, ""}
+		defer ctx.Req.Header.Del(traceHeader)
+
 		err := handleConnect(config, ctx)
-
-		if ctx.Req.Header.Get(traceHeader) == "" {
-			config.StatsdClient.Incr("req.missing_trace_id", []string{}, 1)
-		} else {
-			ctx.Req.Header.Del(traceHeader)
-		}
-
 		if err != nil {
 			ctx.Resp = rejectResponse(ctx.Req, config, err)
 			return goproxy.RejectConnect, ""
