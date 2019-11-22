@@ -45,7 +45,7 @@ type aclDecision struct {
 type ctxUserData struct {
 	start    time.Time
 	decision *aclDecision
-	traceId  string
+	traceID  string
 }
 
 type denyError struct {
@@ -93,6 +93,7 @@ func (t ipType) statsdString() string {
 const errorHeader = "X-Smokescreen-Error"
 const roleHeader = "X-Smokescreen-Role"
 const traceHeader = "X-Smokescreen-Trace-ID"
+const altTraceHeader = "X_Smokescreen_Trace_ID"
 
 func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 	for _, rng := range ranges {
@@ -271,20 +272,27 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			}
 		}
 
+		traceID := req.Header.Get(traceHeader)
+		// Sometimes envoy or something turns the dashes to underscores
+		if traceID == "" {
+			traceID = req.Header.Get(altTraceHeader)
+		}
+
 		config.Log.WithFields(
 			logrus.Fields{
 				"source_ip":      req.RemoteAddr,
 				"requested_host": req.Host,
 				"url":            req.RequestURI,
-				"trace_id":       req.Header.Get(traceHeader),
+				"trace_id":       traceID,
 			}).Debug("received HTTP proxy request")
 
 		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
 		userData.decision = decision
-		userData.traceId = req.Header.Get(traceHeader)
+		userData.traceID = traceID
 
 		req.Header.Del(roleHeader)
 		req.Header.Del(traceHeader)
+		req.Header.Del(altTraceHeader)
 
 		if err != nil {
 			ctx.Error = err
@@ -302,6 +310,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		ctx.UserData = &ctxUserData{time.Now(), nil, ""}
 		defer ctx.Req.Header.Del(traceHeader)
+		defer ctx.Req.Header.Del(altTraceHeader)
 
 		err := handleConnect(config, ctx)
 		if err != nil {
@@ -404,23 +413,29 @@ func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
 
 	userData := ctx.UserData.(*ctxUserData)
 
-	logProxy(config, ctx, "http", toAddr, userData.decision, userData.traceId, userData.start, ctx.Error)
+	logProxy(config, ctx, "http", toAddr, userData.decision, userData.traceID, userData.start, ctx.Error)
 }
 
 func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {
+	traceID := ctx.Req.Header.Get(traceHeader)
+	// Sometimes envoy or something turns the dashes to underscores
+	if traceID == "" {
+		traceID = ctx.Req.Header.Get(altTraceHeader)
+	}
+
 	config.Log.WithFields(
 		logrus.Fields{
 			"remote":         ctx.Req.RemoteAddr,
 			"requested_host": ctx.Req.Host,
-			"trace_id":       ctx.Req.Header.Get(traceHeader),
+			"trace_id":       traceID,
 		}).Debug("received CONNECT proxy request")
 	start := time.Now()
 
 	// Check if requesting role is allowed to talk to remote
 	decision, err := checkIfRequestShouldBeProxied(config, ctx.Req, ctx.Req.Host)
 	ctx.UserData.(*ctxUserData).decision = decision
-	ctx.UserData.(*ctxUserData).traceId = ctx.Req.Header.Get(traceHeader)
-	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, ctx.Req.Header.Get(traceHeader), start, err)
+	ctx.UserData.(*ctxUserData).traceID = traceID
+	logProxy(config, ctx, "connect", decision.resolvedAddr, decision, traceID, start, err)
 	if err != nil {
 		return err
 	}
