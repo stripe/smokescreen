@@ -258,10 +258,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		userData := ctxUserData{time.Now(), nil, ""}
 		ctx.UserData = &userData
-		if strings.Contains(ctx.Req.Host, "virustotal") {
-			logrus.Info("jjiang-test request ", ctx.Req)
-			logrus.Info("jjiang-test user data ", ctx.UserData)
-		}
+		logrus.Info("jjiang-test request ", ctx.Req)
 
 		// Build an address parsable by net.ResolveTCPAddr
 		remoteHost := req.Host
@@ -315,7 +312,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		ctx.UserData = &ctxUserData{time.Now(), nil, ""}
 		if strings.Contains(ctx.Req.Host, "virustotal") {
 			logrus.Info("jjiang-test request ", ctx.Req)
-			logrus.Info("jjiang-test user data ", ctx.UserData)
 		}
 		defer ctx.Req.Header.Del(traceHeader)
 		defer ctx.Req.Header.Del(altTraceHeader)
