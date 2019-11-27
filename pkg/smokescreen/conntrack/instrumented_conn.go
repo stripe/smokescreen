@@ -38,6 +38,7 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, role, outboundHost string) 
 	ic := &InstrumentedConn{
 		Conn:         conn,
 		Role:         role,
+		OutboundHost: outboundHost,
 		tracker:      t,
 		Start:        time.Now(),
 		LastActivity: &now,
