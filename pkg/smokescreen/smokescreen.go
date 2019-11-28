@@ -177,13 +177,14 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 }
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
-	var role, outboundHost, reason string
+	var role, outboundHost, reason, traceId string
 	var resolved *net.TCPAddr
 
 	if v, ok := userdata.(*ctxUserData); ok {
 		role = v.decision.role
 		outboundHost = v.decision.outboundHost
 		resolved = v.decision.resolvedAddr
+		traceId = v.traceId
 	}
 
 	if resolved == nil || addr != outboundHost || network != "tcp" {
@@ -211,7 +212,7 @@ func dial(config *Config, network, addr string, userdata interface{}) (net.Conn,
 		return nil, err
 	} else {
 		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-		return config.ConnTracker.NewInstrumentedConn(conn, role, outboundHost), nil
+		return config.ConnTracker.NewInstrumentedConn(conn, traceId, role, outboundHost), nil
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 type InstrumentedConn struct {
 	net.Conn
+	TraceId      string
 	Role         string
 	OutboundHost string
 
@@ -30,13 +31,14 @@ type InstrumentedConn struct {
 	CloseError error
 }
 
-func (t *Tracker) NewInstrumentedConn(conn net.Conn, role, outboundHost string) *InstrumentedConn {
+func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost string) *InstrumentedConn {
 	now := time.Now().UnixNano()
 	bytesIn := uint64(0)
 	bytesOut := uint64(0)
 
 	ic := &InstrumentedConn{
 		Conn:         conn,
+		TraceId:      traceId,
 		Role:         role,
 		OutboundHost: outboundHost,
 		tracker:      t,
@@ -136,6 +138,7 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 	defer ic.Unlock()
 
 	return &InstrumentedConnStats{
+		TraceId:                  ic.TraceId,
 		Role:                     ic.Role,
 		Rhost:                    ic.OutboundHost,
 		Raddr:                    ic.Conn.RemoteAddr().String(),
