@@ -6,6 +6,7 @@ type InstrumentedConnStats struct {
 	Id                       string    `json:"id"`
 	Role                     string    `json:"role"`
 	Rhost                    string    `json:"rhost"`
+	Raddr                    string    `json:"raddr"`
 	Created                  time.Time `json:"created"`
 	BytesIn                  uint64    `json:"bytesIn"`
 	BytesOut                 uint64    `json:"bytesOut"`

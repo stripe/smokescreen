@@ -136,9 +136,9 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 	defer ic.Unlock()
 
 	return &InstrumentedConnStats{
-		Id:                       fmt.Sprintf("%d", &ic),
 		Role:                     ic.Role,
 		Rhost:                    ic.OutboundHost,
+		Raddr:                    ic.Conn.RemoteAddr().String(),
 		Created:                  ic.Start,
 		BytesIn:                  *ic.BytesIn,
 		BytesOut:                 *ic.BytesOut,
