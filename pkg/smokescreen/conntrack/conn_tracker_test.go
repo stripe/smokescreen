@@ -15,7 +15,7 @@ import (
 func TestConnTrackerDelete(t *testing.T) {
 	tr := NewTestTracker(time.Second * 1)
 
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testDeleteConn", "localhost")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testDeleteConn", "localhost")
 	ic.Close()
 
 	tr.Range(func(k, v interface{}) bool {
@@ -29,7 +29,7 @@ func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(1 * time.Nanosecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testMaybeIdle", "localhost")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testMaybeIdle", "localhost")
 
 	time.Sleep(time.Millisecond)
 
