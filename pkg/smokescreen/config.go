@@ -52,9 +52,12 @@ type Config struct {
 	StatsSocketFileMode          os.FileMode
 	StatsServer                  *StatsServer // StatsServer
 	ConnTracker                  *conntrack.Tracker
-	IdleThreshold                time.Duration // Consider a connection idle if it has been inactive (no bytes transferred) for this many seconds.
-	Healthcheck                  http.Handler  // User defined http.Handler for optional requests to a /healthcheck endpoint
-	ShuttingDown                 atomic.Value  // Stores a boolean value indicating whether the proxy is actively shutting down
+	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
+	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
+
+	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
+	// If there are no reads or writes during this period the net.Conn will time out
+	IdleTimeout time.Duration
 }
 
 type missingRoleError struct {
@@ -201,7 +204,6 @@ func NewConfig() *Config {
 		Port:                    4750,
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
-		IdleThreshold:           10 * time.Second,
 		ShuttingDown:            atomic.Value{},
 	}
 }

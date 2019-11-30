@@ -22,16 +22,18 @@ type yamlConfigTls struct {
 type yamlConfig struct {
 	Ip                   string
 	Port                 *uint16
-	DenyRanges           []string       `yaml:"deny_ranges"`
-	AllowRanges          []string       `yaml:"allow_ranges"`
-	Resolvers            []string       `yaml:"resolver_addresses"`
-	ConnectTimeout       time.Duration  `yaml:"connect_timeout"`
-	ExitTimeout          *time.Duration `yaml:"exit_timeout"`
-	StatsdAddress        string         `yaml:"statsd_address"`
-	EgressAclFile        string         `yaml:"acl_file"`
-	SupportProxyProtocol bool           `yaml:"support_proxy_protocol"`
-	DenyMessageExtra     string         `yaml:"deny_message_extra"`
-	AllowMissingRole     bool           `yaml:"allow_missing_role"`
+	DenyRanges           []string `yaml:"deny_ranges"`
+	AllowRanges          []string `yaml:"allow_ranges"`
+	Resolvers            []string `yaml:"resolver_addresses"`
+	StatsdAddress        string   `yaml:"statsd_address"`
+	EgressAclFile        string   `yaml:"acl_file"`
+	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
+	DenyMessageExtra     string   `yaml:"deny_message_extra"`
+	AllowMissingRole     bool     `yaml:"allow_missing_role"`
+
+	ConnectTimeout time.Duration  `yaml:"connect_timeout"`
+	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
+	ExitTimeout    *time.Duration `yaml:"exit_timeout"`
 
 	StatsSocketDir      string `yaml:"stats_socket_dir"`
 	StatsSocketFileMode string `yaml:"stats_socket_file_mode"`
@@ -71,6 +73,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
+	c.IdleTimeout = yc.IdleTimeout
 	c.ConnectTimeout = yc.ConnectTimeout
 	if yc.ExitTimeout != nil {
 		c.ExitTimeout = *yc.ExitTimeout

@@ -36,7 +36,7 @@ func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	// All connections should be idle
 	assert.Zero(tr.MaybeIdleIn())
 
-	tr.IdleThreshold = time.Second
+	tr.IdleTimeout = time.Second
 	ic.Write([]byte("egress"))
 
 	idleIn := tr.MaybeIdleIn().Round(time.Second)
