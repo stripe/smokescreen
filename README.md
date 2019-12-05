@@ -17,16 +17,16 @@ Smokescreen will warn you if you load a CA certificate with no associated CRL an
 Smokescreen can be provided with an ACL to determine which remote hosts a service is allowed to interact with.
 By default, Smokescreen will identify the clients in the following manner:
 
-| client ca provided? | method |
-| --- | --- |
-| yes | client cert's `common name` |
-| no | `X-Smokescreen-Role` header |
+| client ca provided? | method                      |
+| ------------------- | --------------------------- |
+| yes                 | client cert's `common name` |
+| no                  | `X-Smokescreen-Role` header |
 
 The client identification function can also be replaced by one of your liking. More on this in the usage section.
 
 ## Dependencies
 
-Smokescreen uses [dep][dep] to manage dependencies.  The
+Smokescreen uses [dep][dep] to manage dependencies. The
 repo contains documentation, but some useful commands are reproduced
 below:
 
@@ -117,25 +117,24 @@ An ACL can be described in a YAML formatted file. The ACL, at its top-level, con
 
 Three policies are supported:
 
-| Policy | Behavior |
-| --- | --- |
-| Open | Allows all traffic for this service |
-| Report | Allows all traffic for this service and warns if client accesses a remote host which is not in the list | 
+| Policy  | Behavior                                                                                                       |
+| ------- | -------------------------------------------------------------------------------------------------------------- |
+| Open    | Allows all traffic for this service                                                                            |
+| Report  | Allows all traffic for this service and warns if client accesses a remote host which is not in the list        |
 | Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
 
 A host can be specified with or without a globbing prefix
 
-| host | valid |
-| --- | --- |
-| `example.com` | yes |
-| `*.example.com` | yes |
-| `api.*.example.com` | no | 
-| `*example.com` | no |
-| `ex*ample.com` | no |
-| `example.*` | hell no |
+| host                | valid   |
+| ------------------- | ------- |
+| `example.com`       | yes     |
+| `*.example.com`     | yes     |
+| `api.*.example.com` | no      |
+| `*example.com`      | no      |
+| `ex*ample.com`      | no      |
+| `example.*`         | hell no |
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/testdata/sample_config.yaml) is a sample ACL.
-
+[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
 
 #### Global Allow/Deny Lists
 Optionally, you may specify a global allow list and a global deny list in your ACL config.
@@ -149,9 +148,7 @@ However, if the host specifies `malicious.com` in its `allowed_domains`, traffic
 
 If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
 
-
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
-
+[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
 
 # Contributors
 
