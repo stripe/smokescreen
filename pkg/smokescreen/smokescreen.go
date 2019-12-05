@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,18 +21,8 @@ import (
 )
 
 const (
-	ipAllowDefault ipType = iota
-	ipAllowUserConfigured
-	ipDenyNotGlobalUnicast
-	ipDenyPrivateRange
-	ipDenyUserConfigured
-
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 )
-
-var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
-
-type ipType int
 
 type aclDecision struct {
 	reason, role, project, outboundHost string
@@ -48,133 +37,11 @@ type ctxUserData struct {
 	traceId  string
 }
 
-type denyError struct {
-	error
-}
-
-func (t ipType) IsAllowed() bool {
-	return t == ipAllowDefault || t == ipAllowUserConfigured
-}
-
-func (t ipType) String() string {
-	switch t {
-	case ipAllowDefault:
-		return "Allow: Default"
-	case ipAllowUserConfigured:
-		return "Allow: User Configured"
-	case ipDenyNotGlobalUnicast:
-		return "Deny: Not Global Unicast"
-	case ipDenyPrivateRange:
-		return "Deny: Private Range"
-	case ipDenyUserConfigured:
-		return "Deny: User Configured"
-	default:
-		panic(fmt.Errorf("unknown ip type %d", t))
-	}
-}
-
-func (t ipType) statsdString() string {
-	switch t {
-	case ipAllowDefault:
-		return "resolver.allow.default"
-	case ipAllowUserConfigured:
-		return "resolver.allow.user_configured"
-	case ipDenyNotGlobalUnicast:
-		return "resolver.deny.not_global_unicast"
-	case ipDenyPrivateRange:
-		return "resolver.deny.private_range"
-	case ipDenyUserConfigured:
-		return "resolver.deny.user_configured"
-	default:
-		panic(fmt.Errorf("unknown ip type %d", t))
-	}
-}
-
-const errorHeader = "X-Smokescreen-Error"
-const roleHeader = "X-Smokescreen-Role"
-const traceHeader = "X-Smokescreen-Trace-ID"
-
-func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
-	for _, rng := range ranges {
-		// If the range specifies a port and the port doesn't match,
-		// then this range doesn't match
-		if rng.Port != 0 && addr.Port != rng.Port {
-			continue
-		}
-
-		if rng.Net.Contains(addr.IP) {
-			return true
-		}
-	}
-	return false
-}
-
-func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
-	if !addr.IP.IsGlobalUnicast() || addr.IP.IsLoopback() {
-		if addrIsInRuleRange(config.AllowRanges, addr) {
-			return ipAllowUserConfigured
-		} else {
-			return ipDenyNotGlobalUnicast
-		}
-	}
-
-	if addrIsInRuleRange(config.AllowRanges, addr) {
-		return ipAllowUserConfigured
-	} else if addrIsInRuleRange(config.DenyRanges, addr) {
-		return ipDenyUserConfigured
-	} else if addrIsInRuleRange(PrivateRuleRanges, addr) {
-		return ipDenyPrivateRange
-	} else {
-		return ipAllowDefault
-	}
-}
-
-func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) {
-	if network != "tcp" {
-		return nil, fmt.Errorf("unknown network type %q", network)
-	}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx := context.Background()
-	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
-	if err != nil {
-		return nil, err
-	}
-
-	ips, err := config.Resolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) < 1 {
-		return nil, fmt.Errorf("no IPs resolved")
-	}
-
-	return &net.TCPAddr{
-		IP:   ips[0].IP,
-		Zone: ips[0].Zone,
-		Port: resolvedPort,
-	}, nil
-}
-
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
-	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
-	resolved, err := resolveTCPAddr(config, network, addr)
-	if err != nil {
-		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
-		return nil, "", err
-	}
-
-	classification := classifyAddr(config, resolved)
-	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
-
-	if classification.IsAllowed() {
-		return resolved, classification.String(), nil
-	}
-	return nil, "destination address was denied by rule, see error", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
-}
+const (
+	errorHeader = "X-Smokescreen-Error"
+	roleHeader  = "X-Smokescreen-Role"
+	traceHeader = "X-Smokescreen-Trace-ID"
+)
 
 func dial(config *Config, network, addr string, userdata interface{}) (net.Conn, error) {
 	var role, outboundHost, reason, traceId string
@@ -258,19 +125,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		userData := ctxUserData{time.Now(), nil, ""}
 		ctx.UserData = &userData
-
-		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost := req.Host
-		if strings.LastIndex(remoteHost, ":") <= strings.LastIndex(remoteHost, "]") {
-			switch req.URL.Scheme {
-			case "http":
-				remoteHost = net.JoinHostPort(remoteHost, "80")
-			case "https":
-				remoteHost = net.JoinHostPort(remoteHost, "443")
-			default:
-				remoteHost = net.JoinHostPort(remoteHost, "0")
-			}
-		}
+		remoteHost := resolveParsableAddr(req)
 
 		config.Log.WithFields(
 			logrus.Fields{
@@ -328,84 +183,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return resp
 	})
 	return proxy
-}
-
-func logProxy(
-	config *Config,
-	ctx *goproxy.ProxyCtx,
-	proxyType string,
-	toAddress *net.TCPAddr,
-	decision *aclDecision,
-	traceID string,
-	start time.Time,
-	err error,
-) {
-	var contentLength int64
-	if ctx.Resp != nil {
-		contentLength = ctx.Resp.ContentLength
-	}
-
-	fromHost, fromPort, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
-
-	fields := logrus.Fields{
-		"proxy_type":     proxyType,
-		"src_host":       fromHost,
-		"src_port":       fromPort,
-		"requested_host": ctx.Req.Host,
-		"start_time":     start.Unix(),
-		"content_length": contentLength,
-		"trace_id":       traceID,
-	}
-
-	if toAddress != nil {
-		fields["dest_ip"] = toAddress.IP.String()
-		fields["dest_port"] = toAddress.Port
-	}
-
-	// attempt to retrieve information about the host originating the proxy request
-	fields["src_host_common_name"] = "unknown"
-	fields["src_host_organization_unit"] = "unknown"
-	if ctx.Req.TLS != nil && len(ctx.Req.TLS.PeerCertificates) > 0 {
-		fields["src_host_common_name"] = ctx.Req.TLS.PeerCertificates[0].Subject.CommonName
-		var ou_entries = ctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if ou_entries != nil && len(ou_entries) > 0 {
-			fields["src_host_organization_unit"] = ou_entries[0]
-		}
-	}
-
-	if decision != nil {
-		fields["role"] = decision.role
-		fields["project"] = decision.project
-		fields["decision_reason"] = decision.reason
-		fields["enforce_would_deny"] = decision.enforceWouldDeny
-		fields["allow"] = decision.allow
-	}
-
-	if err != nil {
-		fields["error"] = err.Error()
-	}
-
-	entry := config.Log.WithFields(fields)
-	var logMethod func(...interface{})
-	if _, ok := err.(denyError); !ok && err != nil {
-		logMethod = entry.Error
-	} else if decision != nil && decision.allow {
-		logMethod = entry.Info
-	} else {
-		logMethod = entry.Warn
-	}
-	logMethod(LOGLINE_CANONICAL_PROXY_DECISION)
-}
-
-func logHTTP(config *Config, ctx *goproxy.ProxyCtx) {
-	var toAddr *net.TCPAddr
-	if ctx.RoundTrip != nil {
-		toAddr = ctx.RoundTrip.TCPAddr
-	}
-
-	userData := ctx.UserData.(*ctxUserData)
-
-	logProxy(config, ctx, "http", toAddr, userData.decision, userData.traceId, userData.start, ctx.Error)
 }
 
 func handleConnect(config *Config, ctx *goproxy.ProxyCtx) error {

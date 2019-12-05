@@ -57,19 +57,6 @@ type Config struct {
 	ShuttingDown                 atomic.Value  // Stores a boolean value indicating whether the proxy is actively shutting down
 }
 
-type missingRoleError struct {
-	error
-}
-
-func MissingRoleError(s string) error {
-	return missingRoleError{errors.New(s)}
-}
-
-func IsMissingRoleError(err error) bool {
-	_, ok := err.(missingRoleError)
-	return ok
-}
-
 func parseRanges(rangeStrings []string) ([]RuleRange, error) {
 	outRanges := make([]RuleRange, len(rangeStrings))
 	for i, str := range rangeStrings {

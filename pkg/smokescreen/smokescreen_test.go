@@ -95,7 +95,7 @@ func TestClassifyAddr(t *testing.T) {
 			Port: test.port,
 		}
 
-		got := classifyAddr(conf, &localAddr)
+		got := classifyAddr(conf.AllowRanges, conf.DenyRanges, &localAddr)
 		if got != test.expected {
 			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
 		}
