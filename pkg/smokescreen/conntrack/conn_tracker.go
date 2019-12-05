@@ -35,7 +35,7 @@ func NewTracker(idle time.Duration, statsc *statsd.Client, logger *logrus.Logger
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked
-// connections to become idle based on the configured IdleThreshold.
+// connections to become idle based on the configured IdleTimeout.
 //
 // A duration of 0 indicates all connections are idle.
 func (tr *Tracker) MaybeIdleIn() time.Duration {
