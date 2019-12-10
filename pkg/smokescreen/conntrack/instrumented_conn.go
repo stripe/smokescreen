@@ -32,7 +32,8 @@ type InstrumentedConn struct {
 }
 
 func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost string) *InstrumentedConn {
-	now := time.Now().UnixNano()
+	now := time.Now()
+	nowUnixNano := now.UnixNano()
 	bytesIn := uint64(0)
 	bytesOut := uint64(0)
 
@@ -42,14 +43,14 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost
 		Role:         role,
 		OutboundHost: outboundHost,
 		tracker:      t,
-		Start:        time.Now(),
-		LastActivity: &now,
+		Start:        now,
+		LastActivity: &nowUnixNano,
 		BytesIn:      &bytesIn,
 		BytesOut:     &bytesOut,
 	}
 
 	if t.IdleTimeout != 0 {
-		ic.Conn.SetDeadline(time.Now().Add(t.IdleTimeout))
+		ic.Conn.SetDeadline(now.Add(t.IdleTimeout))
 	}
 	ic.tracker.Store(ic, nil)
 	ic.tracker.Wg.Add(1)
