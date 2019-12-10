@@ -96,9 +96,18 @@ func TestInstrumentedConnIdleTimeout(t *testing.T) {
 	defer serverIC.Close()
 	defer clientIC.Close()
 
-	_, err := serverIC.Read([]byte{})
-	assert.NotNil(err)
+	time.Sleep(1 * time.Second)
 
+	n, err := clientIC.Write([]byte("timeout"))
+	assert.Zero(n)
+	assert.NotNil(err)
 	netError := err.(net.Error)
 	assert.True(netError.Timeout())
+
+	n, err = serverIC.Read([]byte{})
+	assert.Zero(n)
+	assert.NotNil(err)
+	netError = err.(net.Error)
+	assert.True(netError.Timeout())
+
 }
