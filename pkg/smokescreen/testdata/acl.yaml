@@ -2,8 +2,9 @@
     version: v1
     services:
       - name: dummy-srv
-        project: usersec
+        project: security
         action: enforce
         allowed_domains:
-          - example.com
+          - notarealhost.com
+          - httpbin.org
     

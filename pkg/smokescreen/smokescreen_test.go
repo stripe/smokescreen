@@ -312,25 +312,52 @@ func TestInvalidHost(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
-			resp, err := client.Get(fmt.Sprintf("%s://neversaynever.stripe.com", testCase.scheme))
+			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.com", testCase.scheme))
 			if testCase.expectErr {
-				r.EqualError(err, "Get https://neversaynever.stripe.com: Request Rejected by Proxy")
+				r.EqualError(err, "Get https://notarealhost.com: Request Rejected by Proxy")
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
-				r.NotEmpty(resp.Header.Get("X-Smokescreen-Error"))
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
 			r.NotNil(entry)
 
 			if a.Contains(entry.Data, "allow") {
-				a.Equal(false, entry.Data["allow"])
+				a.Equal(true, entry.Data["allow"])
+			}
+			if a.Contains(entry.Data, "error") {
+				a.Contains(entry.Data["error"], "no such host")
 			}
 			if a.Contains(entry.Data, "proxy_type") {
 				a.Contains(entry.Data["proxy_type"], testCase.proxyType)
 			}
 		})
+	}
+}
+
+func TestErrorHeader(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	proxySrv, logHook, err := proxyServer()
+	require.NoError(t, err)
+	defer proxySrv.Close()
+
+	// Create a http.Client that uses our proxy
+	client, err := proxyClient(proxySrv.URL)
+	r.NoError(err)
+
+	resp, err := client.Get("http://example.com")
+	r.NoError(err)
+	r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+	r.NotEmpty(resp.Header.Get("X-Smokescreen-Error"))
+
+	entry := findCanonicalProxyDecision(logHook.AllEntries())
+	r.NotNil(entry)
+
+	if a.Contains(entry.Data, "allow") {
+		a.Equal(false, entry.Data["allow"])
 	}
 }
 
