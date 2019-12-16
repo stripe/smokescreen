@@ -318,16 +318,14 @@ func TestInvalidHost(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+				r.NotEmpty(resp.Header.Get("X-Smokescreen-Error"))
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
 			r.NotNil(entry)
 
 			if a.Contains(entry.Data, "allow") {
-				a.Equal(true, entry.Data["allow"])
-			}
-			if a.Contains(entry.Data, "error") {
-				a.Contains(entry.Data["error"], "no such host")
+				a.Equal(false, entry.Data["allow"])
 			}
 			if a.Contains(entry.Data, "proxy_type") {
 				a.Contains(entry.Data["proxy_type"], testCase.proxyType)
@@ -359,6 +357,10 @@ func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
 	conf.Resolver = &net.Resolver{}
 	conf.Log.AddHook(&logHook)
 	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, nil, conf.Log, atomic.Value{})
+	conf.SetupEgressAcl("testdata/acl.yaml")
+	conf.RoleFromRequest = func(req *http.Request) (string, error) {
+		return "dummy-srv", nil
+	}
 
 	proxy := BuildProxy(conf)
 	return httptest.NewServer(proxy), &logHook, nil
