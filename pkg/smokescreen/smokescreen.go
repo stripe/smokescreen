@@ -313,7 +313,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		if resp != nil {
+		userData := ctx.UserData.(*ctxUserData)
+		if resp != nil && userData.decision.allow {
 			resp.Header.Del(errorHeader)
 		}
 

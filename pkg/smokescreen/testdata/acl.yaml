@@ -1,0 +1,10 @@
+---
+    version: v1
+    services:
+      - name: dummy-srv
+        project: security
+        action: enforce
+        allowed_domains:
+          - notarealhost.com
+          - httpbin.org
+    
