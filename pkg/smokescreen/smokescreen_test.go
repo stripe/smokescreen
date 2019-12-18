@@ -56,32 +56,32 @@ func TestClassifyAddr(t *testing.T) {
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 
 	testIPs := []testCase{
-		testCase{"8.8.8.8", 1, ipAllowDefault},
-		testCase{"8.8.9.8", 1, ipAllowUserConfigured},
+		{"8.8.8.8", 1, ipAllowDefault},
+		{"8.8.9.8", 1, ipAllowUserConfigured},
 
 		// Specific blocked networks
-		testCase{"10.0.0.1", 1, ipDenyPrivateRange},
-		testCase{"10.0.0.1", 321, ipAllowUserConfigured},
-		testCase{"10.0.1.1", 1, ipAllowUserConfigured},
-		testCase{"172.16.0.1", 1, ipDenyPrivateRange},
-		testCase{"172.16.1.1", 1, ipAllowUserConfigured},
-		testCase{"192.168.0.1", 1, ipDenyPrivateRange},
-		testCase{"192.168.1.1", 1, ipAllowUserConfigured},
-		testCase{"8.8.8.8", 321, ipDenyUserConfigured},
-		testCase{"1.1.1.1", 1, ipDenyUserConfigured},
+		{"10.0.0.1", 1, ipDenyPrivateRange},
+		{"10.0.0.1", 321, ipAllowUserConfigured},
+		{"10.0.1.1", 1, ipAllowUserConfigured},
+		{"172.16.0.1", 1, ipDenyPrivateRange},
+		{"172.16.1.1", 1, ipAllowUserConfigured},
+		{"192.168.0.1", 1, ipDenyPrivateRange},
+		{"192.168.1.1", 1, ipAllowUserConfigured},
+		{"8.8.8.8", 321, ipDenyUserConfigured},
+		{"1.1.1.1", 1, ipDenyUserConfigured},
 
 		// localhost
-		testCase{"127.0.0.1", 1, ipDenyNotGlobalUnicast},
-		testCase{"127.255.255.255", 1, ipDenyNotGlobalUnicast},
-		testCase{"::1", 1, ipDenyNotGlobalUnicast},
-		testCase{"127.0.1.1", 1, ipAllowUserConfigured},
+		{"127.0.0.1", 1, ipDenyNotGlobalUnicast},
+		{"127.255.255.255", 1, ipDenyNotGlobalUnicast},
+		{"::1", 1, ipDenyNotGlobalUnicast},
+		{"127.0.1.1", 1, ipAllowUserConfigured},
 
 		// ec2 metadata endpoint
-		testCase{"169.254.169.254", 1, ipDenyNotGlobalUnicast},
+		{"169.254.169.254", 1, ipDenyNotGlobalUnicast},
 
 		// Broadcast addresses
-		testCase{"255.255.255.255", 1, ipDenyNotGlobalUnicast},
-		testCase{"ff02:0:0:0:0:0:0:2", 1, ipDenyNotGlobalUnicast},
+		{"255.255.255.255", 1, ipDenyNotGlobalUnicast},
+		{"ff02:0:0:0:0:0:0:2", 1, ipDenyNotGlobalUnicast},
 	}
 
 	for _, test := range testIPs {

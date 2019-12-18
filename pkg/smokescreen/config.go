@@ -263,7 +263,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 	}
 
 	// Verify that all CAs loaded have a CRL
-	for k, _ := range config.clientCasBySubjectKeyId {
+	for k := range config.clientCasBySubjectKeyId {
 		_, ok := config.CrlByAuthorityKeyId[k]
 		if !ok {
 			fmt.Printf("warn: no CRL loaded for Authority ID '%s'\n", hex.EncodeToString([]byte(k)))
