@@ -17,9 +17,7 @@ type Tracker struct {
 	statsc       *statsd.Client
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
-	// many seconds. If there are no reads or writes during this period the
-	// net.Conn will time out. A 0 value for the duration means the connection
-	// will not time out due to inactivity.
+	// many seconds.
 	IdleTimeout time.Duration
 }
 

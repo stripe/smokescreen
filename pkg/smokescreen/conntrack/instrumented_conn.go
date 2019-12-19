@@ -49,9 +49,6 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost
 		BytesOut:     &bytesOut,
 	}
 
-	if t.IdleTimeout != 0 {
-		ic.Conn.SetDeadline(now.Add(t.IdleTimeout))
-	}
 	ic.tracker.Store(ic, nil)
 	ic.tracker.Wg.Add(1)
 
@@ -112,10 +109,6 @@ func (ic *InstrumentedConn) Read(b []byte) (int, error) {
 	now := time.Now()
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
 
-	if ic.tracker.IdleTimeout != 0 {
-		ic.Conn.SetDeadline(now.Add(ic.tracker.IdleTimeout))
-	}
-
 	n, err := ic.Conn.Read(b)
 	atomic.AddUint64(ic.BytesIn, uint64(n))
 
@@ -125,10 +118,6 @@ func (ic *InstrumentedConn) Read(b []byte) (int, error) {
 func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	now := time.Now()
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
-
-	if ic.tracker.IdleTimeout != 0 {
-		ic.Conn.SetDeadline(now.Add(ic.tracker.IdleTimeout))
-	}
 
 	n, err := ic.Conn.Write(b)
 	atomic.AddUint64(ic.BytesOut, uint64(n))
