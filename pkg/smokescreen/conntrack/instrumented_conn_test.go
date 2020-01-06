@@ -84,30 +84,3 @@ func TestInstrumentedConnIdle(t *testing.T) {
 	time.Sleep(time.Second)
 	assert.True(ic.Idle())
 }
-
-func TestInstrumentedConnIdleTimeout(t *testing.T) {
-	assert := assert.New(t)
-
-	tr := NewTestTracker(time.Millisecond)
-
-	server, client := net.Pipe()
-	serverIC := tr.NewInstrumentedConn(server, "testid", "testIdleTimeout", "localhost")
-	clientIC := tr.NewInstrumentedConn(client, "testid", "testIdleTimeout", "localhost")
-	defer serverIC.Close()
-	defer clientIC.Close()
-
-	time.Sleep(1 * time.Second)
-
-	n, err := clientIC.Write([]byte("timeout"))
-	assert.Zero(n)
-	assert.NotNil(err)
-	netError := err.(net.Error)
-	assert.True(netError.Timeout())
-
-	n, err = serverIC.Read([]byte{})
-	assert.Zero(n)
-	assert.NotNil(err)
-	netError = err.(net.Error)
-	assert.True(netError.Timeout())
-
-}

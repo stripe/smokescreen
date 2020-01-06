@@ -56,7 +56,6 @@ type Config struct {
 	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
-	// If there are no reads or writes during this period the net.Conn will time out
 	IdleTimeout time.Duration
 }
 
