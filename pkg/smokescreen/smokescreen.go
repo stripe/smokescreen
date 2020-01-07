@@ -46,7 +46,6 @@ type smokescreenContext struct {
 	start    time.Time
 	decision *aclDecision
 	traceId  string
-	toAddr   *net.TCPAddr
 }
 
 type denyError struct {
@@ -257,7 +256,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		sctx := &smokescreenContext{time.Now(), nil, "", nil}
+		sctx := &smokescreenContext{time.Now(), nil, ""}
 		pctx.UserData = sctx
 
 		// Build an address parsable by net.ResolveTCPAddr
@@ -302,7 +301,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		ctx.UserData = &smokescreenContext{time.Now(), nil, "", nil}
+		ctx.UserData = &smokescreenContext{time.Now(), nil, ""}
 		defer ctx.Req.Header.Del(traceHeader)
 
 		err := handleConnect(config, ctx)
@@ -352,9 +351,9 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx, proxyType string) {
 		"trace_id":       sctx.traceId,
 	}
 
-	if sctx.toAddr != nil {
-		fields["dest_ip"] = sctx.toAddr.IP.String()
-		fields["dest_port"] = sctx.toAddr.Port
+	if sctx.decision.resolvedAddr != nil {
+		fields["dest_ip"] = sctx.decision.resolvedAddr.IP.String()
+		fields["dest_port"] = sctx.decision.resolvedAddr.Port
 	}
 
 	// attempt to retrieve information about the host originating the proxy request
@@ -410,6 +409,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
 	// Check if requesting role is allowed to talk to remote
 	sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.Host)
 	sctx.traceId = pctx.Req.Header.Get(traceHeader)
+
 	logProxy(config, pctx, "connect")
 	if pctx.Error != nil {
 		return pctx.Error
