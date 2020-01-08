@@ -30,7 +30,7 @@
   name = "github.com/elazarl/goproxy"
   packages = ["."]
   pruneopts = ""
-  revision = "ed8790a91b903f909801c6acd3539411eec1a4a7"
+  revision = "60c34f1ff5bd4b0f7c6c8ee3b7a4a32e80e1f22b"
   source = "git@github.com:stripe/goproxy.git"
 
 [[projects]]
