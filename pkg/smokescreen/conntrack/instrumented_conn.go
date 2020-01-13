@@ -60,6 +60,7 @@ func (ic *InstrumentedConn) Close() error {
 	defer ic.Unlock()
 
 	if ic.closed {
+		ic.tracker.Log.Error("Close() called on previously closed connection")
 		return ic.CloseError
 	}
 
