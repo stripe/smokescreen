@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
+	"time"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -166,7 +167,16 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr: &http.Transport{
+			TLSClientConfig: tlsClientSkipVerify,
+			Proxy:           http.ProxyFromEnvironment,
+
+			// Default Transport settings
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 
