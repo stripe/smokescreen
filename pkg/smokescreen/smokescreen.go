@@ -461,7 +461,9 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.StatsdClient, config.Log, config.ShuttingDown)
 
 	server := http.Server{
-		Handler: handler,
+		Handler:      handler,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	config.ShuttingDown.Store(false)
