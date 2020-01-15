@@ -369,7 +369,7 @@ func logProxy(
 	if ctx.Req.TLS != nil && len(ctx.Req.TLS.PeerCertificates) > 0 {
 		fields["src_host_common_name"] = ctx.Req.TLS.PeerCertificates[0].Subject.CommonName
 		var ou_entries = ctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if ou_entries != nil && len(ou_entries) > 0 {
+		if len(ou_entries) > 0 {
 			fields["src_host_organization_unit"] = ou_entries[0]
 		}
 	}
