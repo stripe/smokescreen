@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,6 +61,8 @@ func (ic *InstrumentedConn) Close() error {
 	defer ic.Unlock()
 
 	if ic.closed {
+		ic.tracker.Log.Errorf("close called on already closed conn. role=%v host=%v", ic.Role, ic.OutboundHost)
+		debug.PrintStack()
 		return ic.CloseError
 	}
 
