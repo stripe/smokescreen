@@ -73,7 +73,7 @@ func (proxy *ProxyHttpServer) dialContext(ctx *ProxyCtx, network, addr string) (
 		pctx := context.WithValue(context.Background(), ProxyContextKey, ctx)
 		return proxy.Tr.DialContext(pctx, network, addr)
 	}
-	return proxy.ConnectDial(network, addr)
+	return proxy.connectDial(network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDialContext(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
@@ -135,12 +135,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+
+		var wg sync.WaitGroup
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go func() {
+				wg.Add(2)
+				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
+				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+				wg.Wait()
+
+				// Always call Close() as custom dialers can return stateful wrapped net.Conns
+				targetSiteCon.Close()
+			}()
 		} else {
 			go func() {
-				var wg sync.WaitGroup
 				wg.Add(2)
 				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
 				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
@@ -324,13 +332,14 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, wg *sync.WaitGroup) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
 	dst.CloseWrite()
 	src.CloseRead()
+	wg.Done()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
@@ -451,13 +460,21 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 	}
 }
 
-func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, httpsProxy, host string) (net.Conn, error) {
-	c, err := proxy.dialContext(ctx, "tcp", httpsProxy)
+func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHost, host string) (net.Conn, error) {
+	proxyURL, err := url.Parse(proxyHost)
 	if err != nil {
 		return nil, err
 	}
 
-	c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	c, err := proxy.ConnectDialContext(ctx, "tcp", proxyHost)
+	if err != nil {
+		return nil, err
+	}
+
+	if proxyURL.Scheme == "https" {
+		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	}
+
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
