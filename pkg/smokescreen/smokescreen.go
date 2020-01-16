@@ -246,6 +246,18 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
+
+	// Set timeout values for goproxy's transport. This is used
+	// for non CONNECT requests
+	proxy.Tr.DialContext = (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+	proxy.Tr.MaxIdleConns = 100
+	proxy.Tr.IdleConnTimeout = 90 * time.Second
+	proxy.Tr.TLSHandshakeTimeout = 10 * time.Second
+	proxy.Tr.ExpectContinueTimeout = 1 * time.Second
+
 	proxy.ConnectDialContext = func(proxyCtx *goproxy.ProxyCtx, network, addr string) (net.Conn, error) {
 		return dialContext(proxyCtx, config, network, addr)
 	}
