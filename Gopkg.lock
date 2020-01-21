@@ -26,11 +26,11 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:7bebc81046464cf8b6a159e95ff8e2480d63e0be743fcdba986cade5580fdf78"
+  digest = "1:211e2226fdb046d9bcb3be5a8c87211fac5c26200637203ed1d41ae9f0c1c41d"
   name = "github.com/elazarl/goproxy"
   packages = ["."]
   pruneopts = ""
-  revision = "31709788377d16eea06bf97a669f7e96e5647412"
+  revision = "93908256a0f4c7cd71016f3b3cf8effcba430cba"
   source = "git@github.com:stripe/goproxy.git"
 
 [[projects]]
