@@ -134,7 +134,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
 		if proxy.CopyHandler != nil {
-			proxy.CopyHandler(ctx, proxyClient, targetSiteCon)
+			go proxy.CopyHandler(ctx, proxyClient, targetSiteCon)
 			return
 		}
 

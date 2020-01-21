@@ -5,11 +5,13 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -238,6 +240,51 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return ic, err
 }
 
+func copyHandler(pctx *goproxy.ProxyCtx, proxyClient, proxyTarget net.Conn) {
+	sctx, _ := pctx.UserData.(*smokescreenContext)
+
+	// ProxyTarget should always be an Instrumentedconn
+	targetIC, ok := proxyTarget.(*conntrack.InstrumentedConn)
+	if !ok {
+		sctx.cfg.Log.Error("proxyTarget did not assert to InstrumentedConn")
+	}
+	targetTCP, targetOK := targetIC.Conn.(*net.TCPConn)
+	clientTCP, clientOK := proxyClient.(*net.TCPConn)
+
+	var wg sync.WaitGroup
+	tcpCopyFn := func(dst, src *net.TCPConn) {
+		sctx.cfg.Log.Warn("called tcpCopyFn")
+		_, err := io.Copy(dst, src)
+		if err != nil {
+			sctx.cfg.Log.Errorf("tcpCopyFn error: %s", err)
+		}
+		dst.CloseWrite()
+		src.CloseRead()
+		wg.Done()
+	}
+
+	connCopyFn := func(dst io.Writer, src io.Reader) {
+		sctx.cfg.Log.Warn("called connCopyFn")
+		_, err := io.Copy(dst, src)
+		if err != nil {
+			sctx.cfg.Log.Errorf("connCopyFn error: %s", err)
+		}
+		wg.Done()
+	}
+
+	wg.Add(2)
+	if targetOK && clientOK {
+		go tcpCopyFn(targetTCP, clientTCP)
+		go tcpCopyFn(clientTCP, targetTCP)
+	} else {
+		go connCopyFn(proxyTarget, proxyClient)
+		go connCopyFn(proxyClient, proxyTarget)
+	}
+	wg.Wait()
+	proxyClient.Close()
+	proxyTarget.Close()
+}
+
 func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
 	var msg string
 	switch err.(type) {
@@ -294,6 +341,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		ctx := context.WithValue(req.Context(), goproxy.ProxyContextKey, pctx)
 		return proxy.Tr.RoundTrip(req.WithContext(ctx))
 	})
+
+	proxy.CopyHandler = copyHandler
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
