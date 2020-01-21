@@ -252,8 +252,9 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 
 func configureTransport(tr *http.Transport) {
 	tr.DialContext = dialContext
-	tr.MaxIdleConns = 100
-	tr.IdleConnTimeout = 90 * time.Second
+	tr.MaxIdleConns = 2048
+	tr.MaxIdleConnsPerHost = 128
+	tr.IdleConnTimeout = 120 * time.Second
 	tr.TLSHandshakeTimeout = 10 * time.Second
 	tr.ExpectContinueTimeout = 1 * time.Second
 }
