@@ -11,4 +11,5 @@ type InstrumentedConnStats struct {
 	BytesIn                  uint64    `json:"bytesIn"`
 	BytesOut                 uint64    `json:"bytesOut"`
 	SecondsSinceLastActivity float64   `json:"secondsSinceLastActivity"`
+	Timeout                  string    `json:"idleTimeout"`
 }

@@ -22,6 +22,7 @@ type InstrumentedConn struct {
 
 	Start        time.Time
 	LastActivity *int64 // Unix nano
+	timeout      time.Duration
 
 	BytesIn  *uint64
 	BytesOut *uint64
@@ -30,6 +31,17 @@ type InstrumentedConn struct {
 
 	closed     bool
 	CloseError error
+}
+
+func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, traceId, role, outboundHost string) (*InstrumentedConn, error) {
+	ic := t.NewInstrumentedConn(conn, traceId, role, outboundHost)
+	ic.timeout = timeout
+
+	var err error
+	if timeout != 0 {
+		err = ic.SetDeadline(time.Now().Add(timeout))
+	}
+	return ic, err
 }
 
 func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost string) *InstrumentedConn {
@@ -57,9 +69,6 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost
 }
 
 func (ic *InstrumentedConn) Close() error {
-	ic.Lock()
-	defer ic.Unlock()
-
 	if ic.closed {
 		ic.tracker.Log.Errorf("close called on already closed conn. role=%v host=%v", ic.Role, ic.OutboundHost)
 		debug.PrintStack()
@@ -110,6 +119,10 @@ func (ic *InstrumentedConn) Close() error {
 
 func (ic *InstrumentedConn) Read(b []byte) (int, error) {
 	now := time.Now()
+	if ic.timeout != 0 {
+		ic.Conn.SetDeadline(now.Add(ic.timeout))
+	}
+
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
 
 	n, err := ic.Conn.Read(b)
@@ -120,6 +133,10 @@ func (ic *InstrumentedConn) Read(b []byte) (int, error) {
 
 func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	now := time.Now()
+	if ic.timeout != 0 {
+		ic.Conn.SetDeadline(now.Add(ic.timeout))
+	}
+
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
 
 	n, err := ic.Conn.Write(b)
@@ -156,6 +173,7 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 		BytesIn:                  *ic.BytesIn,
 		BytesOut:                 *ic.BytesOut,
 		SecondsSinceLastActivity: time.Now().Sub(time.Unix(0, *ic.LastActivity)).Seconds(),
+		Timeout:                  ic.timeout.String(),
 	}
 }
 
