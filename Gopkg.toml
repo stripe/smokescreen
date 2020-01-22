@@ -15,7 +15,7 @@
   source = "git@github.com:stripe/goproxy.git"
   # We maintain our own forked version of goproxy v1.1 which allows us
   # to pass context to the net.Dial family of functions.
-  revision = "3386a335399ef330f4262752d2643def2aa08dcc"
+  revision = "00e4a7c269c0e5ec7e26c16abe9614923d174f1a"
 
 [[constraint]]
   branch = "master"

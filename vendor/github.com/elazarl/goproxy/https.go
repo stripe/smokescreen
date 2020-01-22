@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/http/httpproxy"
 )
@@ -95,6 +96,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	if e != nil {
 		panic("Cannot hijack connection " + e.Error())
 	}
+
+	proxyClient = NewTimeoutConn(3*time.Minute, proxyClient)
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
