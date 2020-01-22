@@ -123,7 +123,10 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return err
 		}
 
-		c.SetupCrls(yc.Tls.CRLFiles)
+		err = c.SetupCrls(yc.Tls.CRLFiles)
+		if err != nil {
+			return err
+		}
 	}
 
 	c.AllowMissingRole = yc.AllowMissingRole
