@@ -211,6 +211,15 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 	a.Error(acl.Add("acl", r))
 }
 
+func TestACLMalformedPolicyDisable(t *testing.T) {
+	_, err := New(
+		logrus.New(),
+		NewYAMLLoader("testdata/no_default.yaml"), // any file will do
+		[]string{"sillystring"},
+	)
+	assert.Error(t, err)
+}
+
 func TestACLAddInvalidDomain(t *testing.T) {
 	a := assert.New(t)
 
