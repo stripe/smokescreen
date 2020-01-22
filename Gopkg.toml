@@ -13,11 +13,8 @@
 [[constraint]]
   name = "github.com/elazarl/goproxy"
   source = "git@github.com:stripe/goproxy.git"
-  # We previously pinned to 0890fc15d1b6428a674b8252a2d238ca589daf73
-  # to avoid introducing a timeout bug that was introduced after that commit.
-  # We've subsequently switched to our own fork of goproxy, and the master branch
-  # of our fork has reverted that bug.
-  revision = "9a6e5f1617e55b9bf9e2417ed8d031af98d99132"
+  # We maintain own fork of goproxy based on the v1.1 release
+  revision = "7f0347c4e99b2c764024a340b1af1c895cca44f8"
 
 [[constraint]]
   branch = "master"
