@@ -37,7 +37,10 @@ func (s *StatsServer) Serve() {
 	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
 
 	s.ln = ln
-	http.Serve(s.ln, s.mux)
+	err = http.Serve(s.ln, s.mux)
+	if err != nil {
+		s.config.Log.Fatal("Could not start the reporting server.", err)
+	}
 }
 
 func (s *StatsServer) Shutdown() {
