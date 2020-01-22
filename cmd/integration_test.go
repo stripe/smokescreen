@@ -58,7 +58,7 @@ func testRFRCert(req *http.Request) (string, error) {
 
 type TestCase struct {
 	ExpectAllow   bool
-	OverTls       bool
+	OverTLS       bool
 	OverConnect   bool
 	ProxyURL      string
 	TargetPort    int
@@ -176,7 +176,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 				if err != nil {
 					return nil, err
 				}
-				if test.OverTls {
+				if test.OverTLS {
 					var certs []tls.Certificate
 
 					if test.RoleName != "" {
@@ -198,11 +198,11 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 					caPool := x509.NewCertPool()
 					a.True(caPool.AppendCertsFromPEM(caBytes))
 
-					proxyTlsClientConfig := tls.Config{
+					proxyTLSClientConfig := tls.Config{
 						Certificates: certs,
 						RootCAs:      caPool,
 					}
-					connRaw, err := tls.Dial("tcp", proxyURL.Host, &proxyTlsClientConfig)
+					connRaw, err := tls.Dial("tcp", proxyURL.Host, &proxyTLSClientConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -251,7 +251,7 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 	}
 	a.NoError(err)
 
-	if !test.OverTls && !test.OverConnect { // If we're not talking to the proxy over TLS, let's use headers as identifiers
+	if !test.OverTLS && !test.OverConnect { // If we're not talking to the proxy over TLS, let's use headers as identifiers
 		req.Header.Add("X-Smokescreen-Role", "egressneedingservice-"+test.RoleName)
 		req.Header.Add("X-Random-Trace", fmt.Sprintf("%d", test.RandomTrace))
 	}
@@ -278,24 +278,24 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	dummyServer := NewDummyServer()
 	outsideListener, err := net.Listen("tcp4", "127.0.0.1:")
-	outsideListenerUrl, err := url.Parse(fmt.Sprintf("http://%s", outsideListener.Addr().String()))
+	outsideListenerURL, err := url.Parse(fmt.Sprintf("http://%s", outsideListener.Addr().String()))
 	r.NoError(err)
-	outsideListenerPort, err := strconv.Atoi(outsideListenerUrl.Port())
+	outsideListenerPort, err := strconv.Atoi(outsideListenerURL.Port())
 	r.NoError(err)
 
 	go dummyServer.Serve(outsideListener)
 
 	var logHook logrustest.Hook
 	servers := map[bool]*httptest.Server{}
-	for _, useTls := range []bool{true, false} {
-		server, err := startSmokescreen(t, useTls, &logHook)
+	for _, useTLS := range []bool{true, false} {
+		server, err := startSmokescreen(t, useTLS, &logHook)
 		require.NoError(t, err)
 		defer server.Close()
-		servers[useTls] = server
+		servers[useTLS] = server
 	}
 
 	// Generate all non-tls tests
-	overTlsDomain := []bool{true, false}
+	overTLSDomain := []bool{true, false}
 	overConnectDomain := []bool{true, false}
 	authorizedHostsDomain := []bool{true, false}
 	actionsDomain := []acl.EnforcementPolicy{
@@ -307,8 +307,8 @@ func TestSmokescreenIntegration(t *testing.T) {
 	var testCases []*TestCase
 
 	for _, overConnect := range overConnectDomain {
-		for _, overTls := range overTlsDomain {
-			if overTls && !overConnect {
+		for _, overTLS := range overTLSDomain {
+			if overTLS && !overConnect {
 				// Is a super sketchy use case, let's not do that.
 				continue
 			}
@@ -324,9 +324,9 @@ func TestSmokescreenIntegration(t *testing.T) {
 				for _, action := range actionsDomain {
 					testCase := &TestCase{
 						ExpectAllow: authorizedHost || action != acl.Enforce,
-						OverTls:     overTls,
+						OverTLS:     overTLS,
 						OverConnect: overConnect,
-						ProxyURL:    servers[overTls].URL,
+						ProxyURL:    servers[overTLS].URL,
 						TargetPort:  outsideListenerPort,
 						Host:        host,
 						RoleName:    generateRoleForAction(action),
@@ -376,7 +376,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		// this test will fail if we're not respecting the UpstreamProxy setting
 		// and instead going straight to this host.
 		proxyCase.Host = "aws.s3.amazonaws.com"
-		proxyCase.UpstreamProxy = outsideListenerUrl.String()
+		proxyCase.UpstreamProxy = outsideListenerURL.String()
 		proxyCase.ExpectAllow = true
 		proxyCase.RoleName = generateRoleForAction(acl.Open)
 
@@ -424,7 +424,7 @@ func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	return nil
 }
 
-func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
@@ -435,7 +435,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		"--deny-address=1.0.0.1:123",
 	}
 
-	if useTls {
+	if useTLS {
 		args = append(args,
 			"--tls-server-bundle-file=testdata/pki/server-bundle.pem",
 			"--tls-client-ca-file=testdata/pki/ca.pem",
@@ -448,7 +448,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 		t.Fatalf("Failed to create configuration: %v", err)
 	}
 
-	if useTls {
+	if useTLS {
 		conf.RoleFromRequest = testRFRCert
 	} else {
 		conf.RoleFromRequest = testRFRHeader
@@ -460,7 +460,7 @@ func startSmokescreen(t *testing.T, useTls bool, logHook logrus.Hook) (*httptest
 	handler := smokescreen.BuildProxy(conf)
 	server := httptest.NewUnstartedServer(handler)
 
-	if useTls {
+	if useTLS {
 		server.TLS = conf.TlsConfig
 		server.StartTLS()
 	} else {

@@ -15,8 +15,8 @@ import (
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
-// Process command line args into a configuration object.  If the "--help" or
-// "--version" flags are provided, return nil with no error.
+// NewConfiguration processes command line args into a configuration object.
+// If the "--help" or "--version" flags are provided, return nil with no error.
 // If args is nil, os.Args will be used.  If logger is nil, a default logger
 // will be created and included in the returned configuration.
 func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, error) {
