@@ -250,6 +250,20 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 	return resp
 }
 
+func configureTransport(tr *http.Transport, cfg *Config) {
+	if cfg.TransportMaxIdleConns != 0 {
+		tr.MaxIdleConns = cfg.TransportMaxIdleConns
+	}
+
+	if cfg.TransportMaxIdleConnsPerHost != 0 {
+		tr.MaxIdleConnsPerHost = cfg.TransportMaxIdleConns
+	}
+
+	if cfg.IdleTimeout != 0 {
+		tr.IdleConnTimeout = cfg.IdleTimeout
+	}
+}
+
 func newContext(cfg *Config) *smokescreenContext {
 	return &smokescreenContext{
 		cfg:   cfg,
@@ -260,6 +274,7 @@ func newContext(cfg *Config) *smokescreenContext {
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
+	configureTransport(proxy.Tr, config)
 
 	// dialContext will be invoked for both CONNECT and traditional proxy requests
 	proxy.Tr.DialContext = dialContext
