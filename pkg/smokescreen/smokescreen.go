@@ -287,6 +287,11 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return proxy.Tr.RoundTrip(req.WithContext(ctx))
 	})
 
+	// Associate a timeout with the CONNECT proxy client connection
+	proxy.ConnectClientConnHandler = func(conn net.Conn) net.Conn {
+		return NewTimeoutConn(conn, config.IdleTimeout)
+	}
+
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Attach smokescreenContext to goproxy.ProxyCtx
