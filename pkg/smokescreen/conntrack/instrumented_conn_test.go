@@ -35,7 +35,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		icWriter := tr.NewInstrumentedConn(conn, "testid", "test", "localhost")
+		icWriter := tr.NewInstrumentedConn(conn, "testid", "test", "localhost", "http")
 
 		n, err := icWriter.Write(sent)
 		if err != nil {
@@ -51,7 +51,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	icReader := tr.NewInstrumentedConn(conn, "testid", "testBytesInOut", "localhost")
+	icReader := tr.NewInstrumentedConn(conn, "testid", "testBytesInOut", "localhost", "http")
 
 	go func() {
 		defer wg.Done()
@@ -76,7 +76,7 @@ func TestInstrumentedConnIdle(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Millisecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testIdle", "localhost")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testIdle", "localhost", "egress")
 
 	ic.Write([]byte("egress"))
 	assert.False(ic.Idle())

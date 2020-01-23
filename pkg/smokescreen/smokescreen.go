@@ -29,6 +29,9 @@ const (
 	ipDenyUserConfigured
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
+
+	httpProxy    = "http"
+	connectProxy = "connect"
 )
 
 var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
@@ -43,10 +46,11 @@ type aclDecision struct {
 }
 
 type smokescreenContext struct {
-	cfg      *Config
-	start    time.Time
-	decision *aclDecision
-	traceId  string
+	cfg       *Config
+	start     time.Time
+	decision  *aclDecision
+	traceId   string
+	proxyType string
 }
 
 type denyError struct {
@@ -217,10 +221,16 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
 		return nil, err
 	}
-
 	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-	// Wrap the dialed net.Conn with IntrumentedConn for tracking
-	return sctx.cfg.ConnTracker.NewInstrumentedConn(conn, sctx.traceId, d.role, d.outboundHost), nil
+
+	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
+	// requests are pooled and reused by net.Transport.
+	if sctx.proxyType == connectProxy {
+		conn = sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.traceId, d.role, d.outboundHost, sctx.proxyType)
+	} else {
+		conn = NewTimeoutConn(conn, sctx.cfg.IdleTimeout)
+	}
+	return conn, nil
 }
 
 func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
@@ -264,10 +274,11 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 	}
 }
 
-func newContext(cfg *Config) *smokescreenContext {
+func newContext(cfg *Config, proxyType string) *smokescreenContext {
 	return &smokescreenContext{
-		cfg:   cfg,
-		start: time.Now(),
+		cfg:       cfg,
+		start:     time.Now(),
+		proxyType: proxyType,
 	}
 }
 
@@ -288,14 +299,16 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	// Associate a timeout with the CONNECT proxy client connection
-	proxy.ConnectClientConnHandler = func(conn net.Conn) net.Conn {
-		return NewTimeoutConn(conn, config.IdleTimeout)
+	if config.IdleTimeout != 0 {
+		proxy.ConnectClientConnHandler = func(conn net.Conn) net.Conn {
+			return NewTimeoutConn(conn, config.IdleTimeout)
+		}
 	}
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Attach smokescreenContext to goproxy.ProxyCtx
-		sctx := newContext(config)
+		sctx := newContext(config, httpProxy)
 		pctx.UserData = sctx
 
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
@@ -344,7 +357,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		defer ctx.Req.Header.Del(traceHeader)
-		ctx.UserData = newContext(config)
+		ctx.UserData = newContext(config, connectProxy)
 
 		err := handleConnect(config, ctx)
 		if err != nil {
