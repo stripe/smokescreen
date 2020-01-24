@@ -32,6 +32,7 @@ type RuleRange struct {
 type Config struct {
 	Ip                           string
 	Port                         uint16
+	Listener                     net.Listener
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
 	Resolver                     *net.Resolver

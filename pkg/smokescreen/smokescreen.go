@@ -492,10 +492,14 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
 	proxy := BuildProxy(config)
+	listener := config.Listener
+	var err error
 
-	listener, err := findListener(config.Ip, config.Port)
-	if err != nil {
-		config.Log.Fatal("can't find listener", err)
+	if listener == nil {
+		listener, err = findListener(config.Ip, config.Port)
+		if err != nil {
+			config.Log.Fatal("can't find listener", err)
+		}
 	}
 
 	if config.SupportProxyProtocol {

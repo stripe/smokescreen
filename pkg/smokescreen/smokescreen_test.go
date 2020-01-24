@@ -3,6 +3,7 @@
 package smokescreen
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -107,7 +108,10 @@ func TestClearsErrorHeader(t *testing.T) {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	proxySrv, _, err := proxyServer()
+	cfg, err := testConfig("test-trusted-srv")
+	r.NoError(err)
+
+	proxySrv := proxyServer(cfg)
 	r.NoError(err)
 	defer proxySrv.Close()
 
@@ -304,8 +308,11 @@ func TestInvalidHost(t *testing.T) {
 			a := assert.New(t)
 			r := require.New(t)
 
-			proxySrv, logHook, err := proxyServer()
+			cfg, err := testConfig("test-trusted-srv")
 			require.NoError(t, err)
+			logHook := proxyLogHook(cfg)
+
+			proxySrv := proxyServer(cfg)
 			defer proxySrv.Close()
 
 			// Create a http.Client that uses our proxy
@@ -340,8 +347,11 @@ func TestErrorHeader(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
-	proxySrv, logHook, err := proxyServer()
+	cfg, err := testConfig("test-trusted-srv")
 	require.NoError(t, err)
+	logHook := proxyLogHook(cfg)
+
+	proxySrv := proxyServer(cfg)
 	defer proxySrv.Close()
 
 	// Create a http.Client that uses our proxy
@@ -361,6 +371,167 @@ func TestErrorHeader(t *testing.T) {
 	}
 }
 
+// TestProxyProtocols ensures that both traditional HTTP and CONNECT proxy
+// requests Emit the correct CANONICAL-PROXY-DECISION log
+func TestProxyProtocols(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+
+	t.Run("HTTP proxy", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		clientCh := make(chan bool)
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		logHook := proxyLogHook(cfg)
+		proxy := proxyServer(cfg)
+		remote := httptest.NewServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		go func() {
+			client.Do(req)
+			clientCh <- true
+		}()
+
+		<-clientCh
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+
+		r.Contains(entry.Data, "proxy_type")
+		r.Equal("http", entry.Data["proxy_type"])
+	})
+
+	t.Run("CONNECT proxy", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		clientCh := make(chan bool)
+		serverCh := make(chan bool)
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCh <- true
+			<-serverCh
+			w.Write([]byte("OK"))
+		})
+
+		logHook := proxyLogHook(cfg)
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		go func() {
+			client.Do(req)
+			clientCh <- true
+		}()
+
+		<-serverCh
+		count := 0
+		cfg.ConnTracker.Range(func(k, v interface{}) bool {
+			count++
+			return true
+		})
+		a.Equal(1, count, "connTracker should contain one tracked connection")
+		serverCh <- true
+
+		<-clientCh
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+
+		r.Contains(entry.Data, "proxy_type")
+		r.Equal("connect", entry.Data["proxy_type"])
+	})
+}
+
+func TestProxyTimeouts(t *testing.T) {
+	r := require.New(t)
+
+	timeout := 50 * time.Millisecond
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * timeout)
+		w.Write([]byte("OK"))
+	})
+
+	t.Run("HTTP proxy timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		logHook := proxyLogHook(cfg)
+		cfg.IdleTimeout = timeout
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		resp, _ := client.Do(req)
+		r.Equal(407, resp.StatusCode)
+
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+
+		r.Equal("http", entry.Data["proxy_type"])
+		r.Contains(entry.Data["error"], "i/o timeout")
+	})
+
+	t.Run("CONNECT proxy timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.IdleTimeout = timeout
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "EOF")
+	})
+
+}
+
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
 		if entry.Message == LOGLINE_CANONICAL_PROXY_DECISION {
@@ -370,27 +541,33 @@ func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	return nil
 }
 
-func proxyServer() (*httptest.Server, *logrustest.Hook, error) {
-	var logHook logrustest.Hook
-
+func testConfig(role string) (*Config, error) {
 	conf := NewConfig()
-	conf.Port = 39381
+
 	if err := conf.SetAllowRanges(allowRanges); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	conf.ConnectTimeout = 10 * time.Second
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 	conf.Resolver = &net.Resolver{}
-	conf.Log.AddHook(&logHook)
 	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, nil, conf.Log, atomic.Value{})
 	conf.SetupEgressAcl("testdata/acl.yaml")
 	conf.RoleFromRequest = func(req *http.Request) (string, error) {
-		return "dummy-srv", nil
+		return role, nil
 	}
+	return conf, nil
+}
 
+func proxyLogHook(conf *Config) *logrustest.Hook {
+	var testHook logrustest.Hook
+	conf.Log.AddHook(&testHook)
+	return &testHook
+}
+
+func proxyServer(conf *Config) *httptest.Server {
 	proxy := BuildProxy(conf)
-	return httptest.NewServer(proxy), &logHook, nil
+	return httptest.NewServer(proxy)
 }
 
 func proxyClient(proxy string) (*http.Client, error) {
@@ -404,6 +581,7 @@ func proxyClient(proxy string) (*http.Client, error) {
 			Proxy:                 http.ProxyURL(proxyUrl),
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 	}, nil
 }

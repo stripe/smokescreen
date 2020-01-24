@@ -2,6 +2,7 @@ package conntrack
 
 import (
 	"io"
+	"log"
 	"net"
 	"sync"
 	"testing"
@@ -83,4 +84,63 @@ func TestInstrumentedConnIdle(t *testing.T) {
 
 	time.Sleep(time.Second)
 	assert.True(ic.Idle())
+}
+
+var timeoutTests = []struct {
+	name          string
+	timeout       time.Duration
+	expectedError bool
+}{
+	{"no timeout with zero duration", 0, false},
+	{"timeout after duration", 50 * time.Millisecond, true},
+}
+
+func TestInstrumentedConnWithTimeout(t *testing.T) {
+	addr := "localhost:0"
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	handler := func(ln net.Listener) {
+		c, err := ln.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(250 * time.Millisecond)
+		c.Write([]byte("timeout-test"))
+		defer c.Close()
+	}
+
+	tr := NewTestTracker(0)
+
+	for _, tt := range timeoutTests {
+		go handler(ln)
+
+		c, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var b [1]byte
+		ic := tr.NewInstrumentedConnWithTimeout(c, tt.timeout, "", "test", "testHost", "http")
+
+		_, err = ic.Read(b[:])
+		if err == nil && tt.expectedError {
+			t.Fatalf("%v: expected=%v got=%v", tt.name, tt.expectedError, err)
+		}
+
+		if err != nil && !tt.expectedError {
+			t.Fatalf("%v: expected=%v got=%v", tt.name, tt.expectedError, err)
+		}
+
+		if err != nil {
+			if err, ok := err.(net.Error); ok && !err.Timeout() {
+				log.Fatal(err)
+				t.Fatalf("%v: expected timeout error - got: %v", tt.name, err)
+			}
+		}
+		ic.Close()
+	}
 }
