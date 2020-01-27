@@ -527,6 +527,14 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		Handler: handler,
 	}
 
+	// This sets an IdleTimeout on _all_ client connections. CONNECT requests
+	// hijacked by goproxy inherit the deadline set here. The deadlines are
+	// reset by the proxy.ConnectClientConnHandler, which wraps the hijacked
+	// connection in a TimeoutConn which bumps the deadline for every read/write.
+	if config.IdleTimeout != 0 {
+		server.IdleTimeout = config.IdleTimeout
+	}
+
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 	return
