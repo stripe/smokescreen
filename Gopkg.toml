@@ -14,7 +14,7 @@
   name = "github.com/elazarl/goproxy"
   source = "git@github.com:stripe/goproxy.git"
   # We maintain own fork of goproxy based on the v1.1 release
-  revision = "7f0347c4e99b2c764024a340b1af1c895cca44f8"
+  revision = "e34c7f6dab2815c58b0d891a345ab31d0d8e215d"
 
 [[constraint]]
   branch = "master"

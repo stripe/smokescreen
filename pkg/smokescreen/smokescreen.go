@@ -29,6 +29,9 @@ const (
 	ipDenyUserConfigured
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
+
+	httpProxy    = "http"
+	connectProxy = "connect"
 )
 
 var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
@@ -43,9 +46,11 @@ type aclDecision struct {
 }
 
 type smokescreenContext struct {
-	start    time.Time
-	decision *aclDecision
-	traceId  string
+	cfg       *Config
+	start     time.Time
+	decision  *aclDecision
+	traceId   string
+	proxyType string
 }
 
 type denyError struct {
@@ -176,44 +181,56 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 	return nil, "destination address was denied by rule, see error", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
 }
 
-func dialContext(pctx *goproxy.ProxyCtx, config *Config, network, addr string) (net.Conn, error) {
-	var role, outboundHost, reason, traceId string
-	var resolved *net.TCPAddr
+func proxyContext(ctx context.Context) (*goproxy.ProxyCtx, bool) {
+	pctx, ok := ctx.Value(goproxy.ProxyContextKey).(*goproxy.ProxyCtx)
+	return pctx, ok
+}
 
-	if v, ok := pctx.UserData.(*smokescreenContext); ok {
-		role = v.decision.role
-		outboundHost = v.decision.outboundHost
-		resolved = v.decision.resolvedAddr
-		traceId = v.traceId
+func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	pctx, ok := proxyContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("dialContext missing required *goproxy.ProxyCtx")
 	}
 
-	if resolved == nil || addr != outboundHost || network != "tcp" {
+	sctx, ok := pctx.UserData.(*smokescreenContext)
+	if !ok {
+		return nil, fmt.Errorf("dialContext missing required *smokescreenContext")
+	}
+	d := sctx.decision
+
+	// If an address hasn't been resolved, does not match the original outboundHost,
+	// or is not tcp we must re-resolve it before establishing the connection.
+	if d.resolvedAddr == nil || d.outboundHost != addr || network != "tcp" {
 		var err error
-		resolved, reason, err = safeResolve(config, network, addr)
-		pctx.UserData.(*smokescreenContext).decision.reason = reason
+		d.resolvedAddr, d.reason, err = safeResolve(sctx.cfg, network, addr)
 		if err != nil {
 			if _, ok := err.(denyError); ok {
-				config.Log.WithFields(
+				sctx.cfg.Log.WithFields(
 					logrus.Fields{
 						"address": addr,
 						"error":   err,
 					}).Error("unexpected illegal address in dialer")
 			}
-
 			return nil, err
 		}
 	}
 
-	config.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
-	conn, err := net.DialTimeout(network, resolved.String(), config.ConnectTimeout)
-
+	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
+	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	if err != nil {
-		config.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
+		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
 		return nil, err
-	} else {
-		config.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-		return config.ConnTracker.NewInstrumentedConn(conn, traceId, role, outboundHost), nil
 	}
+	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
+
+	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
+	// requests are pooled and reused by net.Transport.
+	if sctx.proxyType == connectProxy {
+		conn = sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.traceId, d.role, d.outboundHost, sctx.proxyType)
+	} else {
+		conn = NewTimeoutConn(conn, sctx.cfg.IdleTimeout)
+	}
+	return conn, nil
 }
 
 func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
@@ -243,21 +260,59 @@ func rejectResponse(req *http.Request, config *Config, err error) *http.Response
 	return resp
 }
 
+func configureTransport(tr *http.Transport, cfg *Config) {
+	if cfg.TransportMaxIdleConns != 0 {
+		tr.MaxIdleConns = cfg.TransportMaxIdleConns
+	}
+
+	if cfg.TransportMaxIdleConnsPerHost != 0 {
+		tr.MaxIdleConnsPerHost = cfg.TransportMaxIdleConns
+	}
+
+	if cfg.IdleTimeout != 0 {
+		tr.IdleConnTimeout = cfg.IdleTimeout
+	}
+}
+
+func newContext(cfg *Config, proxyType string) *smokescreenContext {
+	return &smokescreenContext{
+		cfg:       cfg,
+		start:     time.Now(),
+		proxyType: proxyType,
+	}
+}
+
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
-	proxy.ConnectDialContext = func(proxyCtx *goproxy.ProxyCtx, network, addr string) (net.Conn, error) {
-		return dialContext(proxyCtx, config, network, addr)
-	}
+	configureTransport(proxy.Tr, config)
 
-	// Ensure that we don't keep old connections alive to avoid TLS errors
-	// when attempting to re-use an idle connection.
-	proxy.Tr.DisableKeepAlives = true
+	// dialContext will be invoked for both CONNECT and traditional proxy requests
+	proxy.Tr.DialContext = dialContext
+
+	// Use a custom goproxy.RoundTripperFunc to ensure that the correct context is attached to the request.
+	// This is only used for non-CONNECT HTTP proxy requests. For connect requests, goproxy automatically
+	// attaches goproxy.ProxyCtx prior to calling dialContext.
+	rtFn := goproxy.RoundTripperFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Response, error) {
+		ctx := context.WithValue(req.Context(), goproxy.ProxyContextKey, pctx)
+		return proxy.Tr.RoundTrip(req.WithContext(ctx))
+	})
+
+	// Associate a timeout with the CONNECT proxy client connection
+	if config.IdleTimeout != 0 {
+		proxy.ConnectClientConnHandler = func(conn net.Conn) net.Conn {
+			return NewTimeoutConn(conn, config.IdleTimeout)
+		}
+	}
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		sctx := &smokescreenContext{time.Now(), nil, ""}
+		// Attach smokescreenContext to goproxy.ProxyCtx
+		sctx := newContext(config, httpProxy)
 		pctx.UserData = sctx
+
+		// Set this on every request as every request mints a new goproxy.ProxyCtx
+		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
 		remoteHost := req.Host
@@ -301,8 +356,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		ctx.UserData = &smokescreenContext{time.Now(), nil, ""}
 		defer ctx.Req.Header.Del(traceHeader)
+		ctx.UserData = newContext(config, connectProxy)
 
 		err := handleConnect(config, ctx)
 		if err != nil {
@@ -437,10 +492,14 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
 	proxy := BuildProxy(config)
+	listener := config.Listener
+	var err error
 
-	listener, err := findListener(config.Ip, config.Port)
-	if err != nil {
-		config.Log.Fatal("can't find listener", err)
+	if listener == nil {
+		listener, err = findListener(config.Ip, config.Port)
+		if err != nil {
+			config.Log.Fatal("can't find listener", err)
+		}
 	}
 
 	if config.SupportProxyProtocol {
@@ -466,6 +525,14 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	server := http.Server{
 		Handler: handler,
+	}
+
+	// This sets an IdleTimeout on _all_ client connections. CONNECT requests
+	// hijacked by goproxy inherit the deadline set here. The deadlines are
+	// reset by the proxy.ConnectClientConnHandler, which wraps the hijacked
+	// connection in a TimeoutConn which bumps the deadline for every read/write.
+	if config.IdleTimeout != 0 {
+		server.IdleTimeout = config.IdleTimeout
 	}
 
 	config.ShuttingDown.Store(false)

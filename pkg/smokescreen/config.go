@@ -32,6 +32,7 @@ type RuleRange struct {
 type Config struct {
 	Ip                           string
 	Port                         uint16
+	Listener                     net.Listener
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
 	Resolver                     *net.Resolver
@@ -57,6 +58,10 @@ type Config struct {
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
 	IdleTimeout time.Duration
+
+	// These are *only* used for traditional HTTP proxy requests
+	TransportMaxIdleConns        int
+	TransportMaxIdleConnsPerHost int
 }
 
 type missingRoleError struct {

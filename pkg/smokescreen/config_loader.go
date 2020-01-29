@@ -38,6 +38,9 @@ type yamlConfig struct {
 	StatsSocketDir      string `yaml:"stats_socket_dir"`
 	StatsSocketFileMode string `yaml:"stats_socket_file_mode"`
 
+	TransportMaxIdleConns        int `yaml:"transport_max_idle_conns"`
+	TransportMaxIdleConnsPerHost int `yaml:"transport_max_idle_conns_per_host"`
+
 	Tls *yamlConfigTls
 
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
