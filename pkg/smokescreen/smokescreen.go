@@ -53,6 +53,28 @@ type smokescreenContext struct {
 	proxyType string
 }
 
+// ExitStatus is used to log Smokescreen's connection status at shutdown time
+type ExitStatus int
+
+const (
+	Closed ExitStatus = iota
+	Idle
+	Timeout
+)
+
+func (e ExitStatus) String() string {
+	switch e {
+	case Closed:
+		return "All connections closed"
+	case Idle:
+		return "All connections idle"
+	case Timeout:
+		return "Timed out waiting for connections to become idle"
+	default:
+		return "Unknown exit status"
+	}
+}
+
 type denyError struct {
 	error
 }
@@ -595,14 +617,14 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	if graceful {
 		// Wait for all connections to close or become idle before
 		// continuing in an attempt to shutdown gracefully.
-		exit := make(chan bool, 1)
+		exit := make(chan ExitStatus, 1)
 
 		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
 			config.ConnTracker.Wg.Wait()
 			config.Log.Print("All connections are closed. Continuing with shutdown...")
-			exit <- true
+			exit <- Closed
 		}()
 
 		// Sometimes, connections don't close and remain in the idle state. This subroutine
@@ -610,12 +632,20 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		go func() {
 			config.Log.Print("Waiting for all connections to become idle...")
 			beginTs := time.Now()
+
+			// If idleTimeout is set to 0, fall back to using the exit timeout to avoid
+			// immediately closing active connections.
+			idleTimeout := config.IdleTimeout
+			if idleTimeout == 0 {
+				idleTimeout = config.ExitTimeout
+			}
+
 			for {
-				checkAgainIn := config.ConnTracker.MaybeIdleIn()
+				checkAgainIn := config.ConnTracker.MaybeIdleIn(idleTimeout)
 				if checkAgainIn > 0 {
 					if time.Now().Sub(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
-						exit <- true
+						exit <- Timeout
 						break
 					} else {
 						config.Log.Print(fmt.Sprintf("There are still active connections. Waiting %v before checking again.", checkAgainIn))
@@ -623,14 +653,15 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 					}
 				} else {
 					config.Log.Print("All connections are idle. Continuing with shutdown...")
-					exit <- true
+					exit <- Idle
 					break
 				}
 			}
 		}()
 
 		// Wait for the exit signal.
-		<-exit
+		reason := <-exit
+		config.Log.Print(fmt.Sprintf("%s: closing all remaining connections.", reason.String()))
 	}
 
 	// Close all open (and idle) connections to send their metrics to log.
