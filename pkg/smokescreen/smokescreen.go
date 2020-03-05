@@ -393,7 +393,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, pctx *goproxy.ProxyCtx) *http.Response {
 		sctx := pctx.UserData.(*smokescreenContext)
-		if resp != nil && sctx.decision.allow {
+
+		if resp != nil && pctx.Error == nil && sctx.decision.allow {
 			resp.Header.Del(errorHeader)
 		}
 
@@ -402,8 +403,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return rejectResponse(pctx.Req, config, pctx.Error)
 		}
 
-		// In case of an error, this function is called a second time to filter the
-		// response we generate so this logger will be called once.
 		logHTTP(config, pctx)
 		return resp
 	})

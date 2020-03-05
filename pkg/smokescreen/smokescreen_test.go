@@ -106,38 +106,65 @@ func TestClassifyAddr(t *testing.T) {
 func TestClearsErrorHeader(t *testing.T) {
 	r := require.New(t)
 
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	t.Run("Clears error header set by upstream", func(t *testing.T) {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	cfg, err := testConfig("test-trusted-srv")
-	r.NoError(err)
+		cfg, err := testConfig("test-trusted-srv")
+		r.NoError(err)
 
-	proxySrv := proxyServer(cfg)
-	r.NoError(err)
-	defer proxySrv.Close()
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
 
-	// Create a http.Client that uses our proxy
-	client, err := proxyClient(proxySrv.URL)
-	r.NoError(err)
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
 
-	// Talk "through" the proxy to our malicious upstream that sets the
-	// error header.
-	resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
-	r.NoError(err)
+		// Talk "through" the proxy to our malicious upstream that sets the
+		// error header.
+		resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
+		r.NoError(err)
 
-	// Should succeed
-	if resp.StatusCode != 200 {
-		t.Errorf("response had bad status: expected 200, got %d", resp.StatusCode)
-	}
+		// Should succeed
+		if resp.StatusCode != 200 {
+			t.Errorf("response had bad status: expected 200, got %d", resp.StatusCode)
+		}
 
-	// Verify the error header is not set.
-	if h := resp.Header.Get(errorHeader); h != "" {
-		t.Errorf("proxy did not strip %q header: %q", errorHeader, h)
-	}
+		// Verify the error header is not set.
+		if h := resp.Header.Get(errorHeader); h != "" {
+			t.Errorf("proxy did not strip %q header: %q", errorHeader, h)
+		}
 
-	// Verify we did get the other header, to confirm we're talking to the right thing
-	if h := resp.Header.Get("X-Smokescreen-Test"); h != "yes" {
-		t.Errorf("did not get expected header X-Smokescreen-Test: expected \"yes\", got %q", h)
-	}
+		// Verify we did get the other header, to confirm we're talking to the right thing
+		if h := resp.Header.Get("X-Smokescreen-Test"); h != "yes" {
+			t.Errorf("did not get expected header X-Smokescreen-Test: expected \"yes\", got %q", h)
+		}
+	})
+
+	t.Run("Doesn't clear errors for allowed connections", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+
+		// Immediately time out to simulate net.Dial timeouts
+		cfg.ConnectTimeout = -1
+
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
+
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
+
+		resp, err := client.Get("http://127.0.1.1")
+		r.NoError(err)
+
+		// Verify the error header is still set
+		h := resp.Header.Get(errorHeader)
+		if h == "" {
+			t.Errorf("proxy stripped %q header: %q", errorHeader, h)
+		}
+	})
 }
 
 func TestConsistentHostHeader(t *testing.T) {
