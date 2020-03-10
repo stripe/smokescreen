@@ -702,13 +702,18 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	if config.EgressACL == nil {
 		decision.allow = true
 		decision.reason = "Egress ACL is not configured"
+
+		config.StatsdClient.Incr("acl.acl_not_configured", []string{}, 1)
+
 		return decision
 	}
 
 	role, roleErr := getRole(config, req)
 	if roleErr != nil {
-		config.StatsdClient.Incr("acl.role_not_determined", []string{}, 1)
 		decision.reason = "Client role cannot be determined"
+
+		config.StatsdClient.Incr("acl.role_not_determined", []string{}, 1)
+
 		return decision
 	}
 
@@ -719,13 +724,15 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 
 	aclDecision, err := config.EgressACL.Decide(role, destination)
 	if err != nil {
+		decision.reason = aclDecision.Reason
+
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
 			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
-		decision.reason = aclDecision.Reason
+
 		return decision
 	}
 
@@ -736,28 +743,34 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	}
 
 	decision.reason = aclDecision.Reason
+	decision.project = aclDecision.Project
+
 	switch aclDecision.Result {
 	case acl.Deny:
 		decision.enforceWouldDeny = true
+
 		config.StatsdClient.Incr("acl.deny", tags, 1)
 
 	case acl.AllowAndReport:
-		decision.enforceWouldDeny = true
-		config.StatsdClient.Incr("acl.report", tags, 1)
 		decision.allow = true
+		decision.enforceWouldDeny = true
+
+		config.StatsdClient.Incr("acl.report", tags, 1)
 
 	case acl.Allow:
-		// Well, everything is going as expected.
 		decision.allow = true
-		decision.enforceWouldDeny = false
+
 		config.StatsdClient.Incr("acl.allow", tags, 1)
+
 	default:
+		decision.reason = fmt.Sprintf("Internal error: unknown ACL decision %q", aclDecision.Result.String())
+
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
 			"destination": destination,
 			"action":      aclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
-		decision.reason = "Internal error"
+
 		config.StatsdClient.Incr("acl.unknown_error", tags, 1)
 	}
 
