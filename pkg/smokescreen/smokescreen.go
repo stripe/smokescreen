@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -233,29 +234,53 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
-	var msg string
+// HTTPErrorHandler allows returning a custom error response when smokescreen
+// fails to connect to the proxy target.
+func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
+	sctx := pctx.UserData.(*smokescreenContext)
+	resp := rejectResponse(pctx, err)
+
+	if err := resp.Write(w); err != nil {
+		sctx.cfg.Log.Errorf("Failed to write HTTP error response: %s", err)
+	}
+
+	if err := w.Close(); err != nil {
+		sctx.cfg.Log.Errorf("Failed to close proxy client connection: %s", err)
+	}
+}
+
+func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
+	sctx := pctx.UserData.(*smokescreenContext)
+
+	var msg, status string
+	var code int
+
 	switch err.(type) {
 	case denyError:
-		msg = fmt.Sprintf(denyMsgTmpl, req.Host, err.Error())
+		status = "Request rejected by proxy"
+		code = http.StatusProxyAuthRequired
+		msg = fmt.Sprintf(denyMsgTmpl, pctx.Req.Host, err.Error())
+	case net.Error:
+		status = "Bad gateway"
+		code = http.StatusBadGateway
+		msg = "Timed out connecting to remote host: " + pctx.Req.Host
 	default:
-		config.Log.WithFields(logrus.Fields{
+		status = "Internal server error"
+		code = http.StatusInternalServerError
+		msg = "An unexpected error occurred: " + err.Error()
+		sctx.cfg.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Warn("rejectResponse called with unexpected error")
-		msg = "An unexpected error occurred."
 	}
 
-	if config.AdditionalErrorMessageOnDeny != "" {
-		msg = fmt.Sprintf("%s\n\n%s\n", msg, config.AdditionalErrorMessageOnDeny)
+	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
+		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
 	}
 
-	resp := goproxy.NewResponse(req,
-		goproxy.ContentTypeText,
-		http.StatusProxyAuthRequired,
-		msg+"\n")
-	resp.Status = "Request Rejected by Proxy" // change the default status message
-	resp.ProtoMajor = req.ProtoMajor
-	resp.ProtoMinor = req.ProtoMinor
+	resp := goproxy.NewResponse(pctx.Req, goproxy.ContentTypeText, code, msg+"\n")
+	resp.Status = status
+	resp.ProtoMajor = pctx.Req.ProtoMajor
+	resp.ProtoMinor = pctx.Req.ProtoMinor
 	resp.Header.Set(errorHeader, msg)
 	return resp
 }
@@ -308,6 +333,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Attach smokescreenContext to goproxy.ProxyCtx
+		// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
+		// proxy requests we are able to speficy the request during the call to OnResponse().
 		sctx := newContext(config, httpProxy)
 		pctx.UserData = sctx
 
@@ -344,10 +371,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		if err != nil {
 			pctx.Error = err
-			return req, rejectResponse(req, config, err)
+			return req, rejectResponse(pctx, err)
 		}
 		if !decision.allow {
-			return req, rejectResponse(req, config, denyError{errors.New(decision.reason)})
+			return req, rejectResponse(pctx, denyError{errors.New(decision.reason)})
 		}
 
 		// Proceed with proxying the request
@@ -355,13 +382,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
-	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		defer ctx.Req.Header.Del(traceHeader)
-		ctx.UserData = newContext(config, connectProxy)
+	proxy.OnRequest().HandleConnectFunc(func(host string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		defer pctx.Req.Header.Del(traceHeader)
 
-		err := handleConnect(config, ctx)
+		pctx.UserData = newContext(config, connectProxy)
+		pctx.HTTPErrorHandler = HTTPErrorHandler
+
+		err := handleConnect(config, pctx)
 		if err != nil {
-			ctx.Resp = rejectResponse(ctx.Req, config, err)
+			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
 		return goproxy.OkConnect, host
@@ -376,7 +405,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		if resp == nil && pctx.Error != nil {
 			logrus.Warnf("rejecting with %#v", pctx.Error)
-			return rejectResponse(pctx.Req, config, pctx.Error)
+			return rejectResponse(pctx, pctx.Error)
 		}
 
 		logHTTP(config, pctx)
