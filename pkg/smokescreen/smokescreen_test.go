@@ -522,7 +522,8 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		resp, _ := client.Do(req)
-		r.Equal(407, resp.StatusCode)
+		r.Equal(http.StatusBadGateway, resp.StatusCode)
+		r.NotEqual("", resp.Header.Get(errorHeader))
 
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
@@ -557,6 +558,57 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Contains(err.Error(), "EOF")
 	})
 
+	t.Run("CONNECT proxy dial timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1 * time.Millisecond
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		// Go swallows the response as the CONNECT tunnel was never established
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "Bad gateway")
+	})
+
+	t.Run("HTTP proxy dial timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1 * time.Millisecond
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		resp, _ := client.Do(req)
+		r.Equal(http.StatusBadGateway, resp.StatusCode)
+		r.NotEqual("", resp.Header.Get(errorHeader))
+	})
 }
 
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
