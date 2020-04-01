@@ -279,16 +279,22 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	var msg, status string
 	var code int
 
-	switch err.(type) {
-	case denyError:
+	if e, ok := err.(net.Error); ok {
+		// net.Dial timeout
+		if e.Timeout() {
+			status = "Gateway timeout"
+			code = http.StatusGatewayTimeout
+			msg = "Timed out connecting to remote host: " + e.Error()
+		} else {
+			status = "Bad gateway"
+			code = http.StatusBadGateway
+			msg = "Failed connect to remote host: " + e.Error()
+		}
+	} else if e, ok := err.(denyError); ok {
 		status = "Request rejected by proxy"
 		code = http.StatusProxyAuthRequired
-		msg = fmt.Sprintf(denyMsgTmpl, pctx.Req.Host, err.Error())
-	case net.Error:
-		status = "Bad gateway"
-		code = http.StatusBadGateway
-		msg = "Timed out connecting to remote host: " + pctx.Req.Host
-	default:
+		msg = fmt.Sprintf(denyMsgTmpl, pctx.Req.Host, e.Error())
+	} else {
 		status = "Internal server error"
 		code = http.StatusInternalServerError
 		msg = "An unexpected error occurred: " + err.Error()
