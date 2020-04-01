@@ -28,18 +28,17 @@ func TestConnTrackerDelete(t *testing.T) {
 func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	assert := assert.New(t)
 
-	tr := NewTestTracker(1 * time.Nanosecond)
+	tr := NewTestTracker(time.Nanosecond)
 	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testMaybeIdle", "localhost", "http")
 
 	time.Sleep(time.Millisecond)
 
 	// All connections should be idle
-	assert.Zero(tr.MaybeIdleIn())
+	assert.Zero(tr.MaybeIdleIn(time.Nanosecond))
 
-	tr.IdleTimeout = time.Second
 	ic.Write([]byte("egress"))
 
-	idleIn := tr.MaybeIdleIn().Round(time.Second)
+	idleIn := tr.MaybeIdleIn(time.Second).Round(time.Second)
 	assert.Equal(time.Second, idleIn)
 }
 

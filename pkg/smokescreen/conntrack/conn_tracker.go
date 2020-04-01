@@ -36,13 +36,13 @@ func NewTracker(idle time.Duration, statsc *statsd.Client, logger *logrus.Logger
 // connections to become idle based on the configured IdleTimeout.
 //
 // A duration of 0 indicates all connections are idle.
-func (tr *Tracker) MaybeIdleIn() time.Duration {
+func (tr *Tracker) MaybeIdleIn(d time.Duration) time.Duration {
 	longest := 0 * time.Nanosecond
 	tr.Range(func(k, v interface{}) bool {
 		c := k.(*InstrumentedConn)
 
 		lastActivity := time.Unix(0, atomic.LoadInt64(c.LastActivity))
-		idleAt := lastActivity.Add(tr.IdleTimeout)
+		idleAt := lastActivity.Add(d)
 		idleIn := idleAt.Sub(time.Now())
 
 		if idleIn > longest {
