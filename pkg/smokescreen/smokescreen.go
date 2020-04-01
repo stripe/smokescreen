@@ -362,6 +362,12 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		sctx := newContext(config, httpProxy)
 		pctx.UserData = sctx
 
+		// Delete Smokescreen specific headers before goproxy forwards the request
+		defer func() {
+			req.Header.Del(roleHeader)
+			req.Header.Del(traceHeader)
+		}()
+
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
 		pctx.RoundTripper = rtFn
 
@@ -386,19 +392,17 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				"trace_id":       req.Header.Get(traceHeader),
 			}).Debug("received HTTP proxy request")
 
-		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
-		sctx.decision = decision
+		sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost)
 		sctx.traceId = req.Header.Get(traceHeader)
 
-		req.Header.Del(roleHeader)
-		req.Header.Del(traceHeader)
-
-		if err != nil {
-			pctx.Error = err
-			return req, rejectResponse(pctx, err)
+		// Returning any kind of response in this handler is goproxy's way of short circuiting
+		// the request. The original request will never be sent, and goproxy will invoke our
+		// response filter attached via the OnResponse() handler.
+		if pctx.Error != nil {
+			return req, rejectResponse(pctx, pctx.Error)
 		}
-		if !decision.allow {
-			return req, rejectResponse(pctx, denyError{errors.New(decision.reason)})
+		if !sctx.decision.allow {
+			return req, rejectResponse(pctx, denyError{errors.New(sctx.decision.reason)})
 		}
 
 		// Proceed with proxying the request
@@ -420,11 +424,26 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return goproxy.OkConnect, host
 	})
 
+	// Strangely, goproxy can invoke this same function twice for a single HTTP request.
+	//
+	// If a proxy request is rejected due to an ACL denial, the response passed to this
+	// function was created by Smokescreen's call to rejectResponse() in the OnRequest()
+	// handler. This only happens once. This is also the behavior for an allowed request
+	// which is completed successfully.
+	//
+	// If a proxy request is allowed, but the RoundTripper returns an error fulfulling
+	// the HTTP request, goproxy will invoke this OnResponse() filter twice. First this
+	// function will be called with a nil response, and as a result this function will
+	// return a response to send back to the proxy client using rejectResponse(). This
+	// function will be called again with the previously returned response, which will
+	// simply trigger the logHTTP function and return.
 	proxy.OnResponse().DoFunc(func(resp *http.Response, pctx *goproxy.ProxyCtx) *http.Response {
 		sctx := pctx.UserData.(*smokescreenContext)
 
-		if resp != nil && pctx.Error == nil && sctx.decision.allow {
-			resp.Header.Del(errorHeader)
+		if resp != nil && resp.Header.Get(errorHeader) != "" {
+			if pctx.Error == nil && sctx.decision.allow {
+				resp.Header.Del(errorHeader)
+			}
 		}
 
 		if resp == nil && pctx.Error != nil {
