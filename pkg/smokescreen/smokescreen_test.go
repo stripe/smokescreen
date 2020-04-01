@@ -522,7 +522,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		resp, _ := client.Do(req)
-		r.Equal(http.StatusBadGateway, resp.StatusCode)
+		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
 		r.NotEqual("", resp.Header.Get(errorHeader))
 
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
@@ -582,7 +582,7 @@ func TestProxyTimeouts(t *testing.T) {
 		resp, err := client.Do(req)
 		r.Nil(resp)
 		r.Error(err)
-		r.Contains(err.Error(), "Bad gateway")
+		r.Contains(err.Error(), "Gateway timeout")
 	})
 
 	t.Run("HTTP proxy dial timeouts", func(t *testing.T) {
@@ -606,7 +606,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		resp, _ := client.Do(req)
-		r.Equal(http.StatusBadGateway, resp.StatusCode)
+		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
 		r.NotEqual("", resp.Header.Get(errorHeader))
 	})
 }
