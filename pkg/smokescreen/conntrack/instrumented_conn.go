@@ -11,12 +11,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const CanonicalProxyConnClose = "CANONICAL-PROXY-CN-CLOSE"
+
 type InstrumentedConn struct {
 	net.Conn
 	TraceId      string
 	Role         string
 	OutboundHost string
 	proxyType    string
+	ConnError    error
 
 	tracker *Tracker
 
@@ -63,6 +66,10 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost
 	return ic
 }
 
+func (ic *InstrumentedConn) Error(err error) {
+	ic.ConnError = err
+}
+
 func (ic *InstrumentedConn) Close() error {
 	ic.Lock()
 	defer ic.Unlock()
@@ -95,6 +102,16 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
+	var timeout bool
+	var errorMessage string
+	if ic.ConnError != nil {
+		errorMessage = ic.ConnError.Error()
+		if e, ok := ic.ConnError.(net.Error); ok && e.Timeout() {
+			timeout = true
+			ic.tracker.statsc.Incr("cn.timeout", tags, 1)
+		}
+	}
+
 	ic.tracker.Log.WithFields(logrus.Fields{
 		"idle":        idle,
 		"bytes_in":    ic.BytesIn,
@@ -105,10 +122,11 @@ func (ic *InstrumentedConn) Close() error {
 		"start_time":  ic.Start.UTC(),
 		"end_time":    end.UTC(),
 		"duration":    duration,
-	}).Info("CANONICAL-PROXY-CN-CLOSE")
+		"timed_out":   timeout,
+		"error":       errorMessage,
+	}).Info(CanonicalProxyConnClose)
 
 	ic.tracker.Wg.Done()
-
 	ic.CloseError = ic.Conn.Close()
 	return ic.CloseError
 }
