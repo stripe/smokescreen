@@ -403,7 +403,6 @@ func TestErrorHeader(t *testing.T) {
 func TestProxyProtocols(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
-
 	t.Run("HTTP proxy", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
@@ -440,7 +439,6 @@ func TestProxyProtocols(t *testing.T) {
 		r.Contains(entry.Data, "proxy_type")
 		r.Equal("http", entry.Data["proxy_type"])
 	})
-
 	t.Run("CONNECT proxy", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
@@ -480,14 +478,21 @@ func TestProxyProtocols(t *testing.T) {
 			return true
 		})
 		a.Equal(1, count, "connTracker should contain one tracked connection")
-		serverCh <- true
 
+		serverCh <- true
+		remote.CloseClientConnections()
 		<-clientCh
+
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
-
 		r.Contains(entry.Data, "proxy_type")
 		r.Equal("connect", entry.Data["proxy_type"])
+
+		time.Sleep(time.Second)
+		entry = findCanonicalProxyClose(logHook.AllEntries())
+		r.NotNil(entry)
+		r.Equal(false, entry.Data["timed_out"])
+		r.Equal("", entry.Data["error"])
 	})
 }
 
@@ -499,7 +504,6 @@ func TestProxyTimeouts(t *testing.T) {
 		time.Sleep(2 * timeout)
 		w.Write([]byte("OK"))
 	})
-
 	t.Run("HTTP proxy timeouts", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
@@ -531,13 +535,13 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Equal("http", entry.Data["proxy_type"])
 		r.Contains(entry.Data["error"], "i/o timeout")
 	})
-
 	t.Run("CONNECT proxy timeouts", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
+		logHook := proxyLogHook(cfg)
 		cfg.IdleTimeout = timeout
 
 		l, err := net.Listen("tcp", "localhost:0")
@@ -556,8 +560,13 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Nil(resp)
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
-	})
 
+		entry := findCanonicalProxyClose(logHook.AllEntries())
+		r.NotNil(entry)
+
+		r.Equal(true, entry.Data["timed_out"])
+		r.Contains(entry.Data["error"], "i/o timeout")
+	})
 	t.Run("CONNECT proxy dial timeouts", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
@@ -614,6 +623,15 @@ func TestProxyTimeouts(t *testing.T) {
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
 		if entry.Message == LOGLINE_CANONICAL_PROXY_DECISION {
+			return entry
+		}
+	}
+	return nil
+}
+
+func findCanonicalProxyClose(logs []*logrus.Entry) *logrus.Entry {
+	for _, entry := range logs {
+		if entry.Message == conntrack.CanonicalProxyConnClose {
 			return entry
 		}
 	}
