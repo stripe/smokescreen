@@ -6,15 +6,11 @@ services:
     project: test
     action: enforce
     allowed_domains:
-      - example.com
       - 127.0.0.1
-      - 2example.com
 
   - name: egressneedingservice-report
     project: test
     action: report
-    allowed_domains:
-      - 127.0.0.1
 
   - name: egressneedingservice-open
     project: test
@@ -24,5 +20,3 @@ default:
   name: unknown-role
   project: security
   action: enforce
-  allowed_domains:
-      - localhost
