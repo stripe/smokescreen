@@ -321,7 +321,7 @@ func TestInvalidHost(t *testing.T) {
 
 			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.com", testCase.scheme))
 			if testCase.expectErr {
-				r.EqualError(err, "Get https://notarealhost.com: Request Rejected by Proxy")
+				a.Contains(err.Error(), "Request Rejected by Proxy")
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
