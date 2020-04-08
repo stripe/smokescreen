@@ -318,6 +318,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
+	if ctx.HTTPErrorHandler != nil {
+		ctx.HTTPErrorHandler(w, ctx, err)
+		return
+	}
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
 	}
@@ -448,7 +452,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-		config := *defaultTLSConfig
+		config := defaultTLSConfig.Clone()
 		ctx.Logf("signing for %s", stripPort(host))
 		cert, err := signHost(*ca, []string{stripPort(host)})
 		if err != nil {
@@ -456,7 +460,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 			return nil, err
 		}
 		config.Certificates = append(config.Certificates, cert)
-		return &config, nil
+		return config, nil
 	}
 }
 
