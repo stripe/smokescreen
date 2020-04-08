@@ -40,7 +40,7 @@ Smokescreen is built and tested using the following Go releases. Generally, Smok
 - go1.13.x
 - go1.14.x
 
-[mod]: https://blog.golang.org/using-go-modules
+[mod]: https://github.com/golang/go/wiki/Modules
 
 
 ## Usage
