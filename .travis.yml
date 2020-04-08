@@ -1,14 +1,11 @@
 language: go
 go:
-  - "1.10"
-  - "1.11"
-  - "1.12"
-  - "1.13"
-
-
+  - "1.13.x"
+  - "1.14.x"
 install:
-  - go get -v .
-
+  - true # We do nothing here to avoid the default travis_install_go_dependencies script from running `go get`
+env:
+   GOFLAGS=-mod=vendor
 before_script:
   - go vet -v ./...
 script:
