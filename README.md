@@ -26,25 +26,21 @@ The client identification function can also be replaced by one of your liking. M
 
 ## Dependencies
 
-Smokescreen uses [dep][dep] to manage dependencies. The
-repo contains documentation, but some useful commands are reproduced
+Smokescreen uses [mod][go modules] to manage dependencies. The
+linked page contains documentation, but some useful commands are reproduced
 below:
 
-- **Installing or updating dep**: `go get -u
-    github.com/golang/dep/cmd/dep` (ensure `$GOPATH/bin` is in your
-    `$PATH`)
-- **Adding a dependency**: `dep ensure`
-- **Updating a dependency**: `dep ensure -update`
+- **Adding a dependency**: `go build` `go test` `go mod tidy` will automatically fetch the latest version of any new dependencies. Running `go mod vendor` will vendor the dependency.
+- **Updating a dependency**: `go get dep@v1.1.1` or `go get dep@commit-hash` will bring in specific versions of a dependency. The updated dependency should be vendored using `go mod vendor`.
 
-Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to avoid problems with keepalive connections present under newer versions of the upstream project.
+Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections. 
 
-Smokescreen is built and tested using the following Go releases:
+Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
 
-- go1.10
-- go1.11
-- go1.12
+- go1.13.x
+- go1.14.x
 
-[dep]: https://github.com/golang/dep
+[mod]: https://github.com/golang/go/wiki/Modules
 
 
 ## Usage

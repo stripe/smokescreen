@@ -14,9 +14,9 @@ import (
 	"time"
 
 	proxyproto "github.com/armon/go-proxyproto"
-	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
+	"github.com/stripe/goproxy"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
