@@ -132,12 +132,12 @@ func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error,
 	}
 
 	if len(entries) > 0 {
-		lastEntryIndex := len(entries) - 1
-		entry := entries[lastEntryIndex]
+		entry := findLogEntry(entries, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
+		a.NotNil(entry)
 		a.Equal(entry.Message, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
 
 		a.Contains(entry.Data, "allow")
-		a.Equal(test.ExpectAllow, entries[lastEntryIndex].Data["allow"])
+		a.Equal(test.ExpectAllow, entry.Data["allow"])
 
 		a.Contains(entry.Data, "proxy_type")
 		if test.OverConnect {
