@@ -74,6 +74,19 @@ type TestCase struct {
 	UpstreamProxy string
 }
 
+func conformIllegalProxyResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+	r := require.New(t)
+	a := assert.New(t)
+	t.Logf("HTTP Response: %#v", resp)
+
+	// TODO: fix this after smokescreen's returned errors are improved
+	entry := findLogEntry(logs, "CANONICAL-PROXY-DECISION")
+	r.NotNil(entry)
+	// Make sure the hostname resolution of the upstream failed. This indicates
+	// that the request wasn't forwarded directly to the proxy target.
+	a.Contains(entry.Data["error"], "notaproxy.service")
+}
+
 func conformResult(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
 	t.Logf("HTTP Response: %#v", resp)
 
@@ -426,6 +439,47 @@ func TestSmokescreenIntegration(t *testing.T) {
 			testCase.RandomTrace = rand.Int()
 			resp, err := executeRequestForTest(t, testCase, &logHook)
 			conformResult(t, testCase, resp, err, logHook.AllEntries())
+		})
+	}
+}
+
+// This test must be run with a separate test command as the environment variables
+// required can race with the test above.
+func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
+	var logHook logrustest.Hook
+	servers := map[bool]*httptest.Server{}
+	for _, useTls := range []bool{true, false} {
+		server, err := startSmokescreen(t, useTls, &logHook)
+		require.NoError(t, err)
+		defer server.Close()
+		servers[useTls] = server
+	}
+
+	// Passing an illegal upstream proxy value is not designed to be an especially well
+	// handled error so it would fail many of the checks in our other tests. We really
+	// only care to ensure that these requests never succeed.
+	for _, overConnect := range []bool{true, false} {
+		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
+			targetScheme := "http"
+			targetPort := 80
+			if overConnect {
+				targetPort = 443
+				targetScheme = "https"
+			}
+
+			testCase := &TestCase{
+				OverConnect:   overConnect,
+				OverTls:       overConnect,
+				ProxyURL:      servers[overConnect].URL,
+				TargetPort:    targetPort,
+				TargetHost:    "google.com",
+				TargetScheme:  targetScheme,
+				UpstreamProxy: fmt.Sprintf("%s://notaproxy.service", targetScheme),
+				RoleName:      generateRoleForAction(acl.Open),
+				ExpectStatus:  http.StatusBadGateway,
+			}
+			resp, err := executeRequestForTest(t, testCase, &logHook)
+			conformIllegalProxyResult(t, testCase, resp, err, logHook.AllEntries())
 		})
 	}
 }

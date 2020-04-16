@@ -11,4 +11,5 @@ before_script:
   - go vet -v ./...
 script:
   - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./... -tags=nointegration
-  - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... # integration tests
+  - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... -run TestSmokescreenIntegration
+  - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... -run TestUpstreamProxySmokescreenIntegration
