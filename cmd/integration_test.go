@@ -263,11 +263,6 @@ func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hoo
 
 	logHook.Reset()
 
-	os.Setenv("http_proxy", test.UpstreamProxy)
-	os.Setenv("https_proxy", test.UpstreamProxy)
-	defer os.Unsetenv("http_proxy")
-	defer os.Unsetenv("https_proxy")
-
 	client := generateClientForTest(t, test)
 	req := generateRequestForTest(t, test)
 
@@ -429,16 +424,15 @@ func TestSmokescreenIntegration(t *testing.T) {
 // (proxy chaining) forwards the request to the next proxy hop instead of directly
 // to the proxy target.
 func isValidProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
-	r := require.New(t)
 	a := assert.New(t)
 	t.Logf("HTTP Response: %#v", resp)
 
-	// TODO: fix this after smokescreen's returned errors are improved
-	entry := findLogEntry(logs, "CANONICAL-PROXY-DECISION")
-	r.NotNil(entry)
-	// Make sure the hostname resolution of the upstream failed. This indicates
-	// that the request wasn't forwarded directly to the proxy target.
-	a.Contains(entry.Data["error"], "notaproxy.service")
+	// TODO: fix this after smokescreen's returned errors are improved.
+	if test.OverConnect {
+		a.Contains(err.Error(), "proxyconnect tcp")
+	} else {
+		a.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+	}
 }
 
 // This test must be run with a separate test command as the environment variables
@@ -461,14 +455,14 @@ func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
 	for _, overConnect := range []bool{true, false} {
 		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
 			var proxyTarget string
-			var upstreamProxyScheme string
+			var upstreamProxy string
 
 			// These proxy targets don't actually matter, as
 			if overConnect {
-				upstreamProxyScheme = "https"
+				upstreamProxy = "https://notaproxy.sx.svc:443"
 				proxyTarget = "https://api.github.com:443"
 			} else {
-				upstreamProxyScheme = "http"
+				upstreamProxy = "http://notaproxy.sx.svc:80"
 				proxyTarget = "http://checkip.amazonaws.com:80"
 			}
 
@@ -477,12 +471,18 @@ func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
 				OverTLS:       overConnect,
 				ProxyURL:      servers[overConnect].URL,
 				TargetURL:     proxyTarget,
-				UpstreamProxy: fmt.Sprintf("%s://notaproxy.service", upstreamProxyScheme),
+				UpstreamProxy: upstreamProxy,
 				RoleName:      generateRoleForAction(acl.Open),
 				ExpectStatus:  http.StatusBadGateway,
 			}
+			os.Setenv("http_proxy", testCase.UpstreamProxy)
+			os.Setenv("https_proxy", testCase.UpstreamProxy)
+
 			resp, err := executeRequestForTest(t, testCase, &logHook)
 			isValidProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
+
+			os.Unsetenv("http_proxy")
+			os.Unsetenv("https_proxy")
 		})
 	}
 }
