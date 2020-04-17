@@ -96,7 +96,7 @@ func isValidProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err
 		}
 		defer resp.Body.Close()
 		a.Contains(string(body), "denied")
-		a.Contains(string(body), "more ctx")
+		a.Contains(string(body), "additional_error_message_validation_key")
 		a.Equal(test.ExpectStatus, resp.StatusCode, "Expected status did not match actual response code")
 	}
 
@@ -130,7 +130,7 @@ func isValidProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err
 	}
 }
 
-func generateRoleForAction(action acl.EnforcementPolicy) string {
+func generateRoleForPolicy(action acl.EnforcementPolicy) string {
 	switch action {
 	case acl.Open:
 		return "open"
@@ -304,10 +304,16 @@ func TestSmokescreenIntegration(t *testing.T) {
 		}
 	}
 
-	overTLSDomain := []bool{true, false}
-	overConnectDomain := []bool{true, false}
-	authorizedHostsDomain := []bool{true, false}
-	actionsDomain := []acl.EnforcementPolicy{
+	// Send the proxy request via TLS
+	overTLSOptions := []bool{true, false}
+
+	// Send the proxy request using CONNECT
+	overConnectOptions := []bool{true, false}
+
+	// If the proxy target should be sent to an authorized host
+	authorizedHosts := []bool{true, false}
+
+	enforcementPolicies := []acl.EnforcementPolicy{
 		acl.Enforce,
 		acl.Report,
 		acl.Open,
@@ -316,9 +322,16 @@ func TestSmokescreenIntegration(t *testing.T) {
 	var testCases []*TestCase
 
 	// This generates all the permutations for the common test cases
-	for _, overConnect := range overConnectDomain {
-		for _, overTLS := range overTLSDomain {
-			// Do not support these test cases
+	// * proxy requests using CONNECT and regular HTTP proxy
+	// * TLS and non-TLS proxy targets
+	// * hosts authorized and not authorized by the config in testdata/sample_config.yaml
+	// * enforce, report, and open enforcement policies
+	for _, overConnect := range overConnectOptions {
+		for _, overTLS := range overTLSOptions {
+			// Explicitly do not support these test cases
+			// 1) You cannot tunnel TLS using a traditional HTTP proxy request
+			// 2) If you attempt to tunnel a non-TLS HTTP request using CONNECT,
+			//    Go's HTTP machinery rewrites the scheme as HTTPS.
 			if (overTLS && !overConnect) || (!overTLS && overConnect) {
 				continue
 			}
@@ -327,7 +340,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 			// local HTTP server. If authorizedHost is false, the request
 			// will be sent to api.github.com and may or may not be allowed
 			// depending on the acl.EnforcementPolicy.
-			for _, authorizedHost := range authorizedHostsDomain {
+			for _, authorizedHost := range authorizedHosts {
 				var proxyTarget string
 				if authorizedHost {
 					proxyTarget = httpServers[overTLS].URL
@@ -335,7 +348,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 					proxyTarget = externalHosts[overTLS]
 				}
 
-				for _, action := range actionsDomain {
+				for _, policy := range enforcementPolicies {
 					var expectAllow bool
 					// If a host is authorized, it is allowed by the config
 					// and will always be allowed.
@@ -344,18 +357,18 @@ func TestSmokescreenIntegration(t *testing.T) {
 					}
 
 					// Report and open modes should always allow requests.
-					if action != acl.Enforce {
+					if policy != acl.Enforce {
 						expectAllow = true
 					}
 
 					testCase := &TestCase{
 						ExpectAllow: expectAllow,
-						Action:      action,
+						Action:      policy,
 						OverTLS:     overTLS,
 						OverConnect: overConnect,
 						ProxyURL:    proxyServers[overTLS].URL,
 						TargetURL:   proxyTarget,
-						RoleName:    generateRoleForAction(action),
+						RoleName:    generateRoleForPolicy(policy),
 					}
 
 					if expectAllow {
@@ -393,7 +406,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPRangeCase.TargetURL = "http://1.1.1.1:80"
 		badIPRangeCase.ExpectAllow = false
 		badIPRangeCase.ExpectStatus = http.StatusProxyAuthRequired
-		badIPRangeCase.RoleName = generateRoleForAction(acl.Open)
+		badIPRangeCase.RoleName = generateRoleForPolicy(acl.Open)
 
 		// This must be a global unicast, non-loopback address or other IP rules will
 		// block it regardless of the specific configuration we're trying to test.
@@ -401,7 +414,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPAddressCase.TargetURL = "http://1.0.0.1:123"
 		badIPAddressCase.ExpectAllow = false
 		badIPAddressCase.ExpectStatus = http.StatusProxyAuthRequired
-		badIPAddressCase.RoleName = generateRoleForAction(acl.Open)
+		badIPAddressCase.RoleName = generateRoleForPolicy(acl.Open)
 
 		testCases = append(testCases,
 			&unknownRoleDenyCase, &noRoleDenyCase,
@@ -437,7 +450,7 @@ func isValidProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.R
 
 // This test must be run with a separate test command as the environment variables
 // required can race with the test above.
-func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
+func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 	var logHook logrustest.Hook
 	servers := map[bool]*httptest.Server{}
 
@@ -459,10 +472,10 @@ func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
 
 			// These proxy targets don't actually matter, as
 			if overConnect {
-				upstreamProxy = "https://notaproxy.sx.svc:443"
+				upstreamProxy = "https://notaproxy.prxy.svc:443"
 				proxyTarget = "https://api.github.com:443"
 			} else {
-				upstreamProxy = "http://notaproxy.sx.svc:80"
+				upstreamProxy = "http://notaproxy.prxy.svc:80"
 				proxyTarget = "http://checkip.amazonaws.com:80"
 			}
 
@@ -472,7 +485,7 @@ func TestUpstreamProxySmokescreenIntegration(t *testing.T) {
 				ProxyURL:      servers[overConnect].URL,
 				TargetURL:     proxyTarget,
 				UpstreamProxy: upstreamProxy,
-				RoleName:      generateRoleForAction(acl.Open),
+				RoleName:      generateRoleForPolicy(acl.Open),
 				ExpectStatus:  http.StatusBadGateway,
 			}
 			os.Setenv("http_proxy", testCase.UpstreamProxy)
@@ -501,7 +514,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*httptest
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
 		"--egress-acl-file=testdata/sample_config.yaml",
-		"--additional-error-message-on-deny=more ctx",
+		"--additional-error-message-on-deny=additional_error_message_validation_key",
 		"--deny-range=1.1.1.1/32",
 		"--allow-range=127.0.0.1/32",
 		"--deny-address=1.0.0.1:123",

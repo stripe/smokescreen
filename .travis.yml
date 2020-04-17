@@ -13,4 +13,4 @@ script:
   - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./... -tags=nointegration
   # Run integration tests hermetically to avoid nondeterministic races on environment variables
   - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... -run TestSmokescreenIntegration
-  - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... -run TestUpstreamProxySmokescreenIntegration
+  - echo $TRAVIS_GO_VERSION; go test -race -v -timeout 2m -failfast ./cmd/... -run TestInvalidUpstreamProxyConfiguration
