@@ -289,7 +289,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		proxyServers[useTLS] = proxyServer
 
 		if useTLS {
-			externalHosts[useTLS] = "https://api.github.com:443"
+			externalHosts[useTLS] = "https://api.stripe.com:443"
 
 			httpServer := httptest.NewTLSServer(ProxyTargetHandler)
 			defer httpServer.Close()
@@ -373,6 +373,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 					if expectAllow {
 						testCase.ExpectStatus = http.StatusOK
+						if overTLS && !authorizedHost {
+							// The Stripe API returns a 403 to a bare HTTP GET request
+							testCase.ExpectStatus = http.StatusUnauthorized
+						}
 					} else {
 						testCase.ExpectStatus = http.StatusProxyAuthRequired
 					}
@@ -470,10 +474,11 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 			var proxyTarget string
 			var upstreamProxy string
 
-			// These proxy targets don't actually matter, as
+			// These proxy targets don't actually matter as the requests wont be sent.
+			// because the resolution of the upstream proxy will fail.
 			if overConnect {
 				upstreamProxy = "https://notaproxy.prxy.svc:443"
-				proxyTarget = "https://api.github.com:443"
+				proxyTarget = "https://api.stripe.com:443"
 			} else {
 				upstreamProxy = "http://notaproxy.prxy.svc:80"
 				proxyTarget = "http://checkip.amazonaws.com:80"
