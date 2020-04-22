@@ -63,8 +63,8 @@ type TestCase struct {
 	UpstreamProxy string
 }
 
-// isValidProxyResponse validates tests cases and expected responses from TestSmokescreenIntegration
-func isValidProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+// validateProxyResponse validates tests cases and expected responses from TestSmokescreenIntegration
+func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
 	t.Logf("HTTP Response: %#v", resp)
 
 	a := assert.New(t)
@@ -430,17 +430,17 @@ func TestSmokescreenIntegration(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			testCase.RandomTrace = rand.Int()
 			resp, err := executeRequestForTest(t, testCase, &logHook)
-			isValidProxyResponse(t, testCase, resp, err, logHook.AllEntries())
+			validateProxyResponse(t, testCase, resp, err, logHook.AllEntries())
 		})
 	}
 }
 
-// isValidProxyResponseWithUpstream validates tests cases and expected responses
+// validateProxyResponseWithUpstream validates tests cases and expected responses
 // from TestUpstreamProxySmokescreenIntegration. This validates that requests
 // sent to a smokescreen instance with an additional upstream proxy set
 // (proxy chaining) forwards the request to the next proxy hop instead of directly
 // to the proxy target.
-func isValidProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
 	a := assert.New(t)
 	t.Logf("HTTP Response: %#v", resp)
 
@@ -474,7 +474,7 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 			var proxyTarget string
 			var upstreamProxy string
 
-			// These proxy targets don't actually matter as the requests wont be sent.
+			// These proxy targets don't actually matter as the requests won't be sent.
 			// because the resolution of the upstream proxy will fail.
 			if overConnect {
 				upstreamProxy = "https://notaproxy.prxy.svc:443"
@@ -497,7 +497,7 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 			os.Setenv("https_proxy", testCase.UpstreamProxy)
 
 			resp, err := executeRequestForTest(t, testCase, &logHook)
-			isValidProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
+			validateProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
 
 			os.Unsetenv("http_proxy")
 			os.Unsetenv("https_proxy")
