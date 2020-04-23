@@ -288,7 +288,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		} else {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			msg = "Failed connect to remote host: " + e.Error()
+			msg = "Failed to connect to remote host: " + e.Error()
 		}
 	} else if e, ok := err.(denyError); ok {
 		status = "Request rejected by proxy"
@@ -364,7 +364,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Attach smokescreenContext to goproxy.ProxyCtx
 		// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
-		// proxy requests we are able to speficy the request during the call to OnResponse().
+		// proxy requests we are able to specify the request during the call to OnResponse().
 		sctx := newContext(config, httpProxy)
 		pctx.UserData = sctx
 
