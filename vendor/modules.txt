@@ -16,11 +16,11 @@ github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b
 github.com/stripe/go-einhorn/einhorn
-# github.com/stripe/goproxy v0.0.0-20200414174713-2865e63fc811
+# github.com/stripe/goproxy v0.0.0-20200427190316-05fc299d1e72
 github.com/stripe/goproxy
 # golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+# golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0
 golang.org/x/net/http/httpproxy
 golang.org/x/net/idna
 # golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd

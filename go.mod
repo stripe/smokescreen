@@ -12,7 +12,8 @@ require (
 	github.com/sirupsen/logrus v1.0.6
 	github.com/stretchr/testify v1.3.0
 	github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b
-	github.com/stripe/goproxy v0.0.0-20200414174713-2865e63fc811
+	github.com/stripe/goproxy v0.0.0-20200427190316-05fc299d1e72
+	golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0 // indirect
 	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
