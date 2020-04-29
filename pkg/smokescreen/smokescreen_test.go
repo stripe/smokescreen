@@ -376,7 +376,6 @@ func TestErrorHeader(t *testing.T) {
 func TestProxyProtocols(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
-
 	t.Run("HTTP proxy", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
@@ -453,12 +452,12 @@ func TestProxyProtocols(t *testing.T) {
 			return true
 		})
 		a.Equal(1, count, "connTracker should contain one tracked connection")
-		serverCh <- true
 
+		serverCh <- true
 		<-clientCh
+
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
-
 		r.Contains(entry.Data, "proxy_type")
 		r.Equal("connect", entry.Data["proxy_type"])
 	})
@@ -467,9 +466,8 @@ func TestProxyProtocols(t *testing.T) {
 func TestProxyTimeouts(t *testing.T) {
 	r := require.New(t)
 
-	timeout := 50 * time.Millisecond
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * timeout)
+		time.Sleep(time.Second)
 		w.Write([]byte("OK"))
 	})
 
@@ -480,7 +478,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		logHook := proxyLogHook(cfg)
-		cfg.IdleTimeout = timeout
+		cfg.IdleTimeout = time.Nanosecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -510,7 +508,8 @@ func TestProxyTimeouts(t *testing.T) {
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
-		cfg.IdleTimeout = timeout
+		logHook := proxyLogHook(cfg)
+		cfg.IdleTimeout = time.Nanosecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -528,13 +527,27 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Nil(resp)
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
-	})
 
+		entry := findCanonicalProxyClose(logHook.AllEntries())
+		r.NotNil(entry)
+
+		r.Equal(true, entry.Data["timed_out"])
+		r.Contains(entry.Data["error"], "i/o timeout")
+	})
 }
 
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
 		if entry.Message == LOGLINE_CANONICAL_PROXY_DECISION {
+			return entry
+		}
+	}
+	return nil
+}
+
+func findCanonicalProxyClose(logs []*logrus.Entry) *logrus.Entry {
+	for _, entry := range logs {
+		if entry.Message == conntrack.CanonicalProxyConnClose {
 			return entry
 		}
 	}
