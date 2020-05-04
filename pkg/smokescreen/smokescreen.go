@@ -629,6 +629,12 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			exit <- Closed
 		}()
 
+		// Always wait for a maximum of config.ExitTimeout
+		time.AfterFunc(config.ExitTimeout, func() {
+			config.Log.Printf("ExitTimeout %v reached - timing out", config.ExitTimeout)
+			exit <- Timeout
+		})
+
 		// Sometimes, connections don't close and remain in the idle state. This subroutine
 		// waits until all open connections are idle before sending the exit signal.
 		go func() {
