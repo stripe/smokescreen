@@ -5,7 +5,7 @@
         project: security
         action: enforce
         allowed_domains:
-          - notarealhost.com
+          - notarealhost.notarealtld
           - httpbin.org
       - name: test-local-srv
         project: security

@@ -346,9 +346,9 @@ func TestInvalidHost(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
-			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.com", testCase.scheme))
+			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.notarealtld", testCase.scheme))
 			if testCase.expectErr {
-				r.EqualError(err, "Get https://notarealhost.com: Bad gateway")
+				r.Contains(err.Error(), "Bad gateway")
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusBadGateway, resp.StatusCode)
@@ -505,7 +505,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		logHook := proxyLogHook(cfg)
-		cfg.IdleTimeout = time.Nanosecond
+		cfg.IdleTimeout = 100 * time.Millisecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -537,7 +537,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		logHook := proxyLogHook(cfg)
-		cfg.IdleTimeout = time.Nanosecond
+		cfg.IdleTimeout = 100 * time.Millisecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -561,13 +561,15 @@ func TestProxyTimeouts(t *testing.T) {
 
 		r.Equal(true, entry.Data["timed_out"])
 		r.Contains(entry.Data["error"], "i/o timeout")
+	})
+
 	t.Run("CONNECT proxy dial timeouts", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
-		cfg.ConnectTimeout = -1 * time.Millisecond
+		cfg.ConnectTimeout = -1
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -594,7 +596,7 @@ func TestProxyTimeouts(t *testing.T) {
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
-		cfg.ConnectTimeout = -1 * time.Millisecond
+		cfg.ConnectTimeout = -1
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)

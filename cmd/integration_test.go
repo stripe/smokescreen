@@ -444,11 +444,10 @@ func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.
 	a := assert.New(t)
 	t.Logf("HTTP Response: %#v", resp)
 
-	// TODO: fix this after smokescreen's returned errors are improved.
 	if test.OverConnect {
 		a.Contains(err.Error(), "proxyconnect tcp")
 	} else {
-		a.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+		a.Equal(http.StatusBadGateway, resp.StatusCode)
 	}
 }
 
