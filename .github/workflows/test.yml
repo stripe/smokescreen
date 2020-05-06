@@ -5,7 +5,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.13.x, 1.14.x]
-        platform: [ubuntu-latest]
+        platform: [ubuntu-16.04, ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
     - name: Install Go
@@ -13,12 +13,12 @@ jobs:
       with:
         go-version: ${{ matrix.go-version }}
     - name: Setup env
-      run:
+      run: |
         echo ::set-env name=GOFLAGS::-mod=vendor
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Vet
-      run:
+      run: |
         go vet -v ./...
     - name: Test
       run: |
