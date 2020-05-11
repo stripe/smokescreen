@@ -9,6 +9,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
+	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.0.6
 	github.com/stretchr/testify v1.3.0
 	github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b

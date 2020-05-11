@@ -110,9 +110,9 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 	}
 
 	if len(entries) > 0 {
-		entry := findLogEntry(entries, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
+		entry := findLogEntry(entries, smokescreen.CanonicalProxyDecision)
 		a.NotNil(entry)
-		a.Equal(entry.Message, smokescreen.LOGLINE_CANONICAL_PROXY_DECISION)
+		a.Equal(entry.Message, smokescreen.CanonicalProxyDecision)
 
 		a.Contains(entry.Data, "allow")
 		a.Equal(test.ExpectAllow, entry.Data["allow"])

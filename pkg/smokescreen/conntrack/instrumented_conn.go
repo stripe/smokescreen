@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,13 +16,13 @@ const CanonicalProxyConnClose = "CANONICAL-PROXY-CN-CLOSE"
 
 type InstrumentedConn struct {
 	net.Conn
-	TraceId      string
 	Role         string
 	OutboundHost string
 	proxyType    string
 	ConnError    error
 
 	tracker *Tracker
+	logger  *logrus.Entry
 
 	Start        time.Time
 	LastActivity *int64 // Unix nano
@@ -36,13 +37,13 @@ type InstrumentedConn struct {
 	CloseError error
 }
 
-func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, traceId, role, outboundHost, proxyType string) *InstrumentedConn {
-	ic := t.NewInstrumentedConn(conn, traceId, role, outboundHost, proxyType)
+func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, logger *logrus.Entry, role, outboundHost, proxyType string) *InstrumentedConn {
+	ic := t.NewInstrumentedConn(conn, logger, role, outboundHost, proxyType)
 	ic.timeout = timeout
 	return ic
 }
 
-func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost, proxyType string) *InstrumentedConn {
+func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *logrus.Entry, role, outboundHost, proxyType string) *InstrumentedConn {
 	now := time.Now()
 	nowUnixNano := now.UnixNano()
 	bytesIn := uint64(0)
@@ -50,10 +51,10 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, traceId, role, outboundHost
 
 	ic := &InstrumentedConn{
 		Conn:         conn,
-		TraceId:      traceId,
 		Role:         role,
 		OutboundHost: outboundHost,
 		tracker:      t,
+		logger:       logger,
 		Start:        now,
 		LastActivity: &nowUnixNano,
 		BytesIn:      &bytesIn,
@@ -94,10 +95,9 @@ func (ic *InstrumentedConn) Close() error {
 	ic.tracker.statsc.Histogram("cn.bytes_out", float64(*ic.BytesOut), tags, 1)
 
 	// Track when we terminate active connections during a shutdown
-	idle := true
 	if ic.tracker.ShuttingDown.Load() == true {
-		idle = ic.Idle()
-		if !idle {
+		if ic.Idle() {
+			ic.logger = ic.logger.WithField("active_at_termination", true)
 			ic.tracker.statsc.Incr("cn.active_at_termination", tags, 1)
 		}
 	}
@@ -112,18 +112,24 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
-	ic.tracker.Log.WithFields(logrus.Fields{
-		"idle":        idle,
-		"bytes_in":    ic.BytesIn,
-		"bytes_out":   ic.BytesOut,
-		"role":        ic.Role,
-		"req_host":    ic.OutboundHost,
-		"remote_addr": ic.Conn.RemoteAddr(),
-		"start_time":  ic.Start.UTC(),
-		"end_time":    end.UTC(),
-		"duration":    duration,
-		"timed_out":   timeout,
-		"error":       errorMessage,
+	var dstIP, dstPortStr string
+	var dstPort int
+	if remoteAddr := ic.Conn.RemoteAddr(); remoteAddr != nil {
+		dstIP, dstPortStr, _ = net.SplitHostPort(remoteAddr.String())
+		dstPort, _ = strconv.Atoi(dstPortStr)
+	}
+
+	ic.logger.WithFields(logrus.Fields{
+		"bytes_in":      ic.BytesIn,
+		"bytes_out":     ic.BytesOut,
+		"role":          ic.Role,
+		"end_time":      end.UTC(),
+		"duration":      duration,
+		"timed_out":     timeout,
+		"error":         errorMessage,
+		"last_activity": time.Unix(0, *ic.LastActivity).UTC(),
+		"dst_ip":        dstIP,
+		"dst_port":      dstPort,
 	}).Info(CanonicalProxyConnClose)
 
 	ic.tracker.Wg.Done()
@@ -183,7 +189,6 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 	defer ic.Unlock()
 
 	return &InstrumentedConnStats{
-		TraceId:                  ic.TraceId,
 		Role:                     ic.Role,
 		Rhost:                    ic.OutboundHost,
 		Raddr:                    ic.Conn.RemoteAddr().String(),

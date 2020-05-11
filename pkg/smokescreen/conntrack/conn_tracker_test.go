@@ -10,12 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var testLogger = logrus.New()
+
 // TestConnTrackerDelete is a sanity check to ensure we aren't leaking
 // connection references in the tracker's sync.Map
 func TestConnTrackerDelete(t *testing.T) {
 	tr := NewTestTracker(time.Second * 1)
 
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testDeleteConn", "localhost", "http")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testDeleteConn", "localhost", "http")
 	ic.Close()
 
 	tr.Range(func(k, v interface{}) bool {
@@ -29,7 +31,7 @@ func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Nanosecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testMaybeIdle", "localhost", "http")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testMaybeIdle", "localhost", "http")
 
 	time.Sleep(time.Millisecond)
 
