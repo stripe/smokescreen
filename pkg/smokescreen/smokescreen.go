@@ -14,6 +14,7 @@ import (
 	"time"
 
 	proxyproto "github.com/armon/go-proxyproto"
+	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/go-einhorn/einhorn"
 	"github.com/stripe/goproxy"
@@ -34,7 +35,7 @@ const (
 	connectProxy = "connect"
 )
 
-var LOGLINE_CANONICAL_PROXY_DECISION = "CANONICAL-PROXY-DECISION"
+const CanonicalProxyDecision = "CANONICAL-PROXY-DECISION"
 
 type ipType int
 
@@ -49,8 +50,8 @@ type smokescreenContext struct {
 	cfg       *Config
 	start     time.Time
 	decision  *aclDecision
-	traceId   string
 	proxyType string
+	logger    *logrus.Entry
 }
 
 // ExitStatus is used to log Smokescreen's connection status at shutdown time
@@ -248,7 +249,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
 	if sctx.proxyType == connectProxy {
-		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.traceId, d.role, d.outboundHost, sctx.proxyType)
+		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.logger, d.role, d.outboundHost, sctx.proxyType)
 		pctx.ConnErrorHandler = ic.Error
 		conn = ic
 	} else {
@@ -298,11 +299,22 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 	}
 }
 
-func newContext(cfg *Config, proxyType string) *smokescreenContext {
+func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenContext {
+	start := time.Now()
+	logger := cfg.Log.WithFields(logrus.Fields{
+		"id":             xid.New().String(),
+		"proxy_type":     proxyType,
+		"requested_host": req.Host,
+		"source_addr":    req.RemoteAddr,
+		"start_time":     start.UTC(),
+		"trace_id":       req.Header.Get(traceHeader),
+	})
+
 	return &smokescreenContext{
 		cfg:       cfg,
-		start:     time.Now(),
+		logger:    logger,
 		proxyType: proxyType,
+		start:     start,
 	}
 }
 
@@ -332,7 +344,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Attach smokescreenContext to goproxy.ProxyCtx
-		sctx := newContext(config, httpProxy)
+		sctx := newContext(config, httpProxy, req)
 		pctx.UserData = sctx
 
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
@@ -351,17 +363,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			}
 		}
 
-		config.Log.WithFields(
-			logrus.Fields{
-				"source_ip":      req.RemoteAddr,
-				"requested_host": req.Host,
-				"url":            req.RequestURI,
-				"trace_id":       req.Header.Get(traceHeader),
-			}).Debug("received HTTP proxy request")
+		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
 		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
 		sctx.decision = decision
-		sctx.traceId = req.Header.Get(traceHeader)
 
 		req.Header.Del(roleHeader)
 		req.Header.Del(traceHeader)
@@ -379,13 +384,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
-	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		defer ctx.Req.Header.Del(traceHeader)
-		ctx.UserData = newContext(config, connectProxy)
+	proxy.OnRequest().HandleConnectFunc(func(host string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		pctx.UserData = newContext(config, connectProxy, pctx.Req)
+		defer logProxy(config, pctx)
 
-		err := handleConnect(config, ctx)
+		defer pctx.Req.Header.Del(traceHeader)
+		err := handleConnect(config, pctx)
 		if err != nil {
-			ctx.Resp = rejectResponse(ctx.Req, config, err)
+			pctx.Resp = rejectResponse(pctx.Req, config, err)
 			return goproxy.RejectConnect, ""
 		}
 		return goproxy.OkConnect, host
@@ -404,13 +410,13 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		// In case of an error, this function is called a second time to filter the
 		// response we generate so this logger will be called once.
-		logHTTP(config, pctx)
+		logProxy(config, pctx)
 		return resp
 	})
 	return proxy
 }
 
-func logProxy(config *Config, pctx *goproxy.ProxyCtx, proxyType string) {
+func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	var contentLength int64
@@ -421,18 +427,14 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx, proxyType string) {
 	fromHost, fromPort, _ := net.SplitHostPort(pctx.Req.RemoteAddr)
 
 	fields := logrus.Fields{
-		"proxy_type":     proxyType,
 		"src_host":       fromHost,
 		"src_port":       fromPort,
-		"requested_host": pctx.Req.Host,
-		"start_time":     sctx.start.Unix(),
 		"content_length": contentLength,
-		"trace_id":       sctx.traceId,
 	}
 
 	if sctx.decision.resolvedAddr != nil {
-		fields["dest_ip"] = sctx.decision.resolvedAddr.IP.String()
-		fields["dest_port"] = sctx.decision.resolvedAddr.Port
+		fields["dst_ip"] = sctx.decision.resolvedAddr.IP.String()
+		fields["dst_port"] = sctx.decision.resolvedAddr.Port
 	}
 
 	// attempt to retrieve information about the host originating the proxy request
@@ -460,7 +462,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx, proxyType string) {
 		fields["error"] = err.Error()
 	}
 
-	entry := config.Log.WithFields(fields)
+	entry := sctx.logger.WithFields(fields)
 	var logMethod func(...interface{})
 	if _, ok := err.(denyError); !ok && err != nil {
 		logMethod = entry.Error
@@ -469,27 +471,14 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx, proxyType string) {
 	} else {
 		logMethod = entry.Warn
 	}
-	logMethod(LOGLINE_CANONICAL_PROXY_DECISION)
-}
-
-func logHTTP(config *Config, pctx *goproxy.ProxyCtx) {
-	logProxy(config, pctx, "http")
+	logMethod(CanonicalProxyDecision)
 }
 
 func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
-	config.Log.WithFields(
-		logrus.Fields{
-			"remote":         pctx.Req.RemoteAddr,
-			"requested_host": pctx.Req.Host,
-			"trace_id":       pctx.Req.Header.Get(traceHeader),
-		}).Debug("received CONNECT proxy request")
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
 	sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.Host)
-	sctx.traceId = pctx.Req.Header.Get(traceHeader)
-
-	logProxy(config, pctx, "connect")
 	if pctx.Error != nil {
 		return pctx.Error
 	}

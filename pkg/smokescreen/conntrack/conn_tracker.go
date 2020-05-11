@@ -13,7 +13,6 @@ type Tracker struct {
 	*sync.Map
 	ShuttingDown atomic.Value
 	Wg           *sync.WaitGroup
-	Log          *logrus.Logger
 	statsc       *statsd.Client
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
@@ -27,7 +26,6 @@ func NewTracker(idle time.Duration, statsc *statsd.Client, logger *logrus.Logger
 		ShuttingDown: sd,
 		Wg:           &sync.WaitGroup{},
 		IdleTimeout:  idle,
-		Log:          logger,
 		statsc:       statsc,
 	}
 }
