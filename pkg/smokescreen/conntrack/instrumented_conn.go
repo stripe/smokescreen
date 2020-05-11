@@ -112,11 +112,11 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
-	var dstIP, dstIPStr string
+	var dstIP, dstPortStr string
 	var dstPort int
 	if remoteAddr := ic.Conn.RemoteAddr(); remoteAddr != nil {
-		dstIP, dstIPStr, _ = net.SplitHostPort(remoteAddr.String())
-		dstPort, _ = strconv.Atoi(dstIPStr)
+		dstIP, dstPortStr, _ = net.SplitHostPort(remoteAddr.String())
+		dstPort, _ = strconv.Atoi(dstPortStr)
 	}
 
 	ic.logger.WithFields(logrus.Fields{
