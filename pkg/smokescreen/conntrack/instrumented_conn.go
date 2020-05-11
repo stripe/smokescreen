@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -111,16 +112,24 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
+	var dstIP, dstIPStr string
+	var dstPort int
+	if remoteAddr := ic.Conn.RemoteAddr(); remoteAddr != nil {
+		dstIP, dstIPStr, _ = net.SplitHostPort(remoteAddr.String())
+		dstPort, _ = strconv.Atoi(dstIPStr)
+	}
+
 	ic.logger.WithFields(logrus.Fields{
 		"bytes_in":      ic.BytesIn,
 		"bytes_out":     ic.BytesOut,
 		"role":          ic.Role,
-		"remote_addr":   ic.Conn.RemoteAddr(),
 		"end_time":      end.UTC(),
 		"duration":      duration,
 		"timed_out":     timeout,
 		"error":         errorMessage,
 		"last_activity": time.Unix(0, *ic.LastActivity).UTC(),
+		"dst_ip":        dstIP,
+		"dst_port":      dstPort,
 	}).Info(CanonicalProxyConnClose)
 
 	ic.tracker.Wg.Done()
