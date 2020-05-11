@@ -96,7 +96,7 @@ func (ic *InstrumentedConn) Close() error {
 
 	// Track when we terminate active connections during a shutdown
 	if ic.tracker.ShuttingDown.Load() == true {
-		if ic.Idle() {
+		if !ic.Idle() {
 			ic.logger = ic.logger.WithField("active_at_termination", true)
 			ic.tracker.statsc.Incr("cn.active_at_termination", tags, 1)
 		}
