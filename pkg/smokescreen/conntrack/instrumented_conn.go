@@ -137,36 +137,46 @@ func (ic *InstrumentedConn) Close() error {
 	return ic.CloseError
 }
 
-func (ic *InstrumentedConn) Read(b []byte) (int, error) {
+func (ic *InstrumentedConn) Read(b []byte) (n int, err error) {
+	n, err = ic.Conn.Read(b)
+	atomic.AddUint64(ic.BytesIn, uint64(n))
+	if err != nil {
+		return
+	}
+
+	// Update deadlines *after* a successful Read on the underlying Conn, per
+	// net.Conn.SetDeadline() docs.
 	now := time.Now()
 	if ic.timeout != 0 {
-		if err := ic.Conn.SetDeadline(now.Add(ic.timeout)); err != nil {
-			return 0, err
+		if err = ic.Conn.SetDeadline(now.Add(ic.timeout)); err != nil {
+			n = 0
+			return
 		}
 	}
 
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
-
-	n, err := ic.Conn.Read(b)
-	atomic.AddUint64(ic.BytesIn, uint64(n))
-
-	return n, err
+	return
 }
 
-func (ic *InstrumentedConn) Write(b []byte) (int, error) {
+func (ic *InstrumentedConn) Write(b []byte) (n int, err error) {
+	n, err = ic.Conn.Write(b)
+	atomic.AddUint64(ic.BytesOut, uint64(n))
+	if err != nil {
+		return
+	}
+
+	// Update deadlines *after* a successful Read on the underlying Conn, per
+	// net.Conn.SetDeadline() docs.
 	now := time.Now()
 	if ic.timeout != 0 {
-		if err := ic.Conn.SetDeadline(now.Add(ic.timeout)); err != nil {
-			return 0, err
+		if err = ic.Conn.SetDeadline(now.Add(ic.timeout)); err != nil {
+			n = 0
+			return
 		}
 	}
 
 	atomic.StoreInt64(ic.LastActivity, now.UnixNano())
-
-	n, err := ic.Conn.Write(b)
-	atomic.AddUint64(ic.BytesOut, uint64(n))
-
-	return n, err
+	return
 }
 
 // Idle returns true when the connection's last activity occured before the
