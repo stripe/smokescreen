@@ -241,6 +241,10 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
 	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	if err != nil {
+		sctx.logger.WithFields(logrus.Fields{
+			"error":   err.Error(),
+			"address": d.resolvedAddr.String(),
+		}).Error("failed to dial proxy target")
 		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
 		return nil, err
 	}
