@@ -556,6 +556,8 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
 
+		cfg.ConnTracker.Wg.Wait()
+
 		entry := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(entry)
 
