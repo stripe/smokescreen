@@ -156,7 +156,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
-		resp, err := client.Get("http://127.0.1.1")
+		resp, err := client.Get("http://127.0.0.1")
 		r.NoError(err)
 
 		// Verify the error header is still set
