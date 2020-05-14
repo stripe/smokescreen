@@ -266,11 +266,11 @@ func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
 	resp := rejectResponse(pctx, err)
 
 	if err := resp.Write(w); err != nil {
-		sctx.cfg.Log.Errorf("Failed to write HTTP error response: %s", err)
+		sctx.logger.Errorf("Failed to write HTTP error response: %s", err)
 	}
 
 	if err := w.Close(); err != nil {
-		sctx.cfg.Log.Errorf("Failed to close proxy client connection: %s", err)
+		sctx.logger.Errorf("Failed to close proxy client connection: %s", err)
 	}
 }
 
