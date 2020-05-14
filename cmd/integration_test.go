@@ -102,11 +102,7 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 
 	var entries []*logrus.Entry
 	for _, entry := range logs {
-		if entry.Level < logrus.WarnLevel {
-			a.Failf("unexpected log line more severe than Warn", "%v", entry)
-		} else if entry.Level < logrus.DebugLevel {
-			entries = append(entries, entry)
-		}
+		entries = append(entries, entry)
 	}
 
 	if len(entries) > 0 {
@@ -445,7 +441,7 @@ func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.
 	t.Logf("HTTP Response: %#v", resp)
 
 	if test.OverConnect {
-		a.Contains(err.Error(), "proxyconnect tcp")
+		a.Contains(err.Error(), "Failed to connect to remote host")
 	} else {
 		a.Equal(http.StatusBadGateway, resp.StatusCode)
 	}
