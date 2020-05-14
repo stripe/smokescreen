@@ -304,6 +304,8 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		}).Warn("rejectResponse called with unexpected error")
 	}
 
+	sctx.logger.Error(msg)
+
 	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
 		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
 	}
@@ -463,7 +465,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 
 		if resp == nil && pctx.Error != nil {
-			logrus.Warnf("rejecting with %#v", pctx.Error)
 			return rejectResponse(pctx, pctx.Error)
 		}
 
