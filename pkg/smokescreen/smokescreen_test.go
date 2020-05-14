@@ -618,7 +618,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
-		if entry.Message == LOGLINE_CANONICAL_PROXY_DECISION {
+		if entry.Message == CanonicalProxyDecision {
 			return entry
 		}
 	}

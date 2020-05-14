@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		icWriter := tr.NewInstrumentedConn(conn, "testid", "test", "localhost", "http")
+		icWriter := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "test", "localhost", "http")
 
 		n, err := icWriter.Write(sent)
 		if err != nil {
@@ -52,7 +53,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	icReader := tr.NewInstrumentedConn(conn, "testid", "testBytesInOut", "localhost", "http")
+	icReader := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "testBytesInOut", "localhost", "http")
 
 	go func() {
 		defer wg.Done()
@@ -77,7 +78,7 @@ func TestInstrumentedConnIdle(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Millisecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, "testid", "testIdle", "localhost", "egress")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testIdle", "localhost", "egress")
 
 	ic.Write([]byte("egress"))
 	assert.False(ic.Idle())
@@ -124,7 +125,7 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 		}
 
 		var b [1]byte
-		ic := tr.NewInstrumentedConnWithTimeout(c, tt.timeout, "", "test", "testHost", "http")
+		ic := tr.NewInstrumentedConnWithTimeout(c, tt.timeout, logrus.NewEntry(testLogger), "test", "testHost", "http")
 
 		_, err = ic.Read(b[:])
 		if err == nil && tt.expectedError {

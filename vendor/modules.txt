@@ -8,6 +8,8 @@ github.com/davecgh/go-spew/spew
 github.com/hashicorp/go-cleanhttp
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
+# github.com/rs/xid v1.2.1
+github.com/rs/xid
 # github.com/sirupsen/logrus v1.0.6
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/test

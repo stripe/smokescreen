@@ -3,7 +3,6 @@ package conntrack
 import "time"
 
 type InstrumentedConnStats struct {
-	TraceId                  string    `json:"trace_id"`
 	Role                     string    `json:"role"`
 	Rhost                    string    `json:"rhost"`
 	Raddr                    string    `json:"raddr"`
