@@ -302,7 +302,10 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		sctx.logger.WithField("error", err.Error()).Warn("rejectResponse called with unexpected error")
 	}
 
-	sctx.logger.Error(msg)
+	// Do not double log deny errors, they are logged in a previous call to logProxy.
+	if _, ok := err.(denyError); !ok {
+		sctx.logger.Error(msg)
+	}
 
 	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
 		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
