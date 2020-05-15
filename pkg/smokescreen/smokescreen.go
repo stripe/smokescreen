@@ -299,9 +299,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		status = "Internal server error"
 		code = http.StatusInternalServerError
 		msg = "An unexpected error occurred: " + err.Error()
-		sctx.cfg.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Warn("rejectResponse called with unexpected error")
+		sctx.logger.WithField("error", err.Error()).Warn("rejectResponse called with unexpected error")
 	}
 
 	sctx.logger.Error(msg)

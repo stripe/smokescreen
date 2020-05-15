@@ -103,9 +103,14 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+// TestClearsErrors tests that we are correctly preserving/removing the X-Smokescreen-Error header.
+// This header is used to provide more granular errors to proxy clients, and signals that
+// there was an issue connecting to the proxy target.
 func TestClearsErrorHeader(t *testing.T) {
 	r := require.New(t)
 
+	// For HTTP requests, Smokescreen should ensure successful requests do not include
+	// X-Smokescreen-Error, even if they are set by the upstream host.
 	t.Run("Clears error header set by upstream", func(t *testing.T) {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -141,6 +146,8 @@ func TestClearsErrorHeader(t *testing.T) {
 		}
 	})
 
+	// Test that the the error header is preserved when a connection is allowed by the ACL,
+	// but the connection fails to be established.
 	t.Run("Doesn't clear errors for allowed connections", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
