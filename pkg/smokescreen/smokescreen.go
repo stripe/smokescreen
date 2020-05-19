@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -258,29 +259,62 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-func rejectResponse(req *http.Request, config *Config, err error) *http.Response {
-	var msg string
-	switch err.(type) {
-	case denyError:
-		msg = fmt.Sprintf(denyMsgTmpl, req.Host, err.Error())
-	default:
-		config.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Warn("rejectResponse called with unexpected error")
-		msg = "An unexpected error occurred."
+// HTTPErrorHandler allows returning a custom error response when smokescreen
+// fails to connect to the proxy target.
+func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
+	sctx := pctx.UserData.(*smokescreenContext)
+	resp := rejectResponse(pctx, err)
+
+	if err := resp.Write(w); err != nil {
+		sctx.logger.Errorf("Failed to write HTTP error response: %s", err)
 	}
 
-	if config.AdditionalErrorMessageOnDeny != "" {
-		msg = fmt.Sprintf("%s\n\n%s\n", msg, config.AdditionalErrorMessageOnDeny)
+	if err := w.Close(); err != nil {
+		sctx.logger.Errorf("Failed to close proxy client connection: %s", err)
+	}
+}
+
+func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
+	sctx := pctx.UserData.(*smokescreenContext)
+
+	var msg, status string
+	var code int
+
+	if e, ok := err.(net.Error); ok {
+		// net.Dial timeout
+		if e.Timeout() {
+			status = "Gateway timeout"
+			code = http.StatusGatewayTimeout
+			msg = "Timed out connecting to remote host: " + e.Error()
+		} else {
+			status = "Bad gateway"
+			code = http.StatusBadGateway
+			msg = "Failed to connect to remote host: " + e.Error()
+		}
+	} else if e, ok := err.(denyError); ok {
+		status = "Request rejected by proxy"
+		code = http.StatusProxyAuthRequired
+		msg = fmt.Sprintf(denyMsgTmpl, pctx.Req.Host, e.Error())
+	} else {
+		status = "Internal server error"
+		code = http.StatusInternalServerError
+		msg = "An unexpected error occurred: " + err.Error()
+		sctx.logger.WithField("error", err.Error()).Warn("rejectResponse called with unexpected error")
 	}
 
-	resp := goproxy.NewResponse(req,
-		goproxy.ContentTypeText,
-		http.StatusProxyAuthRequired,
-		msg+"\n")
-	resp.Status = "Request Rejected by Proxy" // change the default status message
-	resp.ProtoMajor = req.ProtoMajor
-	resp.ProtoMinor = req.ProtoMinor
+	// Do not double log deny errors, they are logged in a previous call to logProxy.
+	if _, ok := err.(denyError); !ok {
+		sctx.logger.Error(msg)
+	}
+
+	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
+		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
+	}
+
+	resp := goproxy.NewResponse(pctx.Req, goproxy.ContentTypeText, code, msg+"\n")
+	resp.Status = status
+	resp.ProtoMajor = pctx.Req.ProtoMajor
+	resp.ProtoMinor = pctx.Req.ProtoMinor
 	resp.Header.Set(errorHeader, msg)
 	return resp
 }
@@ -343,9 +377,19 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle traditional HTTP proxy
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		// Attach smokescreenContext to goproxy.ProxyCtx
+
+		// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
+		// proxy requests we are able to specify the request during the call to OnResponse().
 		sctx := newContext(config, httpProxy, req)
+
+		// Attach smokescreenContext to goproxy.ProxyCtx
 		pctx.UserData = sctx
+
+		// Delete Smokescreen specific headers before goproxy forwards the request
+		defer func() {
+			req.Header.Del(roleHeader)
+			req.Header.Del(traceHeader)
+		}()
 
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
 		pctx.RoundTripper = rtFn
@@ -365,18 +409,16 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
-		decision, err := checkIfRequestShouldBeProxied(config, req, remoteHost)
-		sctx.decision = decision
+		sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost)
 
-		req.Header.Del(roleHeader)
-		req.Header.Del(traceHeader)
-
-		if err != nil {
-			pctx.Error = err
-			return req, rejectResponse(req, config, err)
+		// Returning any kind of response in this handler is goproxy's way of short circuiting
+		// the request. The original request will never be sent, and goproxy will invoke our
+		// response filter attached via the OnResponse() handler.
+		if pctx.Error != nil {
+			return req, rejectResponse(pctx, pctx.Error)
 		}
-		if !decision.allow {
-			return req, rejectResponse(req, config, denyError{errors.New(decision.reason)})
+		if !sctx.decision.allow {
+			return req, rejectResponse(pctx, denyError{errors.New(sctx.decision.reason)})
 		}
 
 		// Proceed with proxying the request
@@ -386,26 +428,45 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(host string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		pctx.UserData = newContext(config, connectProxy, pctx.Req)
-		defer logProxy(config, pctx)
+		pctx.HTTPErrorHandler = HTTPErrorHandler
 
+		// Defer logging the proxy event here because logProxy relies
+		// on state set in handleConnect
+		defer logProxy(config, pctx)
 		defer pctx.Req.Header.Del(traceHeader)
+
 		err := handleConnect(config, pctx)
 		if err != nil {
-			pctx.Resp = rejectResponse(pctx.Req, config, err)
+			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
 		return goproxy.OkConnect, host
 	})
 
+	// Strangely, goproxy can invoke this same function twice for a single HTTP request.
+	//
+	// If a proxy request is rejected due to an ACL denial, the response passed to this
+	// function was created by Smokescreen's call to rejectResponse() in the OnRequest()
+	// handler. This only happens once. This is also the behavior for an allowed request
+	// which is completed successfully.
+	//
+	// If a proxy request is allowed, but the RoundTripper returns an error fulfulling
+	// the HTTP request, goproxy will invoke this OnResponse() filter twice. First this
+	// function will be called with a nil response, and as a result this function will
+	// return a response to send back to the proxy client using rejectResponse(). This
+	// function will be called again with the previously returned response, which will
+	// simply trigger the logHTTP function and return.
 	proxy.OnResponse().DoFunc(func(resp *http.Response, pctx *goproxy.ProxyCtx) *http.Response {
 		sctx := pctx.UserData.(*smokescreenContext)
-		if resp != nil && sctx.decision.allow {
-			resp.Header.Del(errorHeader)
+
+		if resp != nil && resp.Header.Get(errorHeader) != "" {
+			if pctx.Error == nil && sctx.decision.allow {
+				resp.Header.Del(errorHeader)
+			}
 		}
 
 		if resp == nil && pctx.Error != nil {
-			logrus.Warnf("rejecting with %#v", pctx.Error)
-			return rejectResponse(pctx.Req, config, pctx.Error)
+			return rejectResponse(pctx, pctx.Error)
 		}
 
 		// In case of an error, this function is called a second time to filter the

@@ -103,41 +103,75 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+// TestClearsErrors tests that we are correctly preserving/removing the X-Smokescreen-Error header.
+// This header is used to provide more granular errors to proxy clients, and signals that
+// there was an issue connecting to the proxy target.
 func TestClearsErrorHeader(t *testing.T) {
 	r := require.New(t)
 
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// For HTTP requests, Smokescreen should ensure successful requests do not include
+	// X-Smokescreen-Error, even if they are set by the upstream host.
+	t.Run("Clears error header set by upstream", func(t *testing.T) {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	cfg, err := testConfig("test-trusted-srv")
-	r.NoError(err)
+		cfg, err := testConfig("test-trusted-srv")
+		r.NoError(err)
 
-	proxySrv := proxyServer(cfg)
-	r.NoError(err)
-	defer proxySrv.Close()
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
 
-	// Create a http.Client that uses our proxy
-	client, err := proxyClient(proxySrv.URL)
-	r.NoError(err)
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
 
-	// Talk "through" the proxy to our malicious upstream that sets the
-	// error header.
-	resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
-	r.NoError(err)
+		// Talk "through" the proxy to our malicious upstream that sets the
+		// error header.
+		resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
+		r.NoError(err)
 
-	// Should succeed
-	if resp.StatusCode != 200 {
-		t.Errorf("response had bad status: expected 200, got %d", resp.StatusCode)
-	}
+		// Should succeed
+		if resp.StatusCode != 200 {
+			t.Errorf("response had bad status: expected 200, got %d", resp.StatusCode)
+		}
 
-	// Verify the error header is not set.
-	if h := resp.Header.Get(errorHeader); h != "" {
-		t.Errorf("proxy did not strip %q header: %q", errorHeader, h)
-	}
+		// Verify the error header is not set.
+		if h := resp.Header.Get(errorHeader); h != "" {
+			t.Errorf("proxy did not strip %q header: %q", errorHeader, h)
+		}
 
-	// Verify we did get the other header, to confirm we're talking to the right thing
-	if h := resp.Header.Get("X-Smokescreen-Test"); h != "yes" {
-		t.Errorf("did not get expected header X-Smokescreen-Test: expected \"yes\", got %q", h)
-	}
+		// Verify we did get the other header, to confirm we're talking to the right thing
+		if h := resp.Header.Get("X-Smokescreen-Test"); h != "yes" {
+			t.Errorf("did not get expected header X-Smokescreen-Test: expected \"yes\", got %q", h)
+		}
+	})
+
+	// Test that the the error header is preserved when a connection is allowed by the ACL,
+	// but the connection fails to be established.
+	t.Run("Doesn't clear errors for allowed connections", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+
+		// Immediately time out to simulate net.Dial timeouts
+		cfg.ConnectTimeout = -1
+
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
+
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
+
+		resp, err := client.Get("http://127.0.0.1")
+		r.NoError(err)
+
+		// Verify the error header is still set
+		h := resp.Header.Get(errorHeader)
+		if h == "" {
+			t.Errorf("proxy stripped %q header: %q", errorHeader, h)
+		}
+	})
 }
 
 func TestConsistentHostHeader(t *testing.T) {
@@ -319,12 +353,12 @@ func TestInvalidHost(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
-			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.com", testCase.scheme))
+			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.test", testCase.scheme))
 			if testCase.expectErr {
-				a.Contains(err.Error(), "Request Rejected by Proxy")
+				r.Contains(err.Error(), "Bad gateway")
 			} else {
 				r.NoError(err)
-				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+				r.Equal(http.StatusBadGateway, resp.StatusCode)
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
@@ -478,7 +512,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		logHook := proxyLogHook(cfg)
-		cfg.IdleTimeout = time.Nanosecond
+		cfg.IdleTimeout = 100 * time.Millisecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -493,7 +527,8 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		resp, _ := client.Do(req)
-		r.Equal(407, resp.StatusCode)
+		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
+		r.NotEqual("", resp.Header.Get(errorHeader))
 
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
@@ -509,7 +544,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.NoError(err)
 
 		logHook := proxyLogHook(cfg)
-		cfg.IdleTimeout = time.Nanosecond
+		cfg.IdleTimeout = 100 * time.Millisecond
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -528,11 +563,65 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
 
+		cfg.ConnTracker.Wg.Wait()
+
 		entry := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(entry)
 
 		r.Equal(true, entry.Data["timed_out"])
 		r.Contains(entry.Data["error"], "i/o timeout")
+	})
+
+	t.Run("CONNECT proxy dial timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		// Go swallows the response as the CONNECT tunnel was never established
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "Gateway timeout")
+	})
+
+	t.Run("HTTP proxy dial timeouts", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		resp, _ := client.Do(req)
+		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
+		r.NotEqual("", resp.Header.Get(errorHeader))
 	})
 }
 
