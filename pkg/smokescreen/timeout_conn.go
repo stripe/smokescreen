@@ -11,6 +11,9 @@ type TimeoutConn struct {
 }
 
 func NewTimeoutConn(conn net.Conn, timeout time.Duration) net.Conn {
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		panic("failed to set deadline on new Conn")
+	}
 	return &TimeoutConn{
 		Conn:    conn,
 		timeout: timeout,
