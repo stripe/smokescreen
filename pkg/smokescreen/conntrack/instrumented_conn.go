@@ -91,8 +91,8 @@ func (ic *InstrumentedConn) Close() error {
 
 	ic.tracker.statsc.Incr("cn.close", tags, 1)
 	ic.tracker.statsc.Histogram("cn.duration", duration, tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_in", float64(*ic.BytesIn), tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_out", float64(*ic.BytesOut), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_in", float64(atomic.LoadUint64(ic.BytesIn)), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_out", float64(atomic.LoadUint64(ic.BytesOut)), tags, 1)
 
 	// Track when we terminate active connections during a shutdown
 	if ic.tracker.ShuttingDown.Load() == true {
