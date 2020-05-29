@@ -5,6 +5,7 @@ package smokescreen
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -623,6 +624,64 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
 		r.NotEqual("", resp.Header.Get(errorHeader))
 	})
+}
+
+// TestProxyHalfClosed tests that the proxy and proxy client correctly
+// closes all connections if the proxy target attempts to half-close
+// the TCP connection.
+func TestProxyHalfClosed(t *testing.T) {
+	r := require.New(t)
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("couldn't hijack conn")
+		}
+		conn, bufrw, err := hj.Hijack()
+		if err != nil {
+			t.Error(err)
+		}
+
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			t.Error("conn did not unwrap to tls.Conn")
+		}
+
+		// Send a response
+		if _, err := io.WriteString(bufrw, "HTTP/1.1 200 TCP is great!\r\n\r\n"); err != nil {
+			t.Errorf("Error responding to client: %s", err)
+		}
+		bufrw.Flush()
+		tlsConn.CloseWrite()
+	})
+
+	cfg, err := testConfig("test-local-srv")
+	r.NoError(err)
+	err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+	r.NoError(err)
+
+	logHook := proxyLogHook(cfg)
+
+	l, err := net.Listen("tcp", "localhost:0")
+	r.NoError(err)
+	cfg.Listener = l
+
+	proxy := proxyServer(cfg)
+	remote := httptest.NewTLSServer(h)
+	client, err := proxyClient(proxy.URL)
+	r.NoError(err)
+
+	req, err := http.NewRequest("GET", remote.URL, nil)
+	r.NoError(err)
+
+	resp, err := client.Do(req)
+	resp.Body.Close()
+	r.Equal(http.StatusOK, resp.StatusCode)
+
+	cfg.ConnTracker.Wg.Wait()
+
+	entry := findCanonicalProxyClose(logHook.AllEntries())
+	r.NotNil(entry)
 }
 
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
