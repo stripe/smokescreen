@@ -102,14 +102,9 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
-	var timeout bool
 	var errorMessage string
 	if ic.ConnError != nil {
 		errorMessage = ic.ConnError.Error()
-		if e, ok := ic.ConnError.(net.Error); ok && e.Timeout() {
-			timeout = true
-			ic.tracker.statsc.Incr("cn.timeout", tags, 1)
-		}
 	}
 
 	var dstIP, dstPortStr string
@@ -125,7 +120,6 @@ func (ic *InstrumentedConn) Close() error {
 		"role":          ic.Role,
 		"end_time":      end.UTC(),
 		"duration":      duration,
-		"timed_out":     timeout,
 		"error":         errorMessage,
 		"last_activity": time.Unix(0, *ic.LastActivity).UTC(),
 		"dst_ip":        dstIP,
