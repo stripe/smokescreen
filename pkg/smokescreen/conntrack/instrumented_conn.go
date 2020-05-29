@@ -91,8 +91,8 @@ func (ic *InstrumentedConn) Close() error {
 
 	ic.tracker.statsc.Incr("cn.close", tags, 1)
 	ic.tracker.statsc.Histogram("cn.duration", duration, tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_in", float64(*ic.BytesIn), tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_out", float64(*ic.BytesOut), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_in", float64(atomic.LoadUint64(ic.BytesIn)), tags, 1)
+	ic.tracker.statsc.Histogram("cn.bytes_out", float64(atomic.LoadUint64(ic.BytesOut)), tags, 1)
 
 	// Track when we terminate active connections during a shutdown
 	if ic.tracker.ShuttingDown.Load() == true {
@@ -102,14 +102,9 @@ func (ic *InstrumentedConn) Close() error {
 		}
 	}
 
-	var timeout bool
 	var errorMessage string
 	if ic.ConnError != nil {
 		errorMessage = ic.ConnError.Error()
-		if e, ok := ic.ConnError.(net.Error); ok && e.Timeout() {
-			timeout = true
-			ic.tracker.statsc.Incr("cn.timeout", tags, 1)
-		}
 	}
 
 	var dstIP, dstPortStr string
@@ -125,9 +120,8 @@ func (ic *InstrumentedConn) Close() error {
 		"role":          ic.Role,
 		"end_time":      end.UTC(),
 		"duration":      duration,
-		"timed_out":     timeout,
 		"error":         errorMessage,
-		"last_activity": time.Unix(0, *ic.LastActivity).UTC(),
+		"last_activity": time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC(),
 		"dst_ip":        dstIP,
 		"dst_port":      dstPort,
 	}).Info(CanonicalProxyConnClose)

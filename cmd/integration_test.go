@@ -279,7 +279,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	for _, useTLS := range []bool{true, false} {
 		// Smokescreen instances
-		proxyServer, err := startSmokescreen(t, useTLS, &logHook)
+		_, proxyServer, err := startSmokescreen(t, useTLS, &logHook)
 		require.NoError(t, err)
 		defer proxyServer.Close()
 		proxyServers[useTLS] = proxyServer
@@ -455,7 +455,7 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 
 	// Create TLS and non-TLS instances of Smokescreen
 	for _, useTLS := range []bool{true, false} {
-		server, err := startSmokescreen(t, useTLS, &logHook)
+		_, server, err := startSmokescreen(t, useTLS, &logHook)
 		require.NoError(t, err)
 		defer server.Close()
 		servers[useTLS] = server
@@ -500,6 +500,74 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 	}
 }
 
+func TestClientHalfCloseConnection(t *testing.T) {
+	a := assert.New(t)
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "TCP is great!")
+	})
+	remote := httptest.NewServer(h)
+
+	var logHook logrustest.Hook
+
+	conf, server, err := startSmokescreen(t, false, &logHook)
+	require.NoError(t, err)
+	defer server.Close()
+
+	proxyCon, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Send the CONNECT request to Smokescreen
+	conReq, err := http.NewRequest("CONNECT", remote.URL, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	conReq.Header.Add("X-Smokescreen-Role", "egressneedingservice-open")
+	if err := conReq.Write(proxyCon); err != nil {
+		t.Error(err)
+	}
+
+	buf := bufio.NewReader(proxyCon)
+	resp, err := http.ReadResponse(buf, conReq)
+	if err != nil {
+		t.Error(err)
+	}
+
+	a.Equal(resp.StatusCode, http.StatusOK)
+
+	// Send the response to the "remote" server
+	req, err := http.NewRequest("GET", remote.URL, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := req.Write(proxyCon); err != nil {
+		t.Error(err)
+	}
+	resp, err = http.ReadResponse(buf, req)
+	if err != nil {
+		t.Error(err)
+	}
+	a.Equal(resp.StatusCode, http.StatusOK)
+
+	// Unwrap the underlying net.TCPConn
+	tcpConn, ok := proxyCon.(*net.TCPConn)
+	if !ok {
+		t.Error("conn did not unwrap to net.TCPConn")
+	}
+
+	// Now half close the connection and check that Smokescreen
+	// logged a connection close event
+	tcpConn.CloseWrite()
+
+	conf.ConnTracker.Wg.Wait()
+
+	entries := logHook.AllEntries()
+	entry := findLogEntry(entries, "CANONICAL-PROXY-CN-CLOSE")
+	a.NotNil(entry)
+}
+
 func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	for _, entry := range entries {
 		if entry.Message == msg {
@@ -509,7 +577,7 @@ func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	return nil
 }
 
-func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*smokescreen.Config, *httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
@@ -554,5 +622,5 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*httptest
 		server.Start()
 	}
 
-	return server, nil
+	return conf, server, nil
 }
