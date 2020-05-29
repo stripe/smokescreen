@@ -121,7 +121,7 @@ func (ic *InstrumentedConn) Close() error {
 		"end_time":      end.UTC(),
 		"duration":      duration,
 		"error":         errorMessage,
-		"last_activity": time.Unix(0, *ic.LastActivity).UTC(),
+		"last_activity": time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC(),
 		"dst_ip":        dstIP,
 		"dst_port":      dstPort,
 	}).Info(CanonicalProxyConnClose)
