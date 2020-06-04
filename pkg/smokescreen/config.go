@@ -62,6 +62,9 @@ type Config struct {
 	// These are *only* used for traditional HTTP proxy requests
 	TransportMaxIdleConns        int
 	TransportMaxIdleConnsPerHost int
+
+	// Used for logging connection time
+	TimeConnect bool
 }
 
 type missingRoleError struct {
