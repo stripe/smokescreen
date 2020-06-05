@@ -48,11 +48,12 @@ type aclDecision struct {
 }
 
 type smokescreenContext struct {
-	cfg       *Config
-	start     time.Time
-	decision  *aclDecision
-	proxyType string
-	logger    *logrus.Entry
+	cfg           *Config
+	start         time.Time
+	decision      *aclDecision
+	proxyType     string
+	logger        *logrus.Entry
+	requestedHost string
 }
 
 // ExitStatus is used to log Smokescreen's connection status at shutdown time
@@ -240,7 +241,14 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
+	start := time.Now()
+
 	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+
+	if sctx.cfg.TimeConnect {
+		sctx.cfg.StatsdClient.Timing("cn.atpt.connect.time", time.Since(start), []string{sctx.requestedHost}, 1)
+	}
+
 	if err != nil {
 		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
 		return nil, err
@@ -345,10 +353,11 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	})
 
 	return &smokescreenContext{
-		cfg:       cfg,
-		logger:    logger,
-		proxyType: proxyType,
-		start:     start,
+		cfg:           cfg,
+		logger:        logger,
+		proxyType:     proxyType,
+		start:         start,
+		requestedHost: req.Host,
 	}
 }
 

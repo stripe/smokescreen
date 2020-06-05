@@ -152,7 +152,9 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
  - Andreas Fuchs
  - Andrew Dunham
  - Andrew Metcalf
+ - Aniket Joshi
  - Carl Jackson
+ - Craig Shannon
  - Evan Broder
  - Marc-André Tremblay
  - Ryan Koppenhaver
