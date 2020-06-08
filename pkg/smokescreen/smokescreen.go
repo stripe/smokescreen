@@ -250,7 +250,10 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	if err != nil {
-		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
+		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{sctx.requestedHost}, 1)
+		if e, ok := err.(net.Error); ok && e.Timeout() {
+			sctx.cfg.StatsdClient.Incr("cn.atpt.fail.timeout", []string{sctx.requestedHost}, 1)
+		}
 		return nil, err
 	}
 	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
