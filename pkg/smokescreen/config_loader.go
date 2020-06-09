@@ -41,8 +41,9 @@ type yamlConfig struct {
 	TransportMaxIdleConns        int `yaml:"transport_max_idle_conns"`
 	TransportMaxIdleConnsPerHost int `yaml:"transport_max_idle_conns_per_host"`
 
-	Tls *yamlConfigTls
+	TimeConnect bool `yaml:"time_connect"`
 
+	Tls *yamlConfigTls
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 }
 
@@ -134,6 +135,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
+	c.TimeConnect = yc.TimeConnect
 
 	return nil
 }
