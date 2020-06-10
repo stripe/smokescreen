@@ -246,7 +246,8 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 
 	if sctx.cfg.TimeConnect {
-		sctx.cfg.StatsdClient.Timing("cn.atpt.connect.time", time.Since(start), []string{sctx.requestedHost}, 1)
+		domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
+		sctx.cfg.StatsdClient.Timing("cn.atpt.connect.time", time.Since(start), []string{domainTag}, 1)
 	}
 
 	if err != nil {
