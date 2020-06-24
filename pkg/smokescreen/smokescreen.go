@@ -255,7 +255,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-
+	
+	if sctx.cfg.ReverseProxyProtocol {
+		conn = proxyproto.NewConn(conn, sctx.cfg.ConnectTimeout)	
+	}
+	
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
 	if sctx.proxyType == connectProxy {
