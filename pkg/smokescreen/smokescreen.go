@@ -249,7 +249,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if sctx.cfg.ProxyDialTimeout == nil {
 		conn, err = net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	} else {
-		conn, err = sctx.cfg.ProxyDialTimeout(network, d.resolveAddr.String(), sctx.cfg.ConnectTimeout)
+		conn, err = sctx.cfg.ProxyDialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	}
 	
 	if sctx.cfg.TimeConnect {
