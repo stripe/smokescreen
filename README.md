@@ -26,7 +26,7 @@ The client identification function can also be replaced by one of your liking. M
 
 ## Dependencies
 
-Smokescreen uses [mod][go modules] to manage dependencies. The
+Smokescreen uses [go modules][mod] to manage dependencies. The
 linked page contains documentation, but some useful commands are reproduced
 below:
 
