@@ -243,8 +243,15 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
 	start := time.Now()
 
-	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+	var conn net.Conn
+	var err  error
 
+	if sctx.cfg.ProxyDialTimeout == nil {
+		conn, err = net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+	} else {
+		conn, err = sctx.cfg.ProxyDialTimeout(network, d.resolveAddr.String(), sctx.cfg.ConnectTimeout)
+	}
+	
 	if sctx.cfg.TimeConnect {
 		domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
 		sctx.cfg.StatsdClient.Timing("cn.atpt.connect.time", time.Since(start), []string{domainTag}, 1)
@@ -254,11 +261,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
 		return nil, err
 	}
-	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
-	
-	if sctx.cfg.ReverseProxyProtocol {
-		conn = proxyproto.NewConn(conn, sctx.cfg.ConnectTimeout)	
-	}
+	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)	
 	
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.

@@ -66,8 +66,8 @@ type Config struct {
 	// Used for logging connection time
 	TimeConnect bool
 
-	// Used if smokescreen is used as a reverse proxy instead of a forward proxy
-	ReverseProxyProtocol bool
+	// Custom Dial Timeout function to be called
+	ProxyDialTimeout             func(network, address string, timeout time.Duration) (Conn, error)
 }
 
 type missingRoleError struct {

@@ -42,7 +42,6 @@ type yamlConfig struct {
 	TransportMaxIdleConnsPerHost int `yaml:"transport_max_idle_conns_per_host"`
 
 	TimeConnect bool `yaml:"time_connect"`
-	ReverseProxyProtocol bool `yaml:"reverse_proxy_protocol"`
 
 	Tls *yamlConfigTls
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
@@ -137,7 +136,6 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 	c.TimeConnect = yc.TimeConnect
-	c.ReverseProxyProtocol = yc.ReverseProxyProtocol
 
 	return nil
 }
