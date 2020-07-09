@@ -67,7 +67,7 @@ type Config struct {
 	TimeConnect bool
 
 	// Custom Dial Timeout function to be called
-	ProxyDialTimeout             func(network, address string, timeout time.Duration) (Conn, error)
+	ProxyDialTimeout             func(network, address string, timeout time.Duration) (net.Conn, error)
 }
 
 type missingRoleError struct {
