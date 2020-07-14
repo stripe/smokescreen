@@ -3,6 +3,7 @@
 package smokescreen
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -682,6 +683,81 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	entry := findCanonicalProxyClose(logHook.AllEntries())
 	r.NotNil(entry)
+}
+
+func TestCustomDialTimeout(t *testing.T) {
+	r := require.New(t)
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(time.Second)
+		w.Write([]byte("OK\n"))
+	})
+
+	t.Run("CONNECT proxy custom dial timeouts", func(t *testing.T) {
+		var custom = false
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+		cfg.ProxyDialTimeout = func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error) {
+			custom = true
+			return net.DialTimeout(network, address, timeout)
+		}
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		// Go swallows the response as the CONNECT tunnel was never established
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "Gateway timeout")
+		r.Equal(custom, true)
+	})
+
+	t.Run("HTTP proxy custom dial timeouts", func(t *testing.T) {
+		var custom = false
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		cfg.ConnectTimeout = -1
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		cfg.ProxyDialTimeout = func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error) {
+			custom = true
+			return net.DialTimeout(network, address, timeout)
+		}
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		resp, _ := client.Do(req)
+		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
+		r.NotEqual("", resp.Header.Get(errorHeader))
+
+		r.Equal(custom, true)
+	})
 }
 
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {

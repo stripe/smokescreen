@@ -65,6 +65,9 @@ type Config struct {
 
 	// Used for logging connection time
 	TimeConnect bool
+
+	// Custom Dial Timeout function to be called
+	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
 }
 
 type missingRoleError struct {

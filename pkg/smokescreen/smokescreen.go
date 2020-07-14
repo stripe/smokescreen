@@ -243,7 +243,14 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
 	start := time.Now()
 
-	conn, err := net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+	var conn net.Conn
+	var err error
+
+	if sctx.cfg.ProxyDialTimeout == nil {
+		conn, err = net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+	} else {
+		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+	}
 
 	if sctx.cfg.TimeConnect {
 		domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
