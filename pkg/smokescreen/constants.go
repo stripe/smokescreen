@@ -6,9 +6,8 @@ import (
 )
 
 const versionSemantic = "0.0.1"
-const versionHash = "$Id$" // See `git help attributes`
 func Version() string {
-	return versionSemantic + "-" + versionHash[5:13]
+	return versionSemantic
 }
 
 const DefaultStatsdNamespace = "smokescreen."
