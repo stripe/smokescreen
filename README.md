@@ -48,24 +48,30 @@ Smokescreen is built and tested using the following Go releases. Generally, Smok
 ### CLI
 Here are the options you can give Smokescreen:
 ```
-   --help                                     Show this help text.
-   --listen-ip IP                             listen on interface with address IP.
-                                                This argument is ignored when running under Einhorn. (default: any)
-   --listen-port PORT                         listen on port PORT.
-                                                This argument is ignored when running under Einhorn. (default: 4750)
-   --timeout DURATION                         Time out after DURATION when connecting. (default: 10s)
-   --proxy-protocol                           Enable PROXY protocol support.
-   --deny-range RANGE                         Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
-   --allow-range RANGE                        Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
-   --egress-acl-file FILE                     Validate egress traffic against FILE
-   --statsd-address ADDRESS                   Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
-   --tls-server-bundle-file FILE              Authenticate to clients using key and certs from FILE
-   --tls-client-ca-file FILE                  Validate client certificates using Certificate Authority from FILE
-   --tls-crl-file FILE                        Verify validity of client certificates against Certificate Revocation List from FILE
-   --danger-allow-access-to-private-ranges    WARNING: circumvent the check preventing client to reach hosts in private networks - It will make you vulnerable to SSRF.
-   --additional-error-message-on-deny MESSAGE Display MESSAGE in the HTTP response if proxying request is denied
-   --disable-acl-policy-action POLICY ACTION  Disable usage of a POLICY ACTION such as "open" in the egress ACL
-   --version, -v                              print the version
+   --help                                      Show this help text.
+   --config-file FILE                          Load configuration from FILE.  Command line options override values in the file.
+   --listen-ip IP                              Listen on interface with address IP.
+                                                 This argument is ignored when running under Einhorn. (default: any)
+   --listen-port PORT                          Listen on port PORT.
+                                                 This argument is ignored when running under Einhorn. (default: 4750)
+   --timeout DURATION                          Time out after DURATION when connecting. (default: 10s)
+   --proxy-protocol                            Enable PROXY protocol support.
+   --deny-range RANGE                          Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
+   --allow-range RANGE                         Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
+   --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
+   --allow-address value                       Add IP[:PORT] to list of allowed IPs.  Repeatable.
+   --egress-acl-file FILE                      Validate egress traffic against FILE
+   --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
+   --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
+   --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
+   --tls-client-ca-file FILE                   Validate client certificates using Certificate Authority from FILE
+   --tls-crl-file FILE                         Verify validity of client certificates against Certificate Revocation List from FILE
+   --additional-error-message-on-deny MESSAGE  Display MESSAGE in the HTTP response if proxying request is denied
+   --disable-acl-policy-action POLICY ACTION   Disable usage of a POLICY ACTION such as "open" in the egress ACL
+   --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
+                                                 This should be an absolute path with all symlinks, if any, resolved.
+   --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
+   --version, -v                               print the version
 ```
 
 ### Importing
