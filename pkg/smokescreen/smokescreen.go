@@ -824,6 +824,8 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	destination := submatch[1]
 
 	aclDecision, err := config.EgressACL.Decide(role, destination)
+	decision.project = aclDecision.Project
+	decision.reason = aclDecision.Reason
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -831,7 +833,6 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
-		decision.reason = aclDecision.Reason
 		return decision
 	}
 
@@ -841,7 +842,6 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 		fmt.Sprintf("project:%s", aclDecision.Project),
 	}
 
-	decision.reason = aclDecision.Reason
 	switch aclDecision.Result {
 	case acl.Deny:
 		decision.enforceWouldDeny = true
