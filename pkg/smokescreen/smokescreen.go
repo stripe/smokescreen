@@ -640,10 +640,11 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 	// 1. close the listening socket (so that we don't accept *new* connections)
 	// 2. close *existing* keepalive connections once they become idle
 	//
-	// It is impossible to close existing keepalive connections, because goproxy
-	// hijacks the socket and doesn't tell us when they become idle. So all we
-	// can do is close the listening socket when we receive a signal, not accept
-	// new connections, and then exit the program after a timeout.
+	// goproxy hijacks the socket and interferes with goji's ability to do the
+	// latter.  We instead pass InstrumentedConn objects, which wrap net.Conn,
+	// into goproxy.  ConnTracker keeps a reference to these, which allows us to
+	// know exactly how long to wait until the connection has become idle, and
+	// then Close it.
 
 	if len(config.StatsSocketDir) > 0 {
 		config.StatsServer = StartStatsServer(config)
