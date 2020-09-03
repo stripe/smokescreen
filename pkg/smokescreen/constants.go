@@ -6,9 +6,11 @@ import (
 )
 
 const versionSemantic = "0.0.1"
-const versionHash = "$Id$" // See `git help attributes`
+// This can be set at build time:
+// go build -ldflags='-X github.com/stripe/smokescreen/pkg/smokescreen.VersionID=33955a3' .
+var VersionID = "unknown"
 func Version() string {
-	return versionSemantic + "-" + versionHash[5:13]
+	return versionSemantic + "-" + VersionID
 }
 
 const DefaultStatsdNamespace = "smokescreen."
