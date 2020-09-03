@@ -538,6 +538,14 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Contains(entry.Data["error"], "i/o timeout")
 	})
 
+	// This isn't quite correct, as there is some nondeterministic behavior with the way
+	// CONNECT timeout errors are surfaced back to Smokescreen from Goproxy. We check
+	// for an EOF returned from HTTP client to indicate a connection interruption
+	// which in our case represents the timeout.
+	//
+	// To correctly hook into this, we'd need to pass a logger from Smokescreen to Goproxy
+	// which we have hooks into. This would be able to verify the timeout as errors from
+	// each end of the connection pair are logged by Goproxy.
 	t.Run("CONNECT proxy timeouts", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
