@@ -36,6 +36,7 @@ type Config struct {
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
 	Resolver                     *net.Resolver
+	DisableAAAALookups           bool
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	StatsdClient                 *statsd.Client

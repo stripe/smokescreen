@@ -25,6 +25,7 @@ type yamlConfig struct {
 	DenyRanges           []string `yaml:"deny_ranges"`
 	AllowRanges          []string `yaml:"allow_ranges"`
 	Resolvers            []string `yaml:"resolver_addresses"`
+	DisableAAAALookups   bool     `yaml:"disable_aaaa_lookups"`
 	StatsdAddress        string   `yaml:"statsd_address"`
 	EgressAclFile        string   `yaml:"acl_file"`
 	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
@@ -76,6 +77,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
+
+	c.DisableAAAALookups = yc.DisableAAAALookups
 
 	c.IdleTimeout = yc.IdleTimeout
 	c.ConnectTimeout = yc.ConnectTimeout

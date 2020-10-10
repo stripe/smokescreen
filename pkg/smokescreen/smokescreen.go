@@ -163,30 +163,45 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	if network != "tcp" {
 		return nil, fmt.Errorf("unknown network type %q", network)
 	}
+
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := context.Background()
+
 	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
 		return nil, err
 	}
 
-	ips, err := config.Resolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) < 1 {
-		return nil, fmt.Errorf("no IPs resolved")
+	if config.DisableAAAALookups {
+		if ips, err := config.Resolver.LookupIP(ctx, "ip4", host); err == nil {
+			if len(ips) < 1 {
+				return nil, fmt.Errorf("no IPs resolved")
+			}
+
+			return &net.TCPAddr{
+				IP:   ips[0],
+				Port: resolvedPort,
+			}, nil
+		}
+	} else {
+		if ips, err := config.Resolver.LookupIPAddr(ctx, host); err == nil {
+			if len(ips) < 1 {
+				return nil, fmt.Errorf("no IPs resolved")
+			}
+
+			return &net.TCPAddr{
+				IP:   ips[0].IP,
+				Zone: ips[0].Zone,
+				Port: resolvedPort,
+			}, nil
+		}
 	}
 
-	return &net.TCPAddr{
-		IP:   ips[0].IP,
-		Zone: ips[0].Zone,
-		Port: resolvedPort,
-	}, nil
+	return nil, err
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
