@@ -2,6 +2,7 @@ package acl
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -175,10 +176,30 @@ func (acl *ACL) Validate() error {
 //
 // Domains can only contain a single wildcard prefix
 // Domains cannot be represented as a sole wildcard
+// Domains must not include a protocol scheme
+// Domains must not contain a port suffix
 func (acl *ACL) ValidateDomains(domains []string) error {
 	for _, d := range domains {
 		if d == "" {
 			return fmt.Errorf("glob cannot be empty")
+		}
+
+		u, err := url.Parse(d)
+		if err != nil {
+			return err
+		}
+
+		// The ordering here is important. The url.Port() check should occur before checking
+		// for a specified url.Scheme as Go will automatically apply a scheme for common
+		// ports. As an example, if a domain is suffixed with :443 the scheme will be set
+		// to HTTPS.
+		if u.Port() != "" {
+			return fmt.Errorf("%v: domain must not include port suffix", d)
+		}
+
+		if u.Scheme != "" {
+			fmt.Println(u.Scheme)
+			return fmt.Errorf("%v: domain must not contain protocol scheme", d)
 		}
 
 		if !strings.HasPrefix(d, "*.") && strings.HasPrefix(d, "*") {

@@ -232,7 +232,20 @@ func TestACLAddInvalidDomain(t *testing.T) {
 		Policy:      Open,
 		DomainGlobs: []string{"*.*.stripe.com"},
 	}
+	a.Error(acl.Add("acl", r))
 
+	r = Rule{
+		Project:     "security",
+		Policy:      Open,
+		DomainGlobs: []string{"https://stripe.com"},
+	}
+	a.Error(acl.Add("acl", r))
+
+	r = Rule{
+		Project:     "security",
+		Policy:      Open,
+		DomainGlobs: []string{"stripe.com:443"},
+	}
 	a.Error(acl.Add("acl", r))
 }
 
