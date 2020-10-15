@@ -29,7 +29,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	app := cli.NewApp()
 	app.Name = "smokescreen"
 	app.Version = smokescreen.Version()
-	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
+	app.Usage = "An HTTP CONNECT proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 
 	// Suppress "help" subcommand, as we have no other subcommands.
