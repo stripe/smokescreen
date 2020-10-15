@@ -1,52 +1,48 @@
 # Smokescreen [![Build Status](https://travis-ci.org/stripe/smokescreen.svg?branch=master)](https://travis-ci.org/stripe/smokescreen)
-Smokescreen is a HTTP CONNECT proxy. It proxies most traffic from Stripe to the
-external world (e.g., webhooks).
 
-Smokescreen restricts which URLs it connects to: it resolves each domain name
-that is requested and ensures that it is a publicly routable IP and not a
-Stripe-internal IP. This prevents a class of attacks where, for instance, our
-own webhooks infrastructure is used to scan Stripe's internal network.
+Smokescreen is an HTTP CONNECT proxy used to handle most outbound TCP
+connections from Stripe's infrastructure to the Internet.  This allows Stripe
+to centralize Internet egress in its infrastructure and give customers and
+partners a small set of stable Internet-facing IP addresses to expect
+connections from.
 
-Smokescreen also allows us to centralize egress from Stripe, allowing us to give
-financial partners stable egress IP addresses and abstracting away the details
-of which Stripe service is making the request.
+Smokescreen can restrict which hostnames or IP addresses a client can connect
+to by determining the client's service role and using service-specific access
+control lists (ACLs).  Smokescreen has built-in methods for identifying clients
+based on client TLS certificates and HTTP request headers, but you can also
+supply your own code to identify clients — see the "Client identification"
+section below for details.
 
-Smokescreen can be contacted over TLS. You can provide it with one or more client certificate authority certificates as well as their CRLs.
-Smokescreen will warn you if you load a CA certificate with no associated CRL and will abort if you try to load a CRL which cannot be used (ex.: cannot be associated with loaded CA).
+Additionally, Smokescreen restricts which IP addresses it will connect to by
+ensuring that all requested hostnames resolve to public (globally-routable) IP
+addresses, not private or internal addresses.  This prevents a class of attacks
+where, for example, our webhook delivery infrastructure is used to scan our
+internal networks.
 
-Smokescreen can be provided with an ACL to determine which remote hosts a service is allowed to interact with.
-By default, Smokescreen will identify the clients in the following manner:
-
-| client ca provided? | method                      |
-| ------------------- | --------------------------- |
-| yes                 | client cert's `common name` |
-| no                  | `X-Smokescreen-Role` header |
-
-The client identification function can also be replaced by one of your liking. More on this in the usage section.
+Smokescreen supports directly accepting connections over TLS.  Additionally,
+you can provide it with a set of client certificate authority (CA) certificates
+and their CRLs to enable mutual TLS authentication (mTLS) with clients.
+Smokescreen will warn you if you load a CA certificate with no associated CRL,
+and it will abort if you try to load a CRL that cannot be used (e.g. the CTL
+cannot be associated with a loaded CA certificate).
 
 ## Dependencies
 
-Smokescreen uses [go modules][mod] to manage dependencies. The
-linked page contains documentation, but some useful commands are reproduced
-below:
+Smokescreen is built and tested on the latest major release of Go, which is
+currently Go 1.15.
 
-- **Adding a dependency**: `go build` `go test` `go mod tidy` will automatically fetch the latest version of any new dependencies. Running `go mod vendor` will vendor the dependency.
-- **Updating a dependency**: `go get dep@v1.1.1` or `go get dep@commit-hash` will bring in specific versions of a dependency. The updated dependency should be vendored using `go mod vendor`.
+Smokescreen uses [Go modules](https://github.com/golang/go/wiki/Modules) to
+manage dependencies.
 
-Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections. 
-
-Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
-
-- go1.13.x
-- go1.14.x
-
-[mod]: https://github.com/golang/go/wiki/Modules
-
+Smokescreen uses [a fork of goproxy](https://github.com/stripe/goproxy) to
+support context passing and setting granular timeouts on proxy connections.
 
 ## Usage
 
 ### CLI
+
 Here are the options you can give Smokescreen:
+
 ```
    --help                                      Show this help text.
    --config-file FILE                          Load configuration from FILE.  Command line options override values in the file.
@@ -74,16 +70,27 @@ Here are the options you can give Smokescreen:
    --version, -v                               print the version
 ```
 
-### Importing
-In order to override how Smokescreen identifies its clients, you must:
-- Create a new go project
+### Client identification
+
+By default, Smokescreen identifies clients in the following manner:
+
+| Client CA configured? | Method                                   |
+| --------------------- | ---------------------------------------- |
+| yes                   | client certificate's "common name" (CN)  |
+| no                    | `X-Smokescreen-Role` HTTP request header |
+
+In order to override how Smokescreen identifies clients, you must:
+
+- Create a new Go project
 - Import Smokescreen
-- Create a Smokescreen configuration using cmd.NewConfiguration
+- Create a Smokescreen configuration using `cmd.NewConfiguration`
 - Replace `smokescreen.Config.RoleFromRequest` with your own `func(request *http.Request) (string, error)`
-- Call smokescreen.StartWithConfig
+- Call `smokescreen.StartWithConfig`
 - Build your new project and use the resulting executable through its CLI
 
-Here is a fictional example that would split a client certificate's `OrganizationalUnit` on commas and use the first particle as the service name.
+Here is an example that splits a client certificate's "Organizational Unit"
+(OU) on commas and uses the first part as the service name:
+
 ```go
 package main
 
@@ -113,19 +120,21 @@ func main() {
 }
 ```
 
-
 ### ACLs
-An ACL can be described in a YAML formatted file. The ACL, at its top-level, contains a list of services as well as a default behavior.
+
+Smokescreen's ACL is described in a YAML file.  At its top level, the ACL
+contains a list of services and the default policy for services not explicitly
+configured in the ACL.
 
 Three policies are supported:
 
-| Policy  | Behavior                                                                                                       |
-| ------- | -------------------------------------------------------------------------------------------------------------- |
-| Open    | Allows all traffic for this service                                                                            |
-| Report  | Allows all traffic for this service and warns if client accesses a remote host which is not in the list        |
-| Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
+| Policy  | Behavior                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------- |
+| Open    | Allow all traffic for this service                                                                            |
+| Report  | Allow all traffic for this service but warn if the client requests a host that is not in the list             |
+| Enforce | Only allow traffic to remote hosts provided in the list — warn and deny if the remote host is not in the list |
 
-A host can be specified with or without a globbing prefix
+A host can be specified with or without a globbing prefix:
 
 | host                | valid   |
 | ------------------- | ------- |
@@ -134,23 +143,31 @@ A host can be specified with or without a globbing prefix
 | `api.*.example.com` | no      |
 | `*example.com`      | no      |
 | `ex*ample.com`      | no      |
-| `example.*`         | hell no |
+| `example.*`         | no      |
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
+[A sample ACL](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is included in Smokescreen's tests.
 
-#### Global Allow/Deny Lists
-Optionally, you may specify a global allow list and a global deny list in your ACL config.
+#### Global allow/deny lists
 
-These lists override the policy, but do not override the `allowed_domains` list for each role.
+Optionally, you may specify a global allow list and a global deny list in your
+ACL config.  These lists override the policy but do not override the
+`allowed_domains` list for each service.
 
-For example, specifying `example.com` in your global_allow_list will allow traffic for that domain on that role, even if that role is set to `enforce` and does not specify `example.com` in its allowed domains.
+For example, specifying `example.com` in your `global_allow_list` will allow
+traffic for that domain on that role, even if that role is set to `enforce` and
+does not specify `example.com` in its allowed domains.
 
-Similarly, specifying `malicious.com` in your global_deny_list will deny traffic for that domain on a role, even if that role is set to `report` or `open`.
-However, if the host specifies `malicious.com` in its `allowed_domains`, traffic to `malicious.com` will be allowed on that role, regardless of policy.
+Similarly, specifying `malicious.com` in your `global_deny_list` will deny
+traffic for that domain on a role, even if that role is set to `report` or
+`open`.  However, if a service also specifies `malicious.com` in its
+`allowed_domains`, traffic to `malicious.com` will be allowed on that role,
+regardless of policy.
 
-If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
+If a domain matches both the `global_allow_list` and the `global_deny_list`,
+the `global_deny_list` behavior takes priority.
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
+[A sample ACL that uses global allow/deny lists](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml)
+is included in Smokescreen's tests.
 
 # Contributors
 
@@ -163,4 +180,5 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
  - Craig Shannon
  - Evan Broder
  - Marc-André Tremblay
+ - Richard Godbee
  - Ryan Koppenhaver
