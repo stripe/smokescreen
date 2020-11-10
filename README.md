@@ -1,4 +1,5 @@
-# Smokescreen [![Build Status](https://travis-ci.org/stripe/smokescreen.svg?branch=master)](https://travis-ci.org/stripe/smokescreen)
+# Smokescreen ![Test](https://github.com/stripe/smokescreen/workflows/Test/badge.svg?branch=master&event=push)
+
 Smokescreen is a HTTP CONNECT proxy. It proxies most traffic from Stripe to the
 external world (e.g., webhooks).
 
@@ -33,7 +34,7 @@ below:
 - **Adding a dependency**: `go build` `go test` `go mod tidy` will automatically fetch the latest version of any new dependencies. Running `go mod vendor` will vendor the dependency.
 - **Updating a dependency**: `go get dep@v1.1.1` or `go get dep@commit-hash` will bring in specific versions of a dependency. The updated dependency should be vendored using `go mod vendor`.
 
-Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections. 
+Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections.
 
 Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
 
@@ -42,11 +43,12 @@ Smokescreen is built and tested using the following Go releases. Generally, Smok
 
 [mod]: https://github.com/golang/go/wiki/Modules
 
-
 ## Usage
 
 ### CLI
+
 Here are the options you can give Smokescreen:
+
 ```
    --help                                      Show this help text.
    --config-file FILE                          Load configuration from FILE.  Command line options override values in the file.
@@ -75,7 +77,9 @@ Here are the options you can give Smokescreen:
 ```
 
 ### Importing
+
 In order to override how Smokescreen identifies its clients, you must:
+
 - Create a new go project
 - Import Smokescreen
 - Create a Smokescreen configuration using cmd.NewConfiguration
@@ -84,6 +88,7 @@ In order to override how Smokescreen identifies its clients, you must:
 - Build your new project and use the resulting executable through its CLI
 
 Here is a fictional example that would split a client certificate's `OrganizationalUnit` on commas and use the first particle as the service name.
+
 ```go
 package main
 
@@ -113,8 +118,8 @@ func main() {
 }
 ```
 
-
 ### ACLs
+
 An ACL can be described in a YAML formatted file. The ACL, at its top-level, contains a list of services as well as a default behavior.
 
 Three policies are supported:
@@ -139,6 +144,7 @@ A host can be specified with or without a globbing prefix
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
 
 #### Global Allow/Deny Lists
+
 Optionally, you may specify a global allow list and a global deny list in your ACL config.
 
 These lists override the policy, but do not override the `allowed_domains` list for each role.
@@ -154,13 +160,13 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
 
 # Contributors
 
- - Aditya Mukerjee
- - Andreas Fuchs
- - Andrew Dunham
- - Andrew Metcalf
- - Aniket Joshi
- - Carl Jackson
- - Craig Shannon
- - Evan Broder
- - Marc-André Tremblay
- - Ryan Koppenhaver
+- Aditya Mukerjee
+- Andreas Fuchs
+- Andrew Dunham
+- Andrew Metcalf
+- Aniket Joshi
+- Carl Jackson
+- Craig Shannon
+- Evan Broder
+- Marc-André Tremblay
+- Ryan Koppenhaver
