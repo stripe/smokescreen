@@ -327,6 +327,10 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
 	}
 
+	if sctx.cfg.RejectResponseHandler != nil {
+		msg, code = sctx.cfg.RejectResponseHandler(msg, code)
+	}
+
 	resp := goproxy.NewResponse(pctx.Req, goproxy.ContentTypeText, code, msg+"\n")
 	resp.Status = status
 	resp.ProtoMajor = pctx.Req.ProtoMajor
