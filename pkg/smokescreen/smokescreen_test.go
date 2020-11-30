@@ -681,6 +681,7 @@ func TestProxyHalfClosed(t *testing.T) {
 	r.NoError(err)
 
 	resp, err := client.Do(req)
+	r.NoError(err)
 	resp.Body.Close()
 	r.Equal(http.StatusOK, resp.StatusCode)
 
