@@ -628,7 +628,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
-	return
 }
 
 func runServer(config *Config, server *http.Server, listener net.Listener, quit <-chan interface{}) {
