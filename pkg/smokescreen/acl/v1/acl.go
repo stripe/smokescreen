@@ -185,10 +185,7 @@ func (acl *ACL) ValidateDomains(domains []string) error {
 			return fmt.Errorf("%v: domain glob must represent a full prefix (sub)domain", d)
 		}
 
-		domainToCheck := d
-		if strings.HasPrefix(domainToCheck, "*") {
-			domainToCheck = domainToCheck[1:]
-		}
+		domainToCheck := strings.TrimPrefix(d, "*")
 		if strings.Contains(domainToCheck, "*") {
 			return fmt.Errorf("%v: domain globs are only supported as prefix", d)
 		}
