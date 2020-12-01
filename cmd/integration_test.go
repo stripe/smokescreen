@@ -101,9 +101,7 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 	}
 
 	var entries []*logrus.Entry
-	for _, entry := range logs {
-		entries = append(entries, entry)
-	}
+	entries = append(entries, logs...)
 
 	if len(entries) > 0 {
 		entry := findLogEntry(entries, smokescreen.CanonicalProxyDecision)
