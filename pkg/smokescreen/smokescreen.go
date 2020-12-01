@@ -719,7 +719,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			for {
 				checkAgainIn := config.ConnTracker.MaybeIdleIn(idleTimeout)
 				if checkAgainIn > 0 {
-					if time.Now().Sub(beginTs) > config.ExitTimeout {
+					if time.Since(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
 						exit <- Timeout
 						break
