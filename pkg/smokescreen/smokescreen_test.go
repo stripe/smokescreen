@@ -5,6 +5,7 @@ package smokescreen
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -315,18 +316,24 @@ func TestHealthcheck(t *testing.T) {
 
 	server := httptest.NewServer(handler)
 
+	errChan := make(chan error, 1)
 	go func() {
 		select {
 		case healthy := <-healthcheckCh:
-			a.Equal("OK", healthy)
+			if healthy != "OK" {
+				errChan <- fmt.Errorf("healthcheck not OK: %s", healthy)
+			}
 		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for client request")
+			errChan <- errors.New("timed out waiting for client request")
 		}
+		close(errChan)
 	}()
 
 	resp, err := http.Get(fmt.Sprintf("%s/healthcheck", server.URL))
 	r.NoError(err)
 	a.Equal(http.StatusOK, resp.StatusCode)
+
+	r.NoError(<-errChan)
 }
 
 var invalidHostCases = []struct {
@@ -681,6 +688,7 @@ func TestProxyHalfClosed(t *testing.T) {
 	r.NoError(err)
 
 	resp, err := client.Do(req)
+	r.NoError(err)
 	resp.Body.Close()
 	r.Equal(http.StatusOK, resp.StatusCode)
 

@@ -1,10 +1,10 @@
 package conntrack
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -27,26 +27,33 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	tr := NewTestTracker(0)
 	sent := []byte("X-Smokescreen-Test")
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
+	writerErrChan := make(chan error, 1)
 	go func() {
-		defer wg.Done()
+		defer close(writerErrChan)
 		conn, err := ln.Accept()
 		if err != nil {
-			t.Fatal(err)
+			writerErrChan <- fmt.Errorf("error accepting: %w", err)
+			return
 		}
 
 		icWriter := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "test", "localhost", "http")
 
 		n, err := icWriter.Write(sent)
 		if err != nil {
-			t.Fatal(err)
+			writerErrChan <- fmt.Errorf("error writing: %w", err)
+			return
 		}
 		conn.Close()
 
-		assert.Equal(len(sent), n)
-		assert.Equal(uint64(len(sent)), *icWriter.BytesOut)
+		if len(sent) != n {
+			writerErrChan <- fmt.Errorf("length sent wasn't expected value: %d != %d", len(sent), n)
+			return
+		}
+		bytesOut := *icWriter.BytesOut
+		if uint64(len(sent)) != bytesOut {
+			writerErrChan <- fmt.Errorf("bytes out value wasn't expected value: %d != %d", len(sent), bytesOut)
+			return
+		}
 	}()
 
 	conn, err := net.Dial("tcp", ln.Addr().String())
@@ -55,14 +62,15 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	}
 	icReader := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "testBytesInOut", "localhost", "http")
 
+	readerErrChan := make(chan error, 1)
 	go func() {
-		defer wg.Done()
+		defer close(readerErrChan)
 		read := make([]byte, len(sent))
 		for {
 			_, err := icReader.Read(read)
 			if err != nil {
 				if err != io.EOF {
-					t.Fatal(err)
+					readerErrChan <- err
 				}
 				return
 			}
@@ -70,7 +78,8 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 		}
 	}()
 
-	wg.Wait()
+	assert.NoError(<-writerErrChan)
+	assert.NoError(<-readerErrChan)
 	assert.Equal(uint64(len(sent)), *icReader.BytesIn)
 }
 

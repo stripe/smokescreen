@@ -41,7 +41,7 @@ func (tr *Tracker) MaybeIdleIn(d time.Duration) time.Duration {
 
 		lastActivity := time.Unix(0, atomic.LoadInt64(c.LastActivity))
 		idleAt := lastActivity.Add(d)
-		idleIn := idleAt.Sub(time.Now())
+		idleIn := time.Until(idleAt)
 
 		if idleIn > longest {
 			longest = idleIn

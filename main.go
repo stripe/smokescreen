@@ -36,11 +36,10 @@ func main() {
 			Entry: conf.Log.WithField("stdlog", "1"),
 		}
 
-		// Set the standard logger to use our logger's writter as output.
+		// Set the standard logger to use our logger's writer as output.
 		log.SetOutput(adapter)
 		log.SetFlags(0)
 		smokescreen.StartWithConfig(conf, nil)
-	} else {
-		// --help or --version was passed and handled by NewConfiguration, so do nothing
 	}
+	// Otherwise, --help or --version was passed and handled by NewConfiguration, so do nothing
 }

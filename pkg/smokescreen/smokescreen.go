@@ -521,7 +521,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
 		fields["src_host_common_name"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
 		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if ouEntries != nil && len(ouEntries) > 0 {
+		if len(ouEntries) > 0 {
 			fields["src_host_organization_unit"] = ouEntries[0]
 		}
 	}
@@ -628,7 +628,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
-	return
 }
 
 func runServer(config *Config, server *http.Server, listener net.Listener, quit <-chan interface{}) {
@@ -719,7 +718,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			for {
 				checkAgainIn := config.ConnTracker.MaybeIdleIn(idleTimeout)
 				if checkAgainIn > 0 {
-					if time.Now().Sub(beginTs) > config.ExitTimeout {
+					if time.Since(beginTs) > config.ExitTimeout {
 						config.Log.Print(fmt.Sprintf("Timed out at %v while waiting for all open connections to become idle.", config.ExitTimeout))
 						exit <- Timeout
 						break

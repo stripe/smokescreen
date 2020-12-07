@@ -189,7 +189,7 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 		Created:                  ic.Start,
 		BytesIn:                  *ic.BytesIn,
 		BytesOut:                 *ic.BytesOut,
-		SecondsSinceLastActivity: time.Now().Sub(time.Unix(0, *ic.LastActivity)).Seconds(),
+		SecondsSinceLastActivity: time.Since(time.Unix(0, *ic.LastActivity)).Seconds(),
 		ProxyType:                ic.proxyType,
 	}
 }
