@@ -35,6 +35,8 @@ github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b h1:RjOPjQht0WXH5
 github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b/go.mod h1:hkb6IH5oGd1qYMSCC8kjJCLwbCY8yFn/fABFwClTXTA=
 github.com/stripe/goproxy v0.0.0-20200902225839-ac962cdd7165 h1:FLZlkRr7DAQxqfdApNSokzbd0S0K6C5b3/URYRm61Ss=
 github.com/stripe/goproxy v0.0.0-20200902225839-ac962cdd7165/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
+github.com/stripe/goproxy v0.0.0-20201214151142-bb691dcfe7e9 h1:4BvarxVTLjeiXfHrl3JxfjXTSjXi1AU034EcGvzFOos=
+github.com/stripe/goproxy v0.0.0-20201214151142-bb691dcfe7e9/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 h1:VklqNMn3ovrHsnt90PveolxSbWFaJdECFbxSq0Mqo2M=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
