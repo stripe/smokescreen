@@ -32,14 +32,14 @@ func (s *StatsServer) Serve() {
 	ln, err := net.Listen("unix", s.socketPath)
 
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server.", err)
+		s.config.Log.Fatal("Could not start the reporting server: ", err)
 	}
 	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
 
 	s.ln = ln
 	err = http.Serve(s.ln, s.mux)
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server.", err)
+		s.config.Log.Fatal("Could not start the reporting server: ", err)
 	}
 }
 
