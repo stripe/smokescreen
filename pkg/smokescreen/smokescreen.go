@@ -372,11 +372,11 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 
 	logger := cfg.Log.WithFields(logrus.Fields{
 		"id":                  xid.New().String(),
+		"inbound_remote_addr": req.RemoteAddr,
 		"proxy_type":          proxyType,
 		"requested_host":      req.Host,
 		"start_time":          start.UTC(),
 		"trace_id":            req.Header.Get(traceHeader),
-		"inbound_remote_addr": req.RemoteAddr,
 	})
 
 	return &smokescreenContext{
