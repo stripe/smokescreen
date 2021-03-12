@@ -17,8 +17,8 @@ import (
 	proxyproto "github.com/armon/go-proxyproto"
 	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
-	"github.com/stripe/go-einhorn/einhorn"
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/einhorn"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
