@@ -12,7 +12,6 @@ require (
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.0.6
 	github.com/stretchr/testify v1.3.0
-	github.com/stripe/go-einhorn v0.0.0-20160225014757-79db5cd84b4b
 	github.com/stripe/goproxy v0.0.0-20201214151142-bb691dcfe7e9
 	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b // indirect
 	golang.org/x/text v0.3.2 // indirect
