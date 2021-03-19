@@ -106,6 +106,69 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+func TestUnsafeAllowPrivateRanges (t *testing.T) {
+	a := assert.New(t)
+
+	conf := NewConfig()
+	a.NoError(conf.SetDenyRanges([]string {"192.168.0.0/24", "10.0.0.0/8"}))
+	a.NoError(conf.SetDenyAddresses([]string {"192.168"
+	a.NoError(conf.SetAllowRanges(allowRanges))
+	a.NoError(conf.SetAllowAddresses(allowAddresses))
+	conf.ConnectTimeout = 10 * time.Second
+	conf.ExitTimeout = 10 * time.Second
+	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+
+	conf.UnsafeAllowPrivateRanges = true
+
+	testIPs := []testCase{
+		testCase{"8.8.8.8", 1, ipAllowDefault},
+		testCase{"8.8.9.8", 1, ipAllowUserConfigured},
+
+		// Specific blocked networks
+		testCase{"10.0.0.1", 1, ipDenyPrivateRange},
+		testCase{"10.0.0.1", 321, ipAllowUserConfigured},
+		testCase{"10.0.1.1", 1, ipAllowUserConfigured},
+		testCase{"172.16.0.1", 1, ipDenyPrivateRange},
+		testCase{"172.16.1.1", 1, ipAllowUserConfigured},
+		testCase{"192.168.0.1", 1, ipDenyPrivateRange},
+		testCase{"192.168.1.1", 1, ipAllowUserConfigured},
+		testCase{"8.8.8.8", 321, ipDenyUserConfigured},
+		testCase{"1.1.1.1", 1, ipDenyUserConfigured},
+
+		// localhost
+		testCase{"127.0.0.1", 1, ipDenyNotGlobalUnicast},
+		testCase{"127.255.255.255", 1, ipDenyNotGlobalUnicast},
+		testCase{"::1", 1, ipDenyNotGlobalUnicast},
+		testCase{"127.0.1.1", 1, ipAllowUserConfigured},
+
+		// ec2 metadata endpoint
+		testCase{"169.254.169.254", 1, ipDenyNotGlobalUnicast},
+
+		// Broadcast addresses
+		testCase{"255.255.255.255", 1, ipDenyNotGlobalUnicast},
+		testCase{"ff02:0:0:0:0:0:0:2", 1, ipDenyNotGlobalUnicast},
+	}
+
+	for _, test := range testIPs {
+		localIP := net.ParseIP(test.ip)
+		if localIP == nil {
+			t.Errorf("Could not parse IP from string: %s", test.ip)
+			continue
+		}
+		localAddr := net.TCPAddr{
+			IP:   localIP,
+			Port: test.port,
+		}
+
+		got := classifyAddr(conf, &localAddr)
+		if got != test.expected {
+			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
+		}
+	}
+
+
+}
+
 // TestClearsErrors tests that we are correctly preserving/removing the X-Smokescreen-Error header.
 // This header is used to provide more granular errors to proxy clients, and signals that
 // there was an issue connecting to the proxy target.
