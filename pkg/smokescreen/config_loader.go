@@ -45,6 +45,8 @@ type yamlConfig struct {
 
 	Tls *yamlConfigTls
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
+
+	UnsafeAllowPrivateRanges bool	`yaml:"unsafe_allow_private_ranges"`
 }
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -136,6 +138,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 	c.TimeConnect = yc.TimeConnect
+	c.UnsafeAllowPrivateRanges = yc.UnsafeAllowPrivateRanges
 
 	return nil
 }

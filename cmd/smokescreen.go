@@ -122,6 +122,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Value: "700",
 			Usage: "Set the filemode to `FILE_MODE` on the statistics socket",
 		},
+		cli.BoolFlag{
+			Name:  "unsafe-allow-private-ranges",
+			Usage: "Allow private ip ranges by default",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -234,6 +238,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
 				return err
 			}
+		}
+
+		if c.IsSet("unsafe-allow-private-ranges") {
+			conf.UnsafeAllowPrivateRanges = c.Bool("unsafe-allow-private-ranges")
 		}
 
 		// FIXME: mixing and matching parts of TLS config between cli and file
