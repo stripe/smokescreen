@@ -70,7 +70,12 @@ type Config struct {
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
 
 	// Customer handler to allow clients to modify reject responses
-	RejectResponseHandler func(message string, code int) (string, int)
+	RejectResponseHandler func(*http.Response)
+
+	// UnsafeAllowPrivateRanges inverts the default behavior, telling smokescreen to allow private IP
+	// ranges by default (exempting loopback and unicast ranges)
+	// This setting can be used to configure Smokescreen with a blocklist, rather than an allowlist
+	UnsafeAllowPrivateRanges bool
 }
 
 type missingRoleError struct {
