@@ -38,8 +38,8 @@ Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy t
 
 Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
 
-- go1.14.x
 - go1.15.x
+- go1.16.x
 
 [mod]: https://github.com/golang/go/wiki/Modules
 
