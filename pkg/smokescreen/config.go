@@ -68,6 +68,9 @@ type Config struct {
 
 	// Custom Dial Timeout function to be called
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
+
+	// Customer handler to allow clients to modify reject responses
+	RejectResponseHandler func(*http.Response)
 }
 
 type missingRoleError struct {
