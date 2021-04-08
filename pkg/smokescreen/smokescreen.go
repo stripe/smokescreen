@@ -145,7 +145,6 @@ func (t ipType) statsdString() string {
 }
 
 const errorHeader = "X-Smokescreen-Error"
-const roleHeader = "X-Smokescreen-Role"
 const traceHeader = "X-Smokescreen-Trace-ID"
 
 func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
@@ -479,7 +478,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		// Delete Smokescreen specific headers before goproxy forwards the request
 		defer func() {
-			req.Header.Del(roleHeader)
+			if config.TrustRoleFromHeader != "" {
+				req.Header.Del(config.TrustRoleFromHeader)
+			}
 			req.Header.Del(traceHeader)
 		}()
 

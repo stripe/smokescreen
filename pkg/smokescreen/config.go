@@ -42,6 +42,7 @@ type Config struct {
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
 	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
+	TrustRoleFromHeader          string
 	RoleFromRequest              func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId      map[string]*x509.Certificate
 	AdditionalErrorMessageOnDeny string

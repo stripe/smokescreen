@@ -18,8 +18,10 @@ Smokescreen will warn you if you load a CA certificate with no associated CRL an
 Smokescreen can be provided with an ACL to determine which remote
 hosts a service is allowed to interact with.  By default, Smokescreen
 will identify clients by the "common name" in the TLS certificate they
-present, if any.  The client identification function can also be
-easily replaced; more on this in the usage section.
+present, if any. If `--trust-role-from-header` is supplied, it instead
+trusts the role provided in the specified CONNECT HTTP header. The
+client identification function can also be easily replaced; more on
+this in the usage section.
 
 ## Dependencies
 

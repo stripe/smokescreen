@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"net/http"
+
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/urfave/cli.v1"
 
@@ -104,6 +106,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		cli.StringSliceFlag{
 			Name:  "tls-crl-file",
 			Usage: "Verify validity of client certificates against Certificate Revocation List from `FILE`",
+		},
+		cli.StringFlag{
+			Name:  "trust-role-from-header",
+			Usage: "Trust the provided header name to contain the client's role.\nNote that this is unsafe against clients with the ability to construct arbitrary HTTP requests!",
 		},
 		cli.StringFlag{
 			Name:  "additional-error-message-on-deny",
@@ -259,6 +265,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				c.StringSlice("tls-client-ca-file")); err != nil {
 				return err
 			}
+		}
+
+		if c.IsSet("trust-role-from-header") {
+			conf.TrustRoleFromHeader = http.CanonicalHeaderKey(c.String("trust-role-from-header"))
 		}
 
 		// Setup the connection tracker

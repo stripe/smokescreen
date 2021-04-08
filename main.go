@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -13,7 +14,21 @@ import (
 // client's certificate.  If no certificate is provided, the AllowMissingRole
 // configuration option will control whether the request is rejected, or the
 // default ACL is applied.
-func defaultRoleFromRequest(req *http.Request) (string, error) {
+func defaultHeaderRoleFromRequest(header string) func(req *http.Request) (string, error) {
+	return func(req *http.Request) (string, error) {
+		idHeader := req.Header[header]
+		if len(idHeader) == 0 {
+			return "", smokescreen.MissingRoleError(
+				fmt.Sprintf("defaultRoleFromRequest the %s header be set", header))
+		} else if len(idHeader) > 1 {
+			return "", smokescreen.MissingRoleError(
+				fmt.Sprintf("multiple headers provided for %s", header))
+		}
+		return idHeader[0], nil
+	}
+}
+
+func defaultTLSRoleFromRequest(req *http.Request) (string, error) {
 	if req.TLS == nil {
 		return "", smokescreen.MissingRoleError("defaultRoleFromRequest requires TLS")
 	}
@@ -28,7 +43,11 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("Could not create configuration: %v", err)
 	} else if conf != nil {
-		conf.RoleFromRequest = defaultRoleFromRequest
+		if conf.TrustRoleFromHeader != "" {
+			conf.RoleFromRequest = defaultHeaderRoleFromRequest(conf.TrustRoleFromHeader)
+		} else {
+			conf.RoleFromRequest = defaultTLSRoleFromRequest
+		}
 
 		conf.Log.Formatter = &logrus.JSONFormatter{}
 
