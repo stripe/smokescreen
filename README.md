@@ -15,15 +15,11 @@ of which Stripe service is making the request.
 Smokescreen can be contacted over TLS. You can provide it with one or more client certificate authority certificates as well as their CRLs.
 Smokescreen will warn you if you load a CA certificate with no associated CRL and will abort if you try to load a CRL which cannot be used (ex.: cannot be associated with loaded CA).
 
-Smokescreen can be provided with an ACL to determine which remote hosts a service is allowed to interact with.
-By default, Smokescreen will identify the clients in the following manner:
-
-| client ca provided? | method                      |
-| ------------------- | --------------------------- |
-| yes                 | client cert's `common name` |
-| no                  | `X-Smokescreen-Role` header |
-
-The client identification function can also be replaced by one of your liking. More on this in the usage section.
+Smokescreen can be provided with an ACL to determine which remote
+hosts a service is allowed to interact with.  By default, Smokescreen
+will identify clients by the "common name" in the TLS certificate they
+present, if any.  The client identification function can also be
+easily replaced; more on this in the usage section.
 
 ## Dependencies
 
