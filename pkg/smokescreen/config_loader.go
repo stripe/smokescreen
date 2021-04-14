@@ -30,6 +30,7 @@ type yamlConfig struct {
 	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
 	DenyMessageExtra     string   `yaml:"deny_message_extra"`
 	AllowMissingRole     bool     `yaml:"allow_missing_role"`
+	IPv4OnlyLookups      bool     `yaml:"ipv4_only_lookups"`
 
 	ConnectTimeout time.Duration  `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
@@ -133,6 +134,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 	}
 
+	c.IPv4OnlyLookups = yc.IPv4OnlyLookups
 	c.AllowMissingRole = yc.AllowMissingRole
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 	c.TimeConnect = yc.TimeConnect

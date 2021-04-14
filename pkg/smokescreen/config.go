@@ -55,6 +55,9 @@ type Config struct {
 	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
 
+	// Only resolve ipv4 addrs during DNS lookups
+	IPv4OnlyLookups bool
+
 	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
 	IdleTimeout time.Duration
 

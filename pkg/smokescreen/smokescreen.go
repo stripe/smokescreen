@@ -174,19 +174,31 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	ips, err := config.Resolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) < 1 {
-		return nil, fmt.Errorf("no IPs resolved")
+	tcpAddr := &net.TCPAddr{
+		Port: resolvedPort,
 	}
 
-	return &net.TCPAddr{
-		IP:   ips[0].IP,
-		Zone: ips[0].Zone,
-		Port: resolvedPort,
-	}, nil
+	if config.IPv4OnlyLookups {
+		ips, err := config.Resolver.LookupIP(ctx, "ip4", host)
+		if err != nil {
+			return nil, err
+		}
+		if len(ips) < 1 {
+			return nil, fmt.Errorf("no IPs resolved")
+		}
+		tcpAddr.IP = ips[0]
+	} else {
+		ips, err := config.Resolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		if len(ips) < 1 {
+			return nil, fmt.Errorf("no IPs resolved")
+		}
+		tcpAddr.IP = ips[0].IP
+		tcpAddr.Zone = ips[0].Zone
+	}
+	return tcpAddr, nil
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
