@@ -850,10 +850,7 @@ func testConfig(role string) (*Config, error) {
 		return role, nil
 	}
 
-	mc, err := NewMetricsClient("", "test")
-	if err != nil {
-		return nil, err
-	}
+	mc := NewNoOpMetricsClient()
 	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{})
 	conf.MetricsClient = mc
 	return conf, nil

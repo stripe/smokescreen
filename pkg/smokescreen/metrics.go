@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
-	log "github.com/sirupsen/logrus"
 )
 
 var metrics = map[string][]string{
@@ -38,29 +37,21 @@ type MetricsClient struct {
 // NewMetricsClient creates a new MetricsClient with the provided statsd address and
 // namespace.
 func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
-	var client statsd.ClientInterface
-
-	if addr == "" {
-		log.Print("warn: no statsd address provided, using noop client")
-		client = &statsd.NoOpClient{}
-	} else {
-		c, err := statsd.New(addr)
-		if err != nil {
-			return nil, err
-		}
-		c.Namespace = namespace
-		client = c
+	c, err := statsd.New(addr)
+	if err != nil {
+		return nil, err
 	}
+	c.Namespace = namespace
 
 	return &MetricsClient{
 		additionalTags: make(map[string][]string),
-		StatsdClient:   client,
+		StatsdClient:   c,
 	}, nil
 }
 
-// NewNoopMetricsClient returns a MetricsClient with a no-op statsd client. This can
+// NewNoOpMetricsClient returns a MetricsClient with a no-op statsd client. This can
 // be used when there's no statsd service available to smokescreen.
-func NewNoopMetricsClient() *MetricsClient {
+func NewNoOpMetricsClient() *MetricsClient {
 	return &MetricsClient{
 		additionalTags: make(map[string][]string),
 		StatsdClient:   &statsd.NoOpClient{},

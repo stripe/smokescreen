@@ -217,7 +217,7 @@ func NewConfig() *Config {
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
 		ShuttingDown:            atomic.Value{},
-		MetricsClient:           NewNoopMetricsClient(),
+		MetricsClient:           NewNoOpMetricsClient(),
 	}
 }
 
