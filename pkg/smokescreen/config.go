@@ -286,6 +286,12 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 }
 
 func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
+	if addr == "" {
+		fmt.Println("warn: no statsd addr provided, using noop client")
+		config.MetricsClient = NewNoOpMetricsClient()
+		return nil
+	}
+
 	mc, err := NewMetricsClient(addr, namespace)
 	if err != nil {
 		return err
