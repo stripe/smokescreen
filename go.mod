@@ -1,6 +1,6 @@
 module github.com/stripe/smokescreen
 
-go 1.13
+go 1.15
 
 require (
 	github.com/DataDog/datadog-go v0.0.0-20170427165718-0ddda6bee211
