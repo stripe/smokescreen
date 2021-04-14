@@ -254,7 +254,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		// Setup the connection tracker
-		conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, conf.StatsdClient, conf.Log, conf.ShuttingDown)
+		conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, conf.MetricsClient.StatsdClient, conf.Log, conf.ShuttingDown)
 
 		configToReturn = conf
 		return nil

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
@@ -191,7 +192,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, nil, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{})
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -232,7 +233,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	var logHook logrustest.Hook
 	conf := NewConfig()
 	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, nil, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{})
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -844,11 +845,17 @@ func testConfig(role string) (*Config, error) {
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
 	conf.Resolver = &net.Resolver{}
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, nil, conf.Log, atomic.Value{})
 	conf.SetupEgressAcl("testdata/acl.yaml")
 	conf.RoleFromRequest = func(req *http.Request) (string, error) {
 		return role, nil
 	}
+
+	mc, err := NewMetricsClient("", "test")
+	if err != nil {
+		return nil, err
+	}
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{})
+	conf.MetricsClient = mc
 	return conf, nil
 }
 
