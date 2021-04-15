@@ -629,6 +629,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		server.IdleTimeout = config.IdleTimeout
 	}
 
+	config.MetricsClient.started.Store(true)
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 }

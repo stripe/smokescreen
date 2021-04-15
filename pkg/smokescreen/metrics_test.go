@@ -45,4 +45,14 @@ func TestMetricsClient(t *testing.T) {
 		r.Error(err)
 		r.Nil(mc)
 	})
+
+	// MetricsClient is not thread safe. Adding a tag after smokescreen has started
+	// should always return an error.
+	t.Run("adding metrics after started", func(t *testing.T) {
+		mc := NewNoOpMetricsClient()
+		mc.started.Store(true)
+
+		err := mc.AddMetricTags("acl.allow", []string{"globalize"})
+		r.Error(err)
+	})
 }

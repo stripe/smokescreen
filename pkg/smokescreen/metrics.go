@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -38,6 +39,7 @@ var metrics = []string{
 type MetricsClient struct {
 	metricsTags  map[string][]string
 	StatsdClient statsd.ClientInterface
+	started      atomic.Value
 }
 
 // NewMetricsClient creates a new MetricsClient with the provided statsd address and
@@ -82,6 +84,9 @@ func NewNoOpMetricsClient() *MetricsClient {
 // This function is not thread safe, and adding persitent tags should only be done while initializing
 // the configuration and prior to running smokescreen.
 func (mc *MetricsClient) AddMetricTags(metric string, mTags []string) error {
+	if mc.started.Load() != nil {
+		return fmt.Errorf("cannot add metrics tags after starting smokescreen")
+	}
 	if tags, ok := mc.metricsTags[metric]; ok {
 		mc.metricsTags[metric] = append(tags, mTags...)
 		return nil
