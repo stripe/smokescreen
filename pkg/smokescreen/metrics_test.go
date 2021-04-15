@@ -13,14 +13,14 @@ func TestMetricsTags(t *testing.T) {
 		metric := "acl.allow"
 		mc := NewNoOpMetricsClient()
 
-		err := mc.AddMetricTag(metric, "globalize")
+		err := mc.AddMetricTags(metric, []string{"globalize"})
 		r.NoError(err)
 
 		tags := mc.GetMetricTags(metric)
 		r.Len(tags, 1)
 		r.Equal(tags[0], "globalize")
 
-		err = mc.AddMetricTag(metric, "ignore")
+		err = mc.AddMetricTags(metric, []string{"ignore"})
 		r.NoError(err)
 
 		tags = mc.GetMetricTags(metric)
@@ -31,7 +31,7 @@ func TestMetricsTags(t *testing.T) {
 		metric := "acl.does.not.exist"
 		mc := NewNoOpMetricsClient()
 
-		err := mc.AddMetricTag(metric, "globalize")
+		err := mc.AddMetricTags(metric, []string{"globalize"})
 		r.Error(err)
 	})
 }

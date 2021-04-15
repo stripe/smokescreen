@@ -58,11 +58,11 @@ func NewNoOpMetricsClient() *MetricsClient {
 	}
 }
 
-// AddMetricTag associates the provided tag with a given metric. The metric must be present
+// AddMetricTags associates the provided tags slice with a given metric. The metric must be present
 // in the metrics slice.
-func (mc *MetricsClient) AddMetricTag(metric, tag string) error {
+func (mc *MetricsClient) AddMetricTags(metric string, mTags []string) error {
 	if tags, ok := metrics[metric]; ok {
-		metrics[metric] = append(tags, tag)
+		metrics[metric] = append(tags, mTags...)
 		return nil
 	}
 	return fmt.Errorf("unknown metric: %s", metric)
