@@ -64,8 +64,14 @@ func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
 // NewNoOpMetricsClient returns a MetricsClient with a no-op statsd client. This can
 // be used when there's no statsd service available to smokescreen.
 func NewNoOpMetricsClient() *MetricsClient {
+	// Populate the client's map to hold metric tags
+	metricsTags := make(map[string][]string)
+	for _, m := range metrics {
+		metricsTags[m] = []string{}
+	}
+
 	return &MetricsClient{
-		metricsTags:  make(map[string][]string),
+		metricsTags:  metricsTags,
 		StatsdClient: &statsd.NoOpClient{},
 	}
 }
