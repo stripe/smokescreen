@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	log "github.com/sirupsen/logrus"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
@@ -38,7 +37,7 @@ type Config struct {
 	Resolver                     *net.Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
-	StatsdClient                 *statsd.Client
+	MetricsClient                *MetricsClient
 	EgressACL                    acl.Decider
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
@@ -218,6 +217,7 @@ func NewConfig() *Config {
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
 		ShuttingDown:            atomic.Value{},
+		MetricsClient:           NewNoOpMetricsClient(),
 	}
 }
 
@@ -287,19 +287,16 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 
 func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
-		config.StatsdClient = nil
+		fmt.Println("warn: no statsd addr provided, using noop client")
+		config.MetricsClient = NewNoOpMetricsClient()
 		return nil
 	}
 
-	client, err := statsd.New(addr)
+	mc, err := NewMetricsClient(addr, namespace)
 	if err != nil {
 		return err
 	}
-
-	config.StatsdClient = client
-
-	config.StatsdClient.Namespace = namespace
-
+	config.MetricsClient = mc
 	return nil
 }
 

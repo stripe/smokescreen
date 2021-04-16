@@ -605,6 +605,8 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*smokescr
 		conf.RoleFromRequest = testRFRHeader
 	}
 
+	conf.MetricsClient = smokescreen.NewNoOpMetricsClient()
+
 	conf.ConnectTimeout = time.Second
 
 	fmt.Printf("2 %#v\n", conf)

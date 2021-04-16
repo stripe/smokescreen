@@ -190,15 +190,15 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
-	config.StatsdClient.Incr("resolver.attempts_total", []string{}, 1)
+	config.MetricsClient.Incr("resolver.attempts_total", 1)
 	resolved, err := resolveTCPAddr(config, network, addr)
 	if err != nil {
-		config.StatsdClient.Incr("resolver.errors_total", []string{}, 1)
+		config.MetricsClient.Incr("resolver.errors_total", 1)
 		return nil, "", err
 	}
 
 	classification := classifyAddr(config, resolved)
-	config.StatsdClient.Incr(classification.statsdString(), []string{}, 1)
+	config.MetricsClient.Incr(classification.statsdString(), 1)
 
 	if classification.IsAllowed() {
 		return resolved, classification.String(), nil
@@ -240,7 +240,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		}
 	}
 
-	sctx.cfg.StatsdClient.Incr("cn.atpt.total", []string{}, 1)
+	sctx.cfg.MetricsClient.Incr("cn.atpt.total", 1)
 	start := time.Now()
 
 	var conn net.Conn
@@ -254,14 +254,14 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	if sctx.cfg.TimeConnect {
 		domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
-		sctx.cfg.StatsdClient.Timing("cn.atpt.connect.time", time.Since(start), []string{domainTag}, 1)
+		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", time.Since(start), 1, []string{domainTag})
 	}
 
 	if err != nil {
-		sctx.cfg.StatsdClient.Incr("cn.atpt.fail.total", []string{}, 1)
+		sctx.cfg.MetricsClient.Incr("cn.atpt.fail.total", 1)
 		return nil, err
 	}
-	sctx.cfg.StatsdClient.Incr("cn.atpt.success.total", []string{}, 1)
+	sctx.cfg.MetricsClient.Incr("cn.atpt.success.total", 1)
 
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
@@ -326,7 +326,6 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
 		msg = fmt.Sprintf("%s\n\n%s\n", msg, sctx.cfg.AdditionalErrorMessageOnDeny)
 	}
-
 
 	resp := goproxy.NewResponse(pctx.Req, goproxy.ContentTypeText, code, msg+"\n")
 	resp.Status = status
@@ -616,7 +615,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	// Setup connection tracking
-	config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.StatsdClient, config.Log, config.ShuttingDown)
+	config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown)
 
 	server := http.Server{
 		Handler: handler,
@@ -630,6 +629,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		server.IdleTimeout = config.IdleTimeout
 	}
 
+	config.MetricsClient.started.Store(true)
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 }
@@ -817,7 +817,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 
 	role, roleErr := getRole(config, req)
 	if roleErr != nil {
-		config.StatsdClient.Incr("acl.role_not_determined", []string{}, 1)
+		config.MetricsClient.Incr("acl.role_not_determined", 1)
 		decision.reason = "Client role cannot be determined"
 		return decision
 	}
@@ -836,7 +836,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
 
-		config.StatsdClient.Incr("acl.decide_error", []string{}, 1)
+		config.MetricsClient.Incr("acl.decide_error", 1)
 		return decision
 	}
 
@@ -849,18 +849,18 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	switch aclDecision.Result {
 	case acl.Deny:
 		decision.enforceWouldDeny = true
-		config.StatsdClient.Incr("acl.deny", tags, 1)
+		config.MetricsClient.IncrWithTags("acl.deny", tags, 1)
 
 	case acl.AllowAndReport:
 		decision.enforceWouldDeny = true
-		config.StatsdClient.Incr("acl.report", tags, 1)
+		config.MetricsClient.IncrWithTags("acl.report", tags, 1)
 		decision.allow = true
 
 	case acl.Allow:
 		// Well, everything is going as expected.
 		decision.allow = true
 		decision.enforceWouldDeny = false
-		config.StatsdClient.Incr("acl.allow", tags, 1)
+		config.MetricsClient.IncrWithTags("acl.allow", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
@@ -868,7 +868,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 			"action":      aclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
-		config.StatsdClient.Incr("acl.unknown_error", tags, 1)
+		config.MetricsClient.IncrWithTags("acl.unknown_error", tags, 1)
 	}
 
 	return decision

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,5 +49,5 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	sd := atomic.Value{}
 	sd.Store(false)
 
-	return NewTracker(idle, nil, logrus.New(), sd)
+	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd)
 }

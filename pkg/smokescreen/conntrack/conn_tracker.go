@@ -13,14 +13,14 @@ type Tracker struct {
 	*sync.Map
 	ShuttingDown atomic.Value
 	Wg           *sync.WaitGroup
-	statsc       *statsd.Client
+	statsc       statsd.ClientInterface
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
 	// many seconds.
 	IdleTimeout time.Duration
 }
 
-func NewTracker(idle time.Duration, statsc *statsd.Client, logger *logrus.Logger, sd atomic.Value) *Tracker {
+func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value) *Tracker {
 	return &Tracker{
 		Map:          &sync.Map{},
 		ShuttingDown: sd,
