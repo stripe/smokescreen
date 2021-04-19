@@ -209,6 +209,10 @@ type authKeyId struct {
 }
 
 func NewConfig() *Config {
+	log.SetFormatter(&log.JSONFormatter{
+		TimestampFormat: time.RFC3339Nano,
+	})
+
 	return &Config{
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),

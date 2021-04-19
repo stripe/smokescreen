@@ -263,6 +263,23 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 	sctx.cfg.MetricsClient.Incr("cn.atpt.success.total", 1)
 
+	if conn != nil {
+		fields := logrus.Fields{}
+
+		if addr := conn.LocalAddr(); addr != nil {
+			fields["outbound_local_addr"] = addr.String()
+		}
+
+		if addr := conn.RemoteAddr(); addr != nil {
+			fields["outbound_remote_addr"] = addr.String()
+		}
+
+		if len(fields) > 0 {
+			// add the above fields to all future log messages sent using this smokescreen context's logger
+			sctx.logger = sctx.logger.WithFields(fields)
+		}
+	}
+
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
 	if sctx.proxyType == connectProxy {
@@ -272,6 +289,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	} else {
 		conn = NewTimeoutConn(conn, sctx.cfg.IdleTimeout)
 	}
+
 	return conn, nil
 }
 
@@ -354,13 +372,14 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 
 func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenContext {
 	start := time.Now()
+
 	logger := cfg.Log.WithFields(logrus.Fields{
-		"id":             xid.New().String(),
-		"proxy_type":     proxyType,
-		"requested_host": req.Host,
-		"source_addr":    req.RemoteAddr,
-		"start_time":     start.UTC(),
-		"trace_id":       req.Header.Get(traceHeader),
+		"id":                  xid.New().String(),
+		"inbound_remote_addr": req.RemoteAddr,
+		"proxy_type":          proxyType,
+		"requested_host":      req.Host,
+		"start_time":          start.UTC(),
+		"trace_id":            req.Header.Get(traceHeader),
 	})
 
 	return &smokescreenContext{
@@ -500,32 +519,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	sctx := pctx.UserData.(*smokescreenContext)
 
-	var contentLength int64
-	if pctx.Resp != nil {
-		contentLength = pctx.Resp.ContentLength
-	}
-
-	fromHost, fromPort, _ := net.SplitHostPort(pctx.Req.RemoteAddr)
-
-	fields := logrus.Fields{
-		"src_host":       fromHost,
-		"src_port":       fromPort,
-		"content_length": contentLength,
-	}
-
-	if sctx.decision.resolvedAddr != nil {
-		fields["dst_ip"] = sctx.decision.resolvedAddr.IP.String()
-		fields["dst_port"] = sctx.decision.resolvedAddr.Port
-	}
+	fields := logrus.Fields{}
 
 	// attempt to retrieve information about the host originating the proxy request
-	fields["src_host_common_name"] = "unknown"
-	fields["src_host_organization_unit"] = "unknown"
 	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
-		fields["src_host_common_name"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
+		fields["inbound_remote_x509_cn"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
 		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
 		if len(ouEntries) > 0 {
-			fields["src_host_organization_unit"] = ouEntries[0]
+			fields["inbound_remote_x509_ou"] = ouEntries[0]
 		}
 	}
 
@@ -533,6 +534,19 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	if sctx.decision != nil {
 		fields["role"] = decision.role
 		fields["project"] = decision.project
+	}
+
+	// add the above fields to all future log messages sent using this smokescreen context's logger
+	sctx.logger = sctx.logger.WithFields(fields)
+
+	// start a new set of fields used only in this log message
+	fields = logrus.Fields{}
+
+	if pctx.Resp != nil {
+		fields["content_length"] = pctx.Resp.ContentLength
+	}
+
+	if sctx.decision != nil {
 		fields["decision_reason"] = decision.reason
 		fields["enforce_would_deny"] = decision.enforceWouldDeny
 		fields["allow"] = decision.allow
