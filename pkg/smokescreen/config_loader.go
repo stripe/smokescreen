@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
