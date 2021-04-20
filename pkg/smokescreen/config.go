@@ -55,8 +55,8 @@ type Config struct {
 	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
 
-	// Only resolve ipv4 addrs during DNS lookups
-	IPv4OnlyLookups bool
+	// Network type to use when performing DNS lookups. Must be one of "ip", "ip4" or "ip6".
+	Network string
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
 	IdleTimeout time.Duration
@@ -225,6 +225,7 @@ func NewConfig() *Config {
 		StatsSocketFileMode:     os.FileMode(0700),
 		ShuttingDown:            atomic.Value{},
 		MetricsClient:           NewNoOpMetricsClient(),
+		Network:                 "ip",
 	}
 }
 
