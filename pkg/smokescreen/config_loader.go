@@ -2,6 +2,7 @@ package smokescreen
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -30,6 +31,7 @@ type yamlConfig struct {
 	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
 	DenyMessageExtra     string   `yaml:"deny_message_extra"`
 	AllowMissingRole     bool     `yaml:"allow_missing_role"`
+	Network              string   `yaml:"network"`
 
 	ConnectTimeout time.Duration  `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
@@ -133,6 +135,15 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if yc.Network != "" {
+		switch yc.Network {
+		case "ip", "ip4", "ip6":
+		default:
+			return fmt.Errorf("invalid network type: %v", yc.Network)
+		}
+		c.Network = yc.Network
 	}
 
 	c.AllowMissingRole = yc.AllowMissingRole

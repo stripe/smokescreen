@@ -174,7 +174,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	ips, err := config.Resolver.LookupIPAddr(ctx, host)
+	ips, err := config.Resolver.LookupIP(ctx, config.Network, host)
 	if err != nil {
 		return nil, err
 	}
@@ -183,8 +183,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	}
 
 	return &net.TCPAddr{
-		IP:   ips[0].IP,
-		Zone: ips[0].Zone,
+		IP:   ips[0],
 		Port: resolvedPort,
 	}, nil
 }
