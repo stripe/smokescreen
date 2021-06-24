@@ -223,17 +223,23 @@ func TestACLMalformedPolicyDisable(t *testing.T) {
 func TestACLAddInvalidDomain(t *testing.T) {
 	a := assert.New(t)
 
+	testDomains := []string{
+		"*.*.stripe.com", // multiple stars in glob
+		"*",              // glob matches everything
+		"*.",             // glob matches everything
+	}
+
 	acl := &ACL{
-		Rules: make(map[string]Rule),
+		Rules: make(map[string]Rule, len(testDomains)),
 	}
 
-	r := Rule{
-		Project:     "security",
-		Policy:      Open,
-		DomainGlobs: []string{"*.*.stripe.com"},
+	for _, td := range testDomains {
+		a.Error(acl.Add("acl", Rule{
+			Project:     "security",
+			Policy:      Open,
+			DomainGlobs: []string{td},
+		}), "did not reject invalid domain %q", td)
 	}
-
-	a.Error(acl.Add("acl", r))
 }
 
 func TestACLAddExistingRule(t *testing.T) {
