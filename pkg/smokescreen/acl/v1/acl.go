@@ -181,6 +181,10 @@ func (acl *ACL) ValidateDomains(domains []string) error {
 			return fmt.Errorf("glob cannot be empty")
 		}
 
+		if d == "*" || d == "*." {
+			return fmt.Errorf("glob cannot match all hostnames")
+		}
+
 		if !strings.HasPrefix(d, "*.") && strings.HasPrefix(d, "*") {
 			return fmt.Errorf("%v: domain glob must represent a full prefix (sub)domain", d)
 		}
