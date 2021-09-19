@@ -36,7 +36,26 @@ const (
 	connectProxy = "connect"
 )
 
-const CanonicalProxyDecision = "CANONICAL-PROXY-DECISION"
+const (
+	LogFieldID               = "id"
+	LogFieldOutLocalAddr     = "outbound_local_addr"
+	LogFieldOutRemoteAddr    = "outbound_remote_addr"
+	LogFieldInRemoteAddr     = "inbound_remote_addr"
+	LogFieldProxyType        = "proxy_type"
+	LogFieldRequestedHost    = "requested_host"
+	LogFieldStartTime        = "start_time"
+	LogFieldTraceID          = "trace_id"
+	LogFieldInRemoteX509CN   = "inbound_remote_x509_cn"
+	LogFieldInRemoteX509OU   = "inbound_remote_x509_ou"
+	LogFieldRole             = "role"
+	LogFieldProject          = "project"
+	LogFieldContentLength    = "content_length"
+	LogFieldDecisionReason   = "decision_reason"
+	LogFieldEnforceWouldDeny = "enforce_would_deny"
+	LogFieldAllow            = "allow"
+	LogFieldError            = "error"
+	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
+)
 
 type ipType int
 
@@ -274,11 +293,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		fields := logrus.Fields{}
 
 		if addr := conn.LocalAddr(); addr != nil {
-			fields["outbound_local_addr"] = addr.String()
+			fields[LogFieldOutLocalAddr] = addr.String()
 		}
 
 		if addr := conn.RemoteAddr(); addr != nil {
-			fields["outbound_remote_addr"] = addr.String()
+			fields[LogFieldOutRemoteAddr] = addr.String()
 		}
 
 	}
@@ -378,12 +397,12 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	start := time.Now()
 
 	logger := cfg.Log.WithFields(logrus.Fields{
-		"id":                  xid.New().String(),
-		"inbound_remote_addr": req.RemoteAddr,
-		"proxy_type":          proxyType,
-		"requested_host":      req.Host,
-		"start_time":          start.UTC(),
-		"trace_id":            req.Header.Get(traceHeader),
+		LogFieldID:            xid.New().String(),
+		LogFieldInRemoteAddr:  req.RemoteAddr,
+		LogFieldProxyType:     proxyType,
+		LogFieldRequestedHost: req.Host,
+		LogFieldStartTime:     start.UTC(),
+		LogFieldTraceID:       req.Header.Get(traceHeader),
 	})
 
 	return &smokescreenContext{
@@ -527,17 +546,17 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	// attempt to retrieve information about the host originating the proxy request
 	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
-		fields["inbound_remote_x509_cn"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
+		fields[LogFieldInRemoteX509CN] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
 		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
 		if len(ouEntries) > 0 {
-			fields["inbound_remote_x509_ou"] = ouEntries[0]
+			fields[LogFieldInRemoteX509OU] = ouEntries[0]
 		}
 	}
 
 	decision := sctx.decision
 	if sctx.decision != nil {
-		fields["role"] = decision.role
-		fields["project"] = decision.project
+		fields[LogFieldRole] = decision.role
+		fields[LogFieldProject] = decision.project
 	}
 
 	// add the above fields to all future log messages sent using this smokescreen context's logger
@@ -551,18 +570,18 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	fields["dns_lookup_time_ms"] = sctx.lookupTime.Milliseconds()
 
 	if pctx.Resp != nil {
-		fields["content_length"] = pctx.Resp.ContentLength
+		fields[LogFieldContentLength] = pctx.Resp.ContentLength
 	}
 
 	if sctx.decision != nil {
-		fields["decision_reason"] = decision.reason
-		fields["enforce_would_deny"] = decision.enforceWouldDeny
-		fields["allow"] = decision.allow
+		fields[LogFieldDecisionReason] = decision.reason
+		fields[LogFieldEnforceWouldDeny] = decision.enforceWouldDeny
+		fields[LogFieldAllow] = decision.allow
 	}
 
 	err := pctx.Error
 	if err != nil {
-		fields["error"] = err.Error()
+		fields[LogFieldError] = err.Error()
 	}
 
 	entry := sctx.logger.WithFields(fields)

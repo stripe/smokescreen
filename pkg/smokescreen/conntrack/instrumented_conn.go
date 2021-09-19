@@ -11,7 +11,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const CanonicalProxyConnClose = "CANONICAL-PROXY-CN-CLOSE"
+const (
+	LogFieldBytesIn         = "bytes_in"
+	LogFieldBytesOut        = "bytes_out"
+	LogFieldEndTime         = "end_time"
+	LogFieldDuration        = "duration"
+	LogFieldError           = "error"
+	LogFieldLastActivity    = "last_activity"
+	CanonicalProxyConnClose = "CANONICAL-PROXY-CN-CLOSE"
+)
 
 type InstrumentedConn struct {
 	net.Conn
@@ -107,12 +115,12 @@ func (ic *InstrumentedConn) Close() error {
 	}
 
 	ic.logger.WithFields(logrus.Fields{
-		"bytes_in":      ic.BytesIn,
-		"bytes_out":     ic.BytesOut,
-		"end_time":      end.UTC(),
-		"duration":      duration,
-		"error":         errorMessage,
-		"last_activity": time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC(),
+		LogFieldBytesIn:      ic.BytesIn,
+		LogFieldBytesOut:     ic.BytesOut,
+		LogFieldEndTime:      end.UTC(),
+		LogFieldDuration:     duration,
+		LogFieldError:        errorMessage,
+		LogFieldLastActivity: time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC(),
 	}).Info(CanonicalProxyConnClose)
 
 	ic.tracker.Wg.Done()
