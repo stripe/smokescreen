@@ -1,3 +1,4 @@
+//go:build !nounit
 // +build !nounit
 
 package acl
@@ -144,6 +145,22 @@ var testCases = map[string]struct {
 		"host matched rule in global deny list",
 		"automation",
 	},
+	"deny from global denylist trailing dot open service": {
+		"sample_config_with_global.yaml",
+		"open-dummy-srv",
+		"badexample2.com.",
+		Deny,
+		"host matched rule in global deny list",
+		"automation",
+	},
+	"deny from global denylist case mismatch open service": {
+		"sample_config_with_global.yaml",
+		"open-dummy-srv",
+		"bAdExAmPlE2.cOm",
+		Deny,
+		"host matched rule in global deny list",
+		"automation",
+	},
 	"deny from conflicting lists open service": {
 		"sample_config_with_global.yaml",
 		"open-dummy-srv",
@@ -220,20 +237,28 @@ func TestACLMalformedPolicyDisable(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestACLAddInvalidDomain(t *testing.T) {
+func TestACLAddInvalidGlob(t *testing.T) {
 	a := assert.New(t)
+
+	invalidGlobs := []string{
+		"*.*.stripe.com", // multiple wildcards
+		"*",              // matches everything
+		"*.",             // matches everything
+	}
 
 	acl := &ACL{
 		Rules: make(map[string]Rule),
 	}
 
-	r := Rule{
-		Project:     "security",
-		Policy:      Open,
-		DomainGlobs: []string{"*.*.stripe.com"},
-	}
+	for _, glob := range invalidGlobs {
+		err := acl.Add("acl", Rule{
+			Project:     "security",
+			Policy:      Open,
+			DomainGlobs: []string{glob},
+		})
 
-	a.Error(acl.Add("acl", r))
+		a.Errorf(err, "did not reject invalid glob %q", glob)
+	}
 }
 
 func TestACLAddExistingRule(t *testing.T) {
@@ -252,4 +277,66 @@ func TestACLAddExistingRule(t *testing.T) {
 
 	a.NoError(acl.Add(svc, r))
 	a.Error(acl.Add(svc, r))
+}
+
+// TestHostMatchesGlob tests that hostnames and variants match as expected against domain globs.
+// Does not test hostnames against globs that do not conform to the glob policy of
+// ACL.ValidateDomainGlobs(), as these would already have been rejected during ACL validation.
+func TestHostMatchesGlob(t *testing.T) {
+	globs := map[string]struct {
+		hostname string
+		glob     string
+		match    bool
+	}{
+		"simple match": {
+			"example.com",
+			"example.com",
+			true,
+		},
+		"leading wildcard matches first component": {
+			"contrived.example.com",
+			"*.example.com",
+			true,
+		},
+		"leading wildcard matches first two components": {
+			"more.contrived.example.com",
+			"*.example.com",
+			true,
+		},
+		"wildcard after leading component": {
+			"login.eu.example.com",
+			"login.*.example.com",
+			false,
+		},
+		"trailing dot": {
+			"example.com.",
+			"example.com",
+			true,
+		},
+		"uppercase host with lowercase glob": {
+			"EXAMPLE.COM",
+			"example.com",
+			true,
+		},
+		"lowercase host with uppercase glob": {
+			"example.com",
+			"EXAMPLE.COM",
+			true,
+		},
+		"empty hostname": {
+			"",
+			"example.com",
+			false,
+		},
+	}
+
+	a := assert.New(t)
+	for name, g := range globs {
+		t.Run(name, func(t *testing.T) {
+			a.Equal(
+				g.match,
+				hostMatchesGlob(g.hostname, g.glob),
+			)
+		})
+	}
 }
