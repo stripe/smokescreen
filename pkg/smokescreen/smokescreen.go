@@ -54,6 +54,9 @@ type smokescreenContext struct {
 	proxyType     string
 	logger        *logrus.Entry
 	requestedHost string
+
+	// Time spent resolving the requested hostname
+	lookupTime time.Duration
 }
 
 // ExitStatus is used to log Smokescreen's connection status at shutdown time
@@ -240,20 +243,25 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	sctx.cfg.MetricsClient.Incr("cn.atpt.total", 1)
-	start := time.Now()
 
 	var conn net.Conn
 	var err error
 
+	start := time.Now()
 	if sctx.cfg.ProxyDialTimeout == nil {
 		conn, err = net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	} else {
 		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	}
+	connTime := time.Since(start)
+
+	fields := logrus.Fields{
+		"conn_establish_time": connTime.String(),
+	}
 
 	if sctx.cfg.TimeConnect {
 		domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
-		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", time.Since(start), 1, []string{domainTag})
+		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, 1, []string{domainTag})
 	}
 
 	if err != nil {
@@ -273,11 +281,8 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 			fields["outbound_remote_addr"] = addr.String()
 		}
 
-		if len(fields) > 0 {
-			// add the above fields to all future log messages sent using this smokescreen context's logger
-			sctx.logger = sctx.logger.WithFields(fields)
-		}
 	}
+	sctx.logger = sctx.logger.WithFields(fields)
 
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
@@ -447,7 +452,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
-		sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost)
+		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
@@ -520,6 +525,8 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	fields := logrus.Fields{}
 
+	fields["dns_lookup_time"] = sctx.lookupTime.String()
+
 	// attempt to retrieve information about the host originating the proxy request
 	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
 		fields["inbound_remote_x509_cn"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
@@ -572,7 +579,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	sctx.decision, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.Host)
+	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.Host)
 	if pctx.Error != nil {
 		return pctx.Error
 	}
@@ -797,14 +804,17 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, error) {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, time.Duration, error) {
 	decision := checkACLsForRequest(config, req, outboundHost)
 
+	var lookupTime time.Duration
 	if decision.allow {
+		start := time.Now()
 		resolved, reason, err := safeResolve(config, "tcp", outboundHost)
+		lookupTime = time.Since(start)
 		if err != nil {
 			if _, ok := err.(denyError); !ok {
-				return decision, err
+				return decision, lookupTime, err
 			}
 			decision.reason = fmt.Sprintf("%s. %s", err.Error(), reason)
 			decision.allow = false
@@ -814,7 +824,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 		}
 	}
 
-	return decision, nil
+	return decision, lookupTime, nil
 }
 
 func checkACLsForRequest(config *Config, req *http.Request, outboundHost string) *aclDecision {
