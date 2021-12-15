@@ -545,6 +545,9 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	// start a new set of fields used only in this log message
 	fields = logrus.Fields{}
+
+	// If a lookup takes less than 1ms it will be rounded down to zero. This can separated from
+	// actual failures where the default zero value will also have the error field set.
 	fields["dns_lookup_time_ms"] = sctx.lookupTime.Milliseconds()
 
 	if pctx.Resp != nil {
