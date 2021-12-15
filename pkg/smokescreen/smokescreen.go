@@ -256,7 +256,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	connTime := time.Since(start)
 
 	fields := logrus.Fields{
-		"conn_establish_time": connTime.String(),
+		"conn_establish_time_ms": connTime.Milliseconds(),
 	}
 
 	if sctx.cfg.TimeConnect {
@@ -525,8 +525,6 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	fields := logrus.Fields{}
 
-	fields["dns_lookup_time"] = sctx.lookupTime.String()
-
 	// attempt to retrieve information about the host originating the proxy request
 	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
 		fields["inbound_remote_x509_cn"] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
@@ -547,6 +545,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	// start a new set of fields used only in this log message
 	fields = logrus.Fields{}
+	fields["dns_lookup_time_ms"] = sctx.lookupTime.Milliseconds()
 
 	if pctx.Resp != nil {
 		fields["content_length"] = pctx.Resp.ContentLength
