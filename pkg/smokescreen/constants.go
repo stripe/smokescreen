@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-const versionSemantic = "0.0.2"
+const versionSemantic = "0.0.3"
 
 // This can be set at build time:
 // go build -ldflags='-X github.com/stripe/smokescreen/pkg/smokescreen.VersionID=33955a3' .

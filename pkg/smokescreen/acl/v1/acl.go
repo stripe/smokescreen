@@ -66,7 +66,7 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
-	err = acl.ValidateDomains(r.DomainGlobs)
+	err = acl.ValidateDomainGlobs(svc, r.DomainGlobs)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
-		err := acl.ValidateDomains(r.DomainGlobs)
+		err := acl.ValidateDomainGlobs(svc, r.DomainGlobs)
 		if err != nil {
 			return err
 		}
@@ -170,24 +170,28 @@ func (acl *ACL) Validate() error {
 	return nil
 }
 
-// ValidateDomains takes a slice of domains and verifies they conform to
-// smokescreen's domain glob policy.
+// ValidateDomainGlobs takes a slice of domain globs and verifies they conform to smokescreen's
+// domain glob policy.
 //
-// Domains can only contain a single wildcard prefix
-// Domains cannot be represented as a sole wildcard
-func (acl *ACL) ValidateDomains(domains []string) error {
-	for _, d := range domains {
-		if d == "" {
+// Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
+// pattern is allowed. Globs must include text after a wildcard.
+func (acl *ACL) ValidateDomainGlobs(svc string, globs []string) error {
+	for _, glob := range globs {
+		if glob == "" {
 			return fmt.Errorf("glob cannot be empty")
 		}
 
-		if !strings.HasPrefix(d, "*.") && strings.HasPrefix(d, "*") {
-			return fmt.Errorf("%v: domain glob must represent a full prefix (sub)domain", d)
+		if glob == "*" || glob == "*." {
+			return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
 		}
 
-		domainToCheck := strings.TrimPrefix(d, "*")
+		if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
+			return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
+		}
+
+		domainToCheck := strings.TrimPrefix(glob, "*")
 		if strings.Contains(domainToCheck, "*") {
-			return fmt.Errorf("%v: domain globs are only supported as prefix", d)
+			return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
 		}
 	}
 	return nil
@@ -221,13 +225,24 @@ func (acl *ACL) Rule(service string) *Rule {
 	return acl.DefaultRule
 }
 
+// hostMatchesGlob matches a hostname string against a domain glob after
+// converting both to a canonical form (lowercase with trailing dots removed).
+//
+// domainGlob should already have been passed through ACL.Validate().
 func hostMatchesGlob(host string, domainGlob string) bool {
-	if domainGlob != "" && domainGlob[0] == '*' {
-		suffix := domainGlob[1:]
-		if strings.HasSuffix(host, suffix) {
+	if host == "" {
+		return false
+	}
+
+	h := strings.TrimRight(strings.ToLower(host), ".")
+	g := strings.TrimRight(strings.ToLower(domainGlob), ".")
+
+	if strings.HasPrefix(g, "*.") {
+		suffix := g[1:]
+		if strings.HasSuffix(h, suffix) {
 			return true
 		}
-	} else if domainGlob == host {
+	} else if g == h {
 		return true
 	}
 	return false
