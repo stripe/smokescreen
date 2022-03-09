@@ -1,3 +1,4 @@
+//go:build !nointegration
 // +build !nointegration
 
 package cmd
@@ -368,8 +369,8 @@ func TestSmokescreenIntegration(t *testing.T) {
 					if expectAllow {
 						testCase.ExpectStatus = http.StatusOK
 						if overTLS && !authorizedHost {
-							// The Stripe API returns a 403 to a bare HTTP GET request
-							testCase.ExpectStatus = http.StatusUnauthorized
+							// The Stripe API returns a 404 to a bare HTTP GET request
+							testCase.ExpectStatus = http.StatusNotFound
 						}
 					} else {
 						testCase.ExpectStatus = http.StatusProxyAuthRequired
