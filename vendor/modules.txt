@@ -26,7 +26,7 @@ github.com/sirupsen/logrus/hooks/test
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/stripe/goproxy v0.0.0-20201214151142-bb691dcfe7e9
+# github.com/stripe/goproxy v0.0.0-20220308202309-3f1dfba6d1a4
 ## explicit
 github.com/stripe/goproxy
 # golang.org/x/net v0.0.0-20200528225125-3c3fba18258b
