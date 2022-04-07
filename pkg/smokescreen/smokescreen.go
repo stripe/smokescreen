@@ -55,6 +55,8 @@ const (
 	LogFieldAllow            = "allow"
 	LogFieldError            = "error"
 	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
+	LogFieldConnEstablishMS  = "conn_establish_time_ms"
+	LogFieldDNSLookupTime    = "dns_lookup_time_ms"
 )
 
 type ipType int
@@ -275,7 +277,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	connTime := time.Since(start)
 
 	fields := logrus.Fields{
-		"conn_establish_time_ms": connTime.Milliseconds(),
+		LogFieldConnEstablishMS: connTime.Milliseconds(),
 	}
 
 	if sctx.cfg.TimeConnect {
@@ -567,7 +569,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	// If a lookup takes less than 1ms it will be rounded down to zero. This can separated from
 	// actual failures where the default zero value will also have the error field set.
-	fields["dns_lookup_time_ms"] = sctx.lookupTime.Milliseconds()
+	fields[LogFieldDNSLookupTime] = sctx.lookupTime.Milliseconds()
 
 	if pctx.Resp != nil {
 		fields[LogFieldContentLength] = pctx.Resp.ContentLength
