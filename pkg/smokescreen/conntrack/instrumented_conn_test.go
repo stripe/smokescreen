@@ -113,11 +113,9 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 	}
 	defer ln.Close()
 
-	handler := func(ln net.Listener) {
+	handler := func(ln net.Listener, errCh chan error) {
 		c, err := ln.Accept()
-		if err != nil {
-			t.Fatal(err)
-		}
+		errCh <- err
 		time.Sleep(250 * time.Millisecond)
 		c.Write([]byte("timeout-test"))
 		defer c.Close()
@@ -126,11 +124,17 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 	tr := NewTestTracker(0)
 
 	for _, tt := range timeoutTests {
-		go handler(ln)
+		errCh := make(chan error)
+		go handler(ln, errCh)
 
 		c, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)
+		}
+
+		lnErr := <-errCh
+		if lnErr != nil {
+			t.Fatalf("failed to call Accept() on listener: %v", err)
 		}
 
 		var b [1]byte
