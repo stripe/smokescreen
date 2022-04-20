@@ -20,8 +20,6 @@ var metrics = []string{
 	"acl.role_not_determined",
 	"acl.unknown_error",
 	"cn.atpt.connect.time",
-	"cn.atpt.fail.total",
-	"cn.atpt.success.total",
 	"cn.atpt.total",
 	"resolver.allow.default",
 	"resolver.allow.user_configured",
