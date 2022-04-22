@@ -263,8 +263,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		}
 	}
 
-	sctx.cfg.MetricsClient.Incr("cn.atpt.total", 1)
-
 	var conn net.Conn
 	var err error
 
@@ -286,10 +284,10 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	if err != nil {
-		sctx.cfg.MetricsClient.Incr("cn.atpt.fail.total", 1)
+		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
 		return nil, err
 	}
-	sctx.cfg.MetricsClient.Incr("cn.atpt.success.total", 1)
+	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
 
 	if conn != nil {
 		fields := logrus.Fields{}
