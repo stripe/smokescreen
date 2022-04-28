@@ -414,6 +414,36 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	}
 }
 
+func stripSquareBrackets(host string) string {
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+
+	return host
+}
+
+// This is hacky but necessary in order to remove square brackets from non-IPv6 addresses
+// Otherwise, we'd be checking our ACL for "[stripe.com]" rather than "stripe.com"
+func normalizeHost(host, scheme string) (string, error) {
+	hostname, port, err := net.SplitHostPort(host)
+	if err != nil {
+		if strings.Contains(err.Error(), "missing port in address") {
+			hostname = stripSquareBrackets(host)
+			switch scheme {
+			case "http":
+				port = "80"
+			case "https":
+				port = "443"
+			default:
+				port = "0"
+			}
+		} else {
+			return "", err
+		}
+	}
+	return net.JoinHostPort(hostname, port), nil
+}
+
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
@@ -457,16 +487,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost := req.URL.Hostname()
-		if strings.LastIndex(remoteHost, ":") <= strings.LastIndex(remoteHost, "]") {
-			switch req.URL.Scheme {
-			case "http":
-				remoteHost = net.JoinHostPort(remoteHost, "80")
-			case "https":
-				remoteHost = net.JoinHostPort(remoteHost, "443")
-			default:
-				remoteHost = net.JoinHostPort(remoteHost, "0")
-			}
+		remoteHost, err := normalizeHost(req.Host, req.URL.Scheme)
+		if err != nil {
+			pctx.Error = err
+			return req, rejectResponse(pctx, pctx.Error)
 		}
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
@@ -600,7 +624,12 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.URL.Hostname())
+	remoteHost, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
+	if err != nil {
+		pctx.Error = err
+		return pctx.Error
+	}
+	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost)
 	if pctx.Error != nil {
 		return pctx.Error
 	}
