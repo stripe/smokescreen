@@ -107,11 +107,11 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
-func TestUnsafeAllowPrivateRanges (t *testing.T) {
+func TestUnsafeAllowPrivateRanges(t *testing.T) {
 	a := assert.New(t)
 
 	conf := NewConfig()
-	a.NoError(conf.SetDenyRanges([]string {"192.168.0.0/24", "10.0.0.0/8"}))
+	a.NoError(conf.SetDenyRanges([]string{"192.168.0.0/24", "10.0.0.0/8"}))
 	conf.ConnectTimeout = 10 * time.Second
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
@@ -159,7 +159,6 @@ func TestUnsafeAllowPrivateRanges (t *testing.T) {
 			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
 		}
 	}
-
 
 }
 
@@ -435,6 +434,52 @@ func TestInvalidHost(t *testing.T) {
 			}
 			if a.Contains(entry.Data, "error") {
 				a.Contains(entry.Data["error"], "no such host")
+			}
+			if a.Contains(entry.Data, "proxy_type") {
+				a.Contains(entry.Data["proxy_type"], testCase.proxyType)
+			}
+		})
+	}
+}
+
+var hostSquareBracketsCases = []struct {
+	scheme    string
+	proxyType string
+}{
+	{"http", "http"},
+	{"https", "connect"},
+}
+
+func TestHostSquareBrackets(t *testing.T) {
+	for _, testCase := range hostSquareBracketsCases {
+		t.Run(testCase.scheme, func(t *testing.T) {
+			a := assert.New(t)
+			r := require.New(t)
+
+			cfg, err := testConfig("test-open-srv")
+			require.NoError(t, err)
+			logHook := proxyLogHook(cfg)
+
+			proxySrv := proxyServer(cfg)
+			defer proxySrv.Close()
+
+			// Create a http.Client that uses our proxy
+			client, err := proxyClient(proxySrv.URL)
+			r.NoError(err)
+
+			resp, err := client.Get(fmt.Sprintf("%s://[stripe.com]", testCase.scheme))
+			if err != nil {
+				r.Contains(err.Error(), "Request rejected by proxy")
+			} else {
+				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+			}
+
+			entry := findCanonicalProxyDecision(logHook.AllEntries())
+			r.NotNil(entry)
+
+			if a.Contains(entry.Data, "allow") {
+				a.Equal(false, entry.Data["allow"])
+				a.Equal("host matched rule in global deny list", entry.Data["decision_reason"])
 			}
 			if a.Contains(entry.Data, "proxy_type") {
 				a.Contains(entry.Data["proxy_type"], testCase.proxyType)

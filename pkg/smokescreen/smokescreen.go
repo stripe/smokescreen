@@ -457,7 +457,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost := req.Host
+		remoteHost := req.URL.Hostname()
 		if strings.LastIndex(remoteHost, ":") <= strings.LastIndex(remoteHost, "]") {
 			switch req.URL.Scheme {
 			case "http":
@@ -600,7 +600,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.Host)
+	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, pctx.Req.URL.Hostname())
 	if pctx.Error != nil {
 		return pctx.Error
 	}
