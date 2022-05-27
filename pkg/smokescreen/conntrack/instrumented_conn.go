@@ -18,6 +18,7 @@ const (
 	LogFieldDuration        = "duration"
 	LogFieldError           = "error"
 	LogFieldLastActivity    = "last_activity"
+	LogFieldOutboundAddr    = "outbound_remote_addr"
 	CanonicalProxyConnClose = "CANONICAL-PROXY-CN-CLOSE"
 )
 
@@ -114,6 +115,11 @@ func (ic *InstrumentedConn) Close() error {
 		errorMessage = ic.ConnError.Error()
 	}
 
+	var outboundAddr string
+	if ic.RemoteAddr() != nil {
+		outboundAddr = ic.RemoteAddr().String()
+	}
+
 	ic.logger.WithFields(logrus.Fields{
 		LogFieldBytesIn:      ic.BytesIn,
 		LogFieldBytesOut:     ic.BytesOut,
@@ -121,6 +127,7 @@ func (ic *InstrumentedConn) Close() error {
 		LogFieldDuration:     duration,
 		LogFieldError:        errorMessage,
 		LogFieldLastActivity: time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC(),
+		LogFieldOutboundAddr: outboundAddr,
 	}).Info(CanonicalProxyConnClose)
 
 	ic.tracker.Wg.Done()
