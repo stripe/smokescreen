@@ -907,7 +907,7 @@ func TestRejectResponseHandler(t *testing.T) {
 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
 		}
 		// Send a request that should be allowed
-		resp, err = client.Get("http://example.com")
+		resp, err = client.Get("http://go.dev")
 		r.NoError(err)
 
 		// The header set by our custom reject response handler should not be set
