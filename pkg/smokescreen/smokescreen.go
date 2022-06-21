@@ -415,7 +415,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 }
 
 func stripSquareBrackets(host string) string {
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+	for strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
 		host = host[1 : len(host)-1]
 	}
 
