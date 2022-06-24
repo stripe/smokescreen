@@ -443,11 +443,18 @@ func TestInvalidHost(t *testing.T) {
 }
 
 var hostSquareBracketsCases = []struct {
-	scheme    string
-	proxyType string
+	scheme         string
+	proxyType      string
+	hostname       string
+	decisionReason string
 }{
-	{"http", "http"},
-	{"https", "connect"},
+	{"http", "http", "[stripe.com]", "host matched rule in global deny list"},
+	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
+	{"http", "http", "[[stripe.com]]", "host matched rule in global deny list"},
+	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
+	{"http", "http", "[[[stripe.com]]]", "host matched rule in global deny list"},
+	{"https", "connect", "[[[stripe.com]]]", "Destination host cannot be determined"},
+	{"http", "http", "[[stripe.com]]:80", "Destination host cannot be determined"},
 }
 
 func TestHostSquareBrackets(t *testing.T) {
@@ -467,7 +474,7 @@ func TestHostSquareBrackets(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
-			resp, err := client.Get(fmt.Sprintf("%s://[stripe.com]", testCase.scheme))
+			resp, err := client.Get(fmt.Sprintf("%s://%s", testCase.scheme, testCase.hostname))
 			if err != nil {
 				r.Contains(err.Error(), "Request rejected by proxy")
 			} else {
@@ -479,7 +486,7 @@ func TestHostSquareBrackets(t *testing.T) {
 
 			if a.Contains(entry.Data, "allow") {
 				a.Equal(false, entry.Data["allow"])
-				a.Equal("host matched rule in global deny list", entry.Data["decision_reason"])
+				a.Equal(testCase.decisionReason, entry.Data["decision_reason"])
 			}
 			if a.Contains(entry.Data, "proxy_type") {
 				a.Contains(entry.Data["proxy_type"], testCase.proxyType)

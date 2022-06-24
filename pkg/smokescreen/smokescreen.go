@@ -898,6 +898,10 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	decision.role = role
 
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
+	if len(submatch) < 2 {
+		decision.reason = "Destination host cannot be determined"
+		return decision
+	}
 	destination := submatch[1]
 
 	aclDecision, err := config.EgressACL.Decide(role, destination)
