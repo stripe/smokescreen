@@ -445,15 +445,21 @@ func TestInvalidHost(t *testing.T) {
 var hostSquareBracketsCases = []struct {
 	scheme    string
 	proxyType string
+	hostname  string
+	msg       string
 }{
-	{"http", "http"},
-	{"https", "connect"},
+	{"http", "http", "[stripe.com]", "unable to parse destination host"},
+	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
+	{"http", "http", "[[stripe.com]]", "unable to parse destination host"},
+	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
+	{"http", "http", "[[[stripe.com]]]", "unable to parse destination host"},
+	{"https", "connect", "[[[stripe.com]]]", "Destination host cannot be determined"},
+	{"http", "http", "[[stripe.com]]:80", "Destination host cannot be determined"},
 }
 
 func TestHostSquareBrackets(t *testing.T) {
 	for _, testCase := range hostSquareBracketsCases {
 		t.Run(testCase.scheme, func(t *testing.T) {
-			a := assert.New(t)
 			r := require.New(t)
 
 			cfg, err := testConfig("test-open-srv")
@@ -467,7 +473,7 @@ func TestHostSquareBrackets(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
-			resp, err := client.Get(fmt.Sprintf("%s://[stripe.com]", testCase.scheme))
+			resp, err := client.Get(fmt.Sprintf("%s://%s", testCase.scheme, testCase.hostname))
 			if err != nil {
 				r.Contains(err.Error(), "Request rejected by proxy")
 			} else {
@@ -477,12 +483,12 @@ func TestHostSquareBrackets(t *testing.T) {
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
 			r.NotNil(entry)
 
-			if a.Contains(entry.Data, "allow") {
-				a.Equal(false, entry.Data["allow"])
-				a.Equal("host matched rule in global deny list", entry.Data["decision_reason"])
-			}
-			if a.Contains(entry.Data, "proxy_type") {
-				a.Contains(entry.Data["proxy_type"], testCase.proxyType)
+			r.Equal(entry.Data["proxy_type"], testCase.proxyType)
+			if allowed, ok := entry.Data["allow"]; ok {
+				r.Equal(false, allowed)
+				r.Equal(testCase.msg, entry.Data["decision_reason"])
+			} else {
+				r.Equal(testCase.msg, entry.Data["error"])
 			}
 		})
 	}

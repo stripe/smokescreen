@@ -414,21 +414,19 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	}
 }
 
-func stripSquareBrackets(host string) string {
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
-
-	return host
-}
-
 // This is hacky but necessary in order to remove square brackets from non-IPv6 addresses
 // Otherwise, we'd be checking our ACL for "[stripe.com]" rather than "stripe.com"
 func normalizeHost(host, scheme string) (string, error) {
 	hostname, port, err := net.SplitHostPort(host)
 	if err != nil {
 		if strings.Contains(err.Error(), "missing port in address") {
-			hostname = stripSquareBrackets(host)
+			// net.SplitHostPort should remove square brackets on a valid IPv6 address, so if there
+			// are still square brackets, the hostname is malformed and we should just return an error
+			if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+				return "", denyError{fmt.Errorf("unable to parse destination host")}
+			}
+
+			hostname = host
 			switch scheme {
 			case "http":
 				port = "80"
@@ -898,6 +896,10 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	decision.role = role
 
 	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
+	if len(submatch) < 2 {
+		decision.reason = "Destination host cannot be determined"
+		return decision
+	}
 	destination := submatch[1]
 
 	aclDecision, err := config.EgressACL.Decide(role, destination)
