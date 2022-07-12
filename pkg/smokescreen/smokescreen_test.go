@@ -443,6 +443,44 @@ func TestInvalidHost(t *testing.T) {
 	}
 }
 
+func TestHostNormalization(t *testing.T) {
+	var tests = []struct {
+		scheme   string
+		hostPort string
+		host     string
+		port     int
+		errorMsg string
+	}{
+		{"http", "example.com", "example.com", 80, ""},
+		{"http", "127.0.0.1", "127.0.0.1", 80, ""},
+		{"https", "127.0.0.1:123", "127.0.0.1", 123, ""},
+		{"https", "[2001:DB8::1337]", "", -1, "invalid domain '[2001:db8::1337]': idna: disallowed rune U+005B"},
+		{"https", "2001:DB8::1337", "2001:db8::1337", 443, ""},
+		{"https", "[2001:DB8::1337]:443", "2001:db8::1337", 443, ""},
+		{"https", "[2001:db8::1337]:443", "2001:db8::1337", 443, ""},
+		{"unknown", "[[2001:DB8::1337]]", "", -1, "unable to determine port: lookup tcp/unknown: nodename nor servname provided, or not known"},
+		{"https", "🔐.example.com:123", "xn--jv8h.example.com", 123, ""},
+		{"smtp", "✉️.example.com", "xn--4bi.example.com", 25, ""},
+	}
+
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%v://%v", tt.scheme, tt.hostPort)
+		t.Run(testname, func(t *testing.T) {
+			r := require.New(t)
+
+			if host, port, err := normalizeHost(tt.hostPort, tt.scheme); err != nil {
+				r.Empty(host)
+				r.Equal(port, -1)
+				r.EqualError(err, tt.errorMsg)
+			} else {
+				r.Equal(tt.host, host)
+				r.Equal(tt.port, port)
+				r.NoError(err)
+			}
+		})
+	}
+}
+
 var hostSquareBracketsCases = []struct {
 	scheme    string
 	proxyType string
