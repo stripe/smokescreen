@@ -427,12 +427,16 @@ func hasPort(s string) bool {
 // Returns a normalized representation of host (Punycode for DNS names,
 // standardized IP address representation), as well as the port number.
 func normalizeHost(hostPort, scheme string) (string, int, error) {
-	host := hostPort
-	var err error
-	var port int
 	const portMin, portMax = 0, 65535
-	if hasPort(host) {
-		// Extract host and port if both are provided..
+	var err error
+	host, port := hostPort, -1
+
+	// net.SplitHostPort() doesn't handle bare IPv6 addresses well so
+	// handle that case first.
+	if ip := net.ParseIP(hostPort); ip != nil && ip.To4() == nil {
+		host = ip.String()
+	} else if hasPort(hostPort) {
+		// Extract host and port if both are provided.
 		var portString string
 		host, portString, err = net.SplitHostPort(hostPort)
 		if err != nil {
@@ -445,8 +449,10 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		if port < portMin && port > portMax {
 			return "", -1, fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)
 		}
-	} else {
-		// Port was not provided so it will be determined based on scheme.
+	}
+
+	if port == -1 {
+		// Port was not provided so try to determine it based on scheme.
 		port, err = net.LookupPort("tcp", scheme)
 		if err != nil {
 			return "", -1, fmt.Errorf("unable to determine port: %v", err)
