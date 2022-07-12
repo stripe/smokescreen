@@ -526,7 +526,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
-	proxy.OnRequest().HandleConnectFunc(func(host string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	proxy.OnRequest().HandleConnectFunc(func(_ string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		pctx.UserData = newContext(config, connectProxy, pctx.Req)
 		pctx.HTTPErrorHandler = HTTPErrorHandler
 
@@ -535,12 +535,12 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		defer logProxy(config, pctx)
 		defer pctx.Req.Header.Del(traceHeader)
 
-		err := handleConnect(config, pctx)
+		destination, err := handleConnect(config, pctx)
 		if err != nil {
 			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
-		return goproxy.OkConnect, host
+		return goproxy.OkConnect, destination
 	})
 
 	// Strangely, goproxy can invoke this same function twice for a single HTTP request.
@@ -634,24 +634,24 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	logMethod(CanonicalProxyDecision)
 }
 
-func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
+func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
 	remoteHost, remotePort, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
 	if err != nil {
 		pctx.Error = err
-		return pctx.Error
+		return "", pctx.Error
 	}
 	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost, remotePort)
 	if pctx.Error != nil {
-		return pctx.Error
+		return "", pctx.Error
 	}
 	if !sctx.decision.allow {
-		return denyError{errors.New(sctx.decision.reason)}
+		return "", denyError{errors.New(sctx.decision.reason)}
 	}
 
-	return nil
+	return net.JoinHostPort(remoteHost, strconv.Itoa(remotePort)), nil
 }
 
 func findListener(ip string, defaultPort uint16) (net.Listener, error) {
