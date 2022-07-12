@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -414,32 +415,47 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	}
 }
 
+// hasPort returns true if the provided address does not include a port number.
+func hasPort(s string) bool {
+	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
+}
+
 // This is hacky but necessary in order to remove square brackets from non-IPv6 addresses
 // Otherwise, we'd be checking our ACL for "[stripe.com]" rather than "stripe.com"
-func normalizeHost(host, scheme string) (string, error) {
-	hostname, port, err := net.SplitHostPort(host)
-	if err != nil {
-		if strings.Contains(err.Error(), "missing port in address") {
-			// net.SplitHostPort should remove square brackets on a valid IPv6 address, so if there
-			// are still square brackets, the hostname is malformed and we should just return an error
-			if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-				return "", denyError{fmt.Errorf("unable to parse destination host")}
-			}
-
-			hostname = host
-			switch scheme {
-			case "http":
-				port = "80"
-			case "https":
-				port = "443"
-			default:
-				port = "0"
-			}
-		} else {
-			return "", err
+func normalizeHost(hostPort, scheme string) (string, error) {
+	host := hostPort
+	var err error
+	var port int
+	const portMin, portMax = 0, 65535
+	if hasPort(host) {
+		// Extract host and port if both are provided..
+		var portString string
+		host, portString, err = net.SplitHostPort(hostPort)
+		if err != nil {
+			return "", denyError{fmt.Errorf("unable to parse host: %v", err)}
+		}
+		port, err = strconv.Atoi(portString)
+		if err != nil {
+			return "", denyError{fmt.Errorf("invalid port number %#v: %v", port, err)}
+		}
+		if port < portMin && port > portMax {
+			return "", denyError{fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)}
+		}
+	} else {
+		// Port was not provided so it will be determined based on scheme.
+		port, err = net.LookupPort("tcp", scheme)
+		if err != nil {
+			return "", denyError{fmt.Errorf("unable to determine port: %v", err)}
 		}
 	}
-	return net.JoinHostPort(hostname, port), nil
+
+	if ip := net.ParseIP(host); ip != nil {
+		host = ip.String()
+	} else if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
+		return "", denyError{fmt.Errorf("unable to parse destination host")}
+	}
+
+	return net.JoinHostPort(host, strconv.Itoa(port)), nil
 }
 
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {

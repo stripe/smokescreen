@@ -1,3 +1,4 @@
+//go:build !nounit
 // +build !nounit
 
 package smokescreen
@@ -453,8 +454,9 @@ var hostSquareBracketsCases = []struct {
 	{"http", "http", "[[stripe.com]]", "unable to parse destination host"},
 	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
 	{"http", "http", "[[[stripe.com]]]", "unable to parse destination host"},
-	{"https", "connect", "[[[stripe.com]]]", "Destination host cannot be determined"},
-	{"http", "http", "[[stripe.com]]:80", "Destination host cannot be determined"},
+	// These somewhat confusing error messages originate from net.SplitHostPort().
+	{"https", "connect", "[[[stripe.com]]]", "unable to parse host: address [[stripe.com]]:443: missing port in address"},
+	{"http", "http", "[[stripe.com]]:80", "unable to parse host: address [[stripe.com]]:80: missing port in address"},
 }
 
 func TestHostSquareBrackets(t *testing.T) {
