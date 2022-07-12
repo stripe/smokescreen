@@ -449,11 +449,11 @@ var hostSquareBracketsCases = []struct {
 	hostname  string
 	msg       string
 }{
-	{"http", "http", "[stripe.com]", "unable to parse destination host"},
+	{"http", "http", "[stripe.com]", "invalid domain '[stripe.com]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
-	{"http", "http", "[[stripe.com]]", "unable to parse destination host"},
+	{"http", "http", "[[stripe.com]]", "invalid domain '[[stripe.com]]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
-	{"http", "http", "[[[stripe.com]]]", "unable to parse destination host"},
+	{"http", "http", "[[[stripe.com]]]", "invalid domain '[[[stripe.com]]]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[2001:Db8::]:443", "Destination host cannot be determined"},
 	// These somewhat confusing error messages originate from net.SplitHostPort().
 	{"https", "connect", "[[[stripe.com]]]", "unable to parse host: address [[stripe.com]]:443: missing port in address"},
@@ -462,7 +462,7 @@ var hostSquareBracketsCases = []struct {
 
 func TestHostSquareBrackets(t *testing.T) {
 	for _, testCase := range hostSquareBracketsCases {
-		t.Run(testCase.scheme, func(t *testing.T) {
+		t.Run(testCase.scheme+"://"+testCase.hostname, func(t *testing.T) {
 			r := require.New(t)
 
 			cfg, err := testConfig("test-open-srv")

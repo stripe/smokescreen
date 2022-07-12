@@ -22,6 +22,7 @@ import (
 	"github.com/stripe/smokescreen/internal/einhorn"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -451,8 +452,14 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 
 	if ip := net.ParseIP(host); ip != nil {
 		host = ip.String()
-	} else if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
-		return "", -1, denyError{fmt.Errorf("unable to parse destination host")}
+	} else {
+		// If it's not an IP address then it must be's a domain name.
+		// Convert it to Punycode it so that we deal only with with ASCII from now on
+		// and we find out if the domain name is malformed.
+		host, err = idna.Lookup.ToASCII(host)
+		if err != nil {
+			return "", -1, denyError{fmt.Errorf("invalid domain '%v': %v", host, err)}
+		}
 	}
 
 	return host, port, nil
