@@ -427,9 +427,9 @@ func hasPort(s string) bool {
 // Returns a normalized representation of host (Punycode for DNS names,
 // standardized IP address representation), as well as the port number.
 func normalizeHost(hostPort, scheme string) (string, int, error) {
-	const portMin, portMax = 0, 65535
 	var err error
-	host, port := hostPort, -1
+	const noPort = -1
+	host, port := hostPort, noPort
 
 	// net.SplitHostPort() doesn't handle bare IPv6 addresses well so
 	// handle that case first.
@@ -440,22 +440,22 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		var portString string
 		host, portString, err = net.SplitHostPort(hostPort)
 		if err != nil {
-			return "", -1, fmt.Errorf("unable to parse host: %v", err)
+			return "", noPort, fmt.Errorf("unable to parse host: %v", err)
 		}
 		port, err = strconv.Atoi(portString)
 		if err != nil {
-			return "", -1, fmt.Errorf("invalid port number %#v: %v", port, err)
+			return "", noPort, fmt.Errorf("invalid port number %#v: %v", port, err)
 		}
 		if port < portMin && port > portMax {
-			return "", -1, fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)
+			return "", noPort, fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)
 		}
 	}
 
-	if port == -1 {
+	if port == noPort {
 		// Port was not provided so try to determine it based on scheme.
 		port, err = net.LookupPort("tcp", scheme)
 		if err != nil {
-			return "", -1, fmt.Errorf("unable to determine port: %v", err)
+			return "", noPort, fmt.Errorf("unable to determine port: %v", err)
 		}
 	}
 
@@ -467,7 +467,7 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		// and we find out if the domain name is malformed.
 		host, err = idna.Lookup.ToASCII(host)
 		if err != nil {
-			return "", -1, fmt.Errorf("invalid domain '%v': %v", host, err)
+			return "", noPort, fmt.Errorf("invalid domain '%v': %v", host, err)
 		}
 	}
 
