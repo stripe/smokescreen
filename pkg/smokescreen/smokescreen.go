@@ -422,7 +422,7 @@ func hasPort(s string) bool {
 
 // This is hacky but necessary in order to remove square brackets from non-IPv6 addresses
 // Otherwise, we'd be checking our ACL for "[stripe.com]" rather than "stripe.com"
-func normalizeHost(hostPort, scheme string) (string, error) {
+func normalizeHost(hostPort, scheme string) (string, int, error) {
 	host := hostPort
 	var err error
 	var port int
@@ -432,30 +432,30 @@ func normalizeHost(hostPort, scheme string) (string, error) {
 		var portString string
 		host, portString, err = net.SplitHostPort(hostPort)
 		if err != nil {
-			return "", denyError{fmt.Errorf("unable to parse host: %v", err)}
+			return "", -1, denyError{fmt.Errorf("unable to parse host: %v", err)}
 		}
 		port, err = strconv.Atoi(portString)
 		if err != nil {
-			return "", denyError{fmt.Errorf("invalid port number %#v: %v", port, err)}
+			return "", -1, denyError{fmt.Errorf("invalid port number %#v: %v", port, err)}
 		}
 		if port < portMin && port > portMax {
-			return "", denyError{fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)}
+			return "", -1, denyError{fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)}
 		}
 	} else {
 		// Port was not provided so it will be determined based on scheme.
 		port, err = net.LookupPort("tcp", scheme)
 		if err != nil {
-			return "", denyError{fmt.Errorf("unable to determine port: %v", err)}
+			return "", -1, denyError{fmt.Errorf("unable to determine port: %v", err)}
 		}
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
 		host = ip.String()
 	} else if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
-		return "", denyError{fmt.Errorf("unable to parse destination host")}
+		return "", -1, denyError{fmt.Errorf("unable to parse destination host")}
 	}
 
-	return net.JoinHostPort(host, strconv.Itoa(port)), nil
+	return host, port, nil
 }
 
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
@@ -501,7 +501,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost, err := normalizeHost(req.Host, req.URL.Scheme)
+		remoteHost, remotePort, err := normalizeHost(req.Host, req.URL.Scheme)
 		if err != nil {
 			pctx.Error = err
 			return req, rejectResponse(pctx, pctx.Error)
@@ -509,7 +509,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
-		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost)
+		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost, remotePort)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
@@ -638,12 +638,12 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) error {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	remoteHost, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
+	remoteHost, remotePort, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
 	if err != nil {
 		pctx.Error = err
 		return pctx.Error
 	}
-	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost)
+	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost, remotePort)
 	if pctx.Error != nil {
 		return pctx.Error
 	}
@@ -868,13 +868,14 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHost string) (*aclDecision, time.Duration, error) {
-	decision := checkACLsForRequest(config, req, outboundHost)
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, host string, port int) (*aclDecision, time.Duration, error) {
+	decision := checkACLsForRequest(config, req, host, port)
+	socketAddress := net.JoinHostPort(host, strconv.Itoa(port))
 
 	var lookupTime time.Duration
 	if decision.allow {
 		start := time.Now()
-		resolved, reason, err := safeResolve(config, "tcp", outboundHost)
+		resolved, reason, err := safeResolve(config, "tcp", socketAddress)
 		lookupTime = time.Since(start)
 		if err != nil {
 			if _, ok := err.(denyError); !ok {
@@ -891,9 +892,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, outboundHo
 	return decision, lookupTime, nil
 }
 
-func checkACLsForRequest(config *Config, req *http.Request, outboundHost string) *aclDecision {
+func checkACLsForRequest(config *Config, req *http.Request, host string, port int) *aclDecision {
 	decision := &aclDecision{
-		outboundHost: outboundHost,
+		outboundHost: net.JoinHostPort(host, strconv.Itoa(port)),
 	}
 
 	if config.EgressACL == nil {
@@ -911,14 +912,14 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 
 	decision.role = role
 
-	submatch := hostExtractRE.FindStringSubmatch(outboundHost)
-	if len(submatch) < 2 {
+	// This host validation prevents IPv6 addresses from being used as destinations.
+	// Added for backwards compatibility.
+	if strings.ContainsAny(host, ":") {
 		decision.reason = "Destination host cannot be determined"
 		return decision
 	}
-	destination := submatch[1]
 
-	aclDecision, err := config.EgressACL.Decide(role, destination)
+	aclDecision, err := config.EgressACL.Decide(role, host)
 	decision.project = aclDecision.Project
 	decision.reason = aclDecision.Reason
 	if err != nil {
@@ -955,7 +956,7 @@ func checkACLsForRequest(config *Config, req *http.Request, outboundHost string)
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
-			"destination": destination,
+			"destination": host,
 			"action":      aclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
