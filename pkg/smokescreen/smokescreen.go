@@ -421,8 +421,11 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
-// This is hacky but necessary in order to remove square brackets from non-IPv6 addresses
-// Otherwise, we'd be checking our ACL for "[stripe.com]" rather than "stripe.com"
+// normalizeHost returns host (as string) and port (as int) derived from  the
+// `hostPort` string. `hostPort` is a colon-separated (':') DNS name and port.
+//
+// Returns a normalized representation of host (Punycode for DNS names,
+// standardized IP address representation), as well as the port number.
 func normalizeHost(hostPort, scheme string) (string, int, error) {
 	host := hostPort
 	var err error
