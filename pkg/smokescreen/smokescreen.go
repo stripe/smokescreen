@@ -421,12 +421,15 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
-// normalizeHost returns host (as string) and port (as int) derived from  the
+// normalizeHost returns host (as string) and port (as int) derived from the
 // `hostPort` string. `hostPort` is a colon-separated (':') DNS name and port.
+//
+// If no port is specified, the scheme string is used to find the default port.
+// If forceFQDN is true, returned normalized domain name will be an FQDN.
 //
 // Returns a normalized representation of host (Punycode for DNS names,
 // standardized IP address representation), as well as the port number.
-func normalizeHost(hostPort, scheme string) (string, int, error) {
+func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error) {
 	var err error
 	const noPort = -1
 	host, port := hostPort, noPort
@@ -468,6 +471,9 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		host, err = idna.Lookup.ToASCII(host)
 		if err != nil {
 			return "", noPort, fmt.Errorf("invalid domain '%v': %v", host, err)
+		}
+		if forceFQDN && !strings.HasSuffix(host, ".") {
+			host += "."
 		}
 	}
 
@@ -517,7 +523,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost, remotePort, err := normalizeHost(req.Host, req.URL.Scheme)
+		remoteHost, remotePort, err := normalizeHost(req.Host, req.URL.Scheme, false)
 		if err != nil {
 			pctx.Error = denyError{err}
 			return req, rejectResponse(pctx, pctx.Error)
@@ -654,7 +660,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	remoteHost, remotePort, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
+	remoteHost, remotePort, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme, false)
 	if err != nil {
 		pctx.Error = denyError{err}
 		return "", pctx.Error
