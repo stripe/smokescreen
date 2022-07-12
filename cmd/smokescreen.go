@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/carlmjohnson/versioninfo"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/urfave/cli.v1"
 
@@ -28,7 +29,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app := cli.NewApp()
 	app.Name = "smokescreen"
-	app.Version = smokescreen.Version()
+	app.Version = versioninfo.Short()
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 

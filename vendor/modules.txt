@@ -8,6 +8,9 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
 ## explicit
 github.com/armon/go-proxyproto
+# github.com/carlmjohnson/versioninfo v0.22.4
+## explicit
+github.com/carlmjohnson/versioninfo
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
