@@ -886,12 +886,12 @@ func getRole(config *Config, req *http.Request) (string, error) {
 
 func checkIfRequestShouldBeProxied(config *Config, req *http.Request, host string, port int) (*aclDecision, time.Duration, error) {
 	decision := checkACLsForRequest(config, req, host, port)
-	socketAddress := net.JoinHostPort(host, strconv.Itoa(port))
 
 	var lookupTime time.Duration
 	if decision.allow {
 		start := time.Now()
-		resolved, reason, err := safeResolve(config, "tcp", socketAddress)
+		hostPort := net.JoinHostPort(host, strconv.Itoa(port))
+		resolved, reason, err := safeResolve(config, "tcp", hostPort)
 		lookupTime = time.Since(start)
 		if err != nil {
 			if _, ok := err.(denyError); !ok {
