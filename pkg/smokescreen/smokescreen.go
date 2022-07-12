@@ -433,20 +433,20 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		var portString string
 		host, portString, err = net.SplitHostPort(hostPort)
 		if err != nil {
-			return "", -1, denyError{fmt.Errorf("unable to parse host: %v", err)}
+			return "", -1, fmt.Errorf("unable to parse host: %v", err)
 		}
 		port, err = strconv.Atoi(portString)
 		if err != nil {
-			return "", -1, denyError{fmt.Errorf("invalid port number %#v: %v", port, err)}
+			return "", -1, fmt.Errorf("invalid port number %#v: %v", port, err)
 		}
 		if port < portMin && port > portMax {
-			return "", -1, denyError{fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)}
+			return "", -1, fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)
 		}
 	} else {
 		// Port was not provided so it will be determined based on scheme.
 		port, err = net.LookupPort("tcp", scheme)
 		if err != nil {
-			return "", -1, denyError{fmt.Errorf("unable to determine port: %v", err)}
+			return "", -1, fmt.Errorf("unable to determine port: %v", err)
 		}
 	}
 
@@ -458,7 +458,7 @@ func normalizeHost(hostPort, scheme string) (string, int, error) {
 		// and we find out if the domain name is malformed.
 		host, err = idna.Lookup.ToASCII(host)
 		if err != nil {
-			return "", -1, denyError{fmt.Errorf("invalid domain '%v': %v", host, err)}
+			return "", -1, fmt.Errorf("invalid domain '%v': %v", host, err)
 		}
 	}
 
@@ -510,7 +510,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// Build an address parsable by net.ResolveTCPAddr
 		remoteHost, remotePort, err := normalizeHost(req.Host, req.URL.Scheme)
 		if err != nil {
-			pctx.Error = err
+			pctx.Error = denyError{err}
 			return req, rejectResponse(pctx, pctx.Error)
 		}
 
@@ -647,7 +647,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	// Check if requesting role is allowed to talk to remote
 	remoteHost, remotePort, err := normalizeHost(pctx.Req.Host, pctx.Req.URL.Scheme)
 	if err != nil {
-		pctx.Error = err
+		pctx.Error = denyError{err}
 		return "", pctx.Error
 	}
 	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost, remotePort)
