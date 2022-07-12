@@ -458,7 +458,7 @@ func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error)
 		// Port was not provided so try to determine it based on scheme.
 		port, err = net.LookupPort("tcp", scheme)
 		if err != nil {
-			return "", noPort, fmt.Errorf("unable to determine port: %v", err)
+			return "", noPort, fmt.Errorf("unable to determine port for %v", scheme)
 		}
 	}
 

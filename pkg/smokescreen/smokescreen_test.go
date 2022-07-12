@@ -459,7 +459,7 @@ func TestHostNormalization(t *testing.T) {
 		{"https", "2001:DB8::1337", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:DB8::1337]:443", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:db8::1337]:443", "2001:db8::1337", 443, false, ""},
-		{"unknown", "[[2001:DB8::1337]]", "", -1, false, "unable to determine port: lookup tcp/unknown: nodename nor servname provided, or not known"},
+		{"unknown", "[[2001:DB8::1337]]", "", -1, false, "unable to determine port for unknown"},
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com", 123, false, ""},
 		{"smtp", "✉️.example.com.", "xn--4bi.example.com.", 25, false, ""},
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com.", 123, true, ""},
