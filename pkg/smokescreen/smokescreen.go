@@ -465,9 +465,9 @@ func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error)
 	if ip := net.ParseIP(host); ip != nil {
 		host = ip.String()
 	} else {
-		// If it's not an IP address then it must be's a domain name.
-		// Convert it to Punycode it so that we deal only with with ASCII from now on
-		// and we find out if the domain name is malformed.
+		// If it's not an IP address then it must be a domain name.
+		// Convert it to Punycode it so that we deal only with with ASCII from now on.
+		// This way we can find out whether the domain name is malformed.
 		host, err = idna.Lookup.ToASCII(host)
 		if err != nil {
 			return "", noPort, fmt.Errorf("invalid domain '%v': %v", host, err)
