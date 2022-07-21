@@ -437,6 +437,9 @@ func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error)
 	// net.SplitHostPort() doesn't handle bare IPv6 addresses well so
 	// handle that case first.
 	if ip := net.ParseIP(hostPort); ip != nil && ip.To4() == nil {
+		// IP addresses might have different but equivalent representations
+		// (e.g., `2001:DB8::` and `2001:db8::` are the same address).
+		// Let's make sure we use a consistent representation from now on.
 		host = ip.String()
 	} else if hasPort(hostPort) {
 		// Extract host and port if both are provided.
