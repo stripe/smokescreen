@@ -667,7 +667,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	}
 	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost, remotePort)
 	if pctx.Error != nil {
-		return "", pctx.Error
+		return "", denyError{pctx.Error}
 	}
 	if !sctx.decision.allow {
 		return "", denyError{errors.New(sctx.decision.reason)}
