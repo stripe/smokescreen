@@ -463,6 +463,9 @@ func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error)
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
+		// IP addresses might have different but equivalent representations
+		// (e.g., `2001:DB8::` and `2001:db8::` are the same address).
+		// Let's make sure we use a consistent representation from now on.
 		host = ip.String()
 	} else {
 		// If it's not an IP address then it must be a domain name.
