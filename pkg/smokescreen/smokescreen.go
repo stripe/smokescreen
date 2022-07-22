@@ -452,7 +452,7 @@ func normalizeHost(hostPort, scheme string, forceFQDN bool) (string, int, error)
 		if err != nil {
 			return "", noPort, fmt.Errorf("invalid port number %#v: %v", port, err)
 		}
-		if port < portMin && port > portMax {
+		if port < portMin || port > portMax {
 			return "", noPort, fmt.Errorf("invalid port number %#v: must be between %d and %d", port, portMin, portMax)
 		}
 	}
