@@ -455,7 +455,7 @@ func TestHostNormalization(t *testing.T) {
 		{"http", "example.com", "example.com", 80, false, ""},
 		{"http", "127.0.0.1", "127.0.0.1", 80, false, ""},
 		{"https", "127.0.0.1:123", "127.0.0.1", 123, false, ""},
-		{"https", "[2001:DB8::1337]", "", -1, false, "invalid domain '[2001:db8::1337]': idna: disallowed rune U+005B"},
+		{"https", "[2001:DB8::1337]", "", -1, false, "invalid domain '[2001:DB8::1337]': idna: disallowed rune U+005B"},
 		{"https", "2001:DB8::1337", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:DB8::1337]:443", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:db8::1337]:443", "2001:db8::1337", 443, false, ""},
@@ -465,6 +465,7 @@ func TestHostNormalization(t *testing.T) {
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com", 123, false, ""},
 		{"smtp", "✉️.example.com.", "xn--4bi.example.com.", 25, false, ""},
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com.", 123, true, ""},
+		{"https", "🔐.example.com:007", "xn--jv8h.example.com.", 0, true, "invalid port number 007: decimal representation required"},
 		{"smtp", "✉️.example.com", "xn--4bi.example.com.", 25, true, ""},
 	}
 
@@ -473,7 +474,7 @@ func TestHostNormalization(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 			r := require.New(t)
 
-			if host, port, err := normalizeHost(tt.hostPort, tt.scheme, tt.forceFQDN); err != nil {
+			if host, port, err := normalizeHostWithOptionalPort(tt.hostPort, tt.scheme, tt.forceFQDN); err != nil {
 				r.Empty(host)
 				r.Equal(port, -1)
 				r.EqualError(err, tt.errorMsg)
@@ -499,8 +500,8 @@ var hostSquareBracketsCases = []struct {
 	{"http", "http", "[[[stripe.com]]]", "invalid domain '[[[stripe.com]]]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[2001:Db8::]:443", "Destination host cannot be determined"},
 	// These somewhat confusing error messages originate from net.SplitHostPort().
-	{"https", "connect", "[[[stripe.com]]]", "unable to parse host: address [[stripe.com]]:443: missing port in address"},
-	{"http", "http", "[[stripe.com]]:80", "unable to parse host: address [[stripe.com]]:80: missing port in address"},
+	{"https", "connect", "[[[stripe.com]]]", "address [[stripe.com]]:443: missing port in address"},
+	{"http", "http", "[[stripe.com]]:80", "address [[stripe.com]]:80: missing port in address"},
 }
 
 func TestHostSquareBrackets(t *testing.T) {
