@@ -9,9 +9,9 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.7.0
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.8.0
 	github.com/stripe/goproxy v0.0.0-20220308202309-3f1dfba6d1a4
-	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b // indirect
+	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b
 	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.2.8
