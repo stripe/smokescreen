@@ -443,6 +443,56 @@ func TestInvalidHost(t *testing.T) {
 	}
 }
 
+func TestStrictNormalization(t *testing.T) {
+	for i, tt := range []struct {
+		hostPort string
+		host     string
+		hostFQDN string
+		port     int
+		err      string
+	}{
+		{"127.0.0.1:1234", "127.0.0.1", "127.0.0.1", 1234, ""},
+		{"example.net", "", "", 0, "missing port in address"},
+		{"example.net:1337", "example.net", "example.net.", 1337, ""},
+		{"example.net.:1337", "example.net.", "example.net.", 1337, ""},
+		{"[example.net.]:1337", "example.net.", "example.net.", 1337, ""},
+		{"[127.0.0.1]:1337", "127.0.0.1", "127.0.0.1", 1337, ""},
+		{"[example.net]:1337", "example.net", "example.net.", 1337, ""},
+		{"[[example.net]]:1337", "", "", 0, "missing port in address"},
+		{"", "", "", 0, "missing port in address"},
+		{":", "", "", 0, "invalid syntax"},
+		{"::", "", "", 0, "too many colons in address"},
+		{"2001:DB8::1337", "", "", 0, "too many colons in address"},
+		{"[2001:DB8::1337]:1337", "2001:db8::1337", "2001:db8::1337", 1337, ""},
+		{"[2001:DB8::1337]:91337", "", "", 0, "must be between 0 and 65535"},
+		{"[2001:DB8::1337]:007", "", "", 0, "decimal representation required"},
+		{"[2001:DB8::1337]:-12", "", "", 0, "must be between 0 and 65535"},
+		{"[2001:DB8::1337]:https", "", "", 0, "invalid syntax"},
+		{"🔐.example.com:123", "xn--jv8h.example.com", "xn--jv8h.example.com.", 123, ""},
+		{"🔐.example.com:007", "", "", 0, "decimal representation required"},
+	} {
+		t.Run(fmt.Sprintf("%d: %s", i+1, tt.hostPort), func(t *testing.T) {
+			a := assert.New(t)
+			host, port, err := normalizeHostPort(tt.hostPort, false)
+			a.Equal(tt.host, host)
+			a.Equal(tt.port, port)
+			if tt.err != "" {
+				a.ErrorContains(err, tt.err)
+			} else {
+				a.NoError(err)
+			}
+			hostFQDN, portFQDN, errFQDN := normalizeHostPort(tt.hostPort, true)
+			a.Equal(tt.hostFQDN, hostFQDN)
+			a.Equal(tt.port, portFQDN)
+			if tt.err != "" {
+				a.ErrorContains(errFQDN, tt.err)
+			} else {
+				a.NoError(errFQDN)
+			}
+		})
+	}
+}
+
 func TestHostNormalization(t *testing.T) {
 	var tests = []struct {
 		scheme    string
