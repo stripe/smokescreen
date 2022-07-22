@@ -1,3 +1,4 @@
+//go:build !nounit
 // +build !nounit
 
 package smokescreen
@@ -420,7 +421,7 @@ func TestInvalidHost(t *testing.T) {
 
 			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.test", testCase.scheme))
 			if testCase.expectErr {
-				r.Contains(err.Error(), "Bad gateway")
+				r.Contains(err.Error(), "Request rejected by proxy")
 			} else {
 				r.NoError(err)
 				r.Equal(http.StatusBadGateway, resp.StatusCode)
@@ -442,24 +443,69 @@ func TestInvalidHost(t *testing.T) {
 	}
 }
 
+func TestHostNormalization(t *testing.T) {
+	var tests = []struct {
+		scheme    string
+		hostPort  string
+		host      string
+		port      int
+		forceFQDN bool
+		errorMsg  string
+	}{
+		{"http", "example.com", "example.com", 80, false, ""},
+		{"http", "127.0.0.1", "127.0.0.1", 80, false, ""},
+		{"https", "127.0.0.1:123", "127.0.0.1", 123, false, ""},
+		{"https", "[2001:DB8::1337]", "", -1, false, "invalid domain '[2001:db8::1337]': idna: disallowed rune U+005B"},
+		{"https", "2001:DB8::1337", "2001:db8::1337", 443, false, ""},
+		{"https", "[2001:DB8::1337]:443", "2001:db8::1337", 443, false, ""},
+		{"https", "[2001:db8::1337]:443", "2001:db8::1337", 443, false, ""},
+		{"https", "[2001:DB8::1337]:-1", "2001:db8::1337", -1, false, "invalid port number -1: must be between 0 and 65535"},
+		{"https", "[2001:db8::1337]:111111", "2001:db8::1337", -1, false, "invalid port number 111111: must be between 0 and 65535"},
+		{"unknown", "[[2001:DB8::1337]]", "", -1, false, "unable to determine port for unknown"},
+		{"https", "🔐.example.com:123", "xn--jv8h.example.com", 123, false, ""},
+		{"smtp", "✉️.example.com.", "xn--4bi.example.com.", 25, false, ""},
+		{"https", "🔐.example.com:123", "xn--jv8h.example.com.", 123, true, ""},
+		{"smtp", "✉️.example.com", "xn--4bi.example.com.", 25, true, ""},
+	}
+
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%v://%v", tt.scheme, tt.hostPort)
+		t.Run(testname, func(t *testing.T) {
+			r := require.New(t)
+
+			if host, port, err := normalizeHost(tt.hostPort, tt.scheme, tt.forceFQDN); err != nil {
+				r.Empty(host)
+				r.Equal(port, -1)
+				r.EqualError(err, tt.errorMsg)
+			} else {
+				r.Equal(tt.host, host)
+				r.Equal(tt.port, port)
+				r.NoError(err)
+			}
+		})
+	}
+}
+
 var hostSquareBracketsCases = []struct {
 	scheme    string
 	proxyType string
 	hostname  string
 	msg       string
 }{
-	{"http", "http", "[stripe.com]", "unable to parse destination host"},
+	{"http", "http", "[stripe.com]", "invalid domain '[stripe.com]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
-	{"http", "http", "[[stripe.com]]", "unable to parse destination host"},
+	{"http", "http", "[[stripe.com]]", "invalid domain '[[stripe.com]]': idna: disallowed rune U+005B"},
 	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
-	{"http", "http", "[[[stripe.com]]]", "unable to parse destination host"},
-	{"https", "connect", "[[[stripe.com]]]", "Destination host cannot be determined"},
-	{"http", "http", "[[stripe.com]]:80", "Destination host cannot be determined"},
+	{"http", "http", "[[[stripe.com]]]", "invalid domain '[[[stripe.com]]]': idna: disallowed rune U+005B"},
+	{"https", "connect", "[2001:Db8::]:443", "Destination host cannot be determined"},
+	// These somewhat confusing error messages originate from net.SplitHostPort().
+	{"https", "connect", "[[[stripe.com]]]", "unable to parse host: address [[stripe.com]]:443: missing port in address"},
+	{"http", "http", "[[stripe.com]]:80", "unable to parse host: address [[stripe.com]]:80: missing port in address"},
 }
 
 func TestHostSquareBrackets(t *testing.T) {
 	for _, testCase := range hostSquareBracketsCases {
-		t.Run(testCase.scheme, func(t *testing.T) {
+		t.Run(testCase.scheme+"://"+testCase.hostname, func(t *testing.T) {
 			r := require.New(t)
 
 			cfg, err := testConfig("test-open-srv")
