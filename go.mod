@@ -6,6 +6,7 @@ require (
 	github.com/DataDog/datadog-go v4.5.1+incompatible
 	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
+	github.com/carlmjohnson/versioninfo v0.22.4
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.7.0
