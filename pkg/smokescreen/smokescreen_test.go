@@ -473,7 +473,7 @@ func TestStrictNormalization(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d: %s", i+1, tt.hostPort), func(t *testing.T) {
 			a := assert.New(t)
-			host, port, err := normalizeHostPort(tt.hostPort, false)
+			host, port, err := NormalizeHostPort(tt.hostPort, false)
 			a.Equal(tt.host, host)
 			a.Equal(tt.port, port)
 			if tt.err != "" {
@@ -481,7 +481,7 @@ func TestStrictNormalization(t *testing.T) {
 			} else {
 				a.NoError(err)
 			}
-			hostFQDN, portFQDN, errFQDN := normalizeHostPort(tt.hostPort, true)
+			hostFQDN, portFQDN, errFQDN := NormalizeHostPort(tt.hostPort, true)
 			a.Equal(tt.hostFQDN, hostFQDN)
 			a.Equal(tt.port, portFQDN)
 			if tt.err != "" {
@@ -524,7 +524,7 @@ func TestHostNormalization(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 			r := require.New(t)
 
-			if host, port, err := normalizeHostWithOptionalPort(tt.hostPort, tt.scheme, tt.forceFQDN); err != nil {
+			if host, port, err := NormalizeHostWithOptionalPort(tt.hostPort, tt.scheme, tt.forceFQDN); err != nil {
 				r.Empty(host)
 				r.Equal(port, -1)
 				r.EqualError(err, tt.errorMsg)
