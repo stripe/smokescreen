@@ -423,9 +423,6 @@ func hasPort(s string) bool {
 
 // normalizePort converts `s` to int if it represents a valid TCP port.
 func normalizePort(s string) (port int, err error) {
-	if strings.HasPrefix(s, "0") && s != "0" {
-		return 0, fmt.Errorf("invalid port number %s: decimal representation required", s)
-	}
 	port, err = strconv.Atoi(s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid port number %q: %v", s, err)
