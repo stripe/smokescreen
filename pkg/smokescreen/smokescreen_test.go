@@ -465,11 +465,11 @@ func TestStrictNormalization(t *testing.T) {
 		{"2001:DB8::1337", "", "", 0, "too many colons in address"},
 		{"[2001:DB8::1337]:1337", "2001:db8::1337", "2001:db8::1337", 1337, ""},
 		{"[2001:DB8::1337]:91337", "", "", 0, "must be between 0 and 65535"},
-		{"[2001:DB8::1337]:007", "", "", 0, "decimal representation required"},
+		{"[2001:DB8::1337]:007", "2001:db8::1337", "2001:db8::1337", 7, ""},
 		{"[2001:DB8::1337]:-12", "", "", 0, "must be between 0 and 65535"},
 		{"[2001:DB8::1337]:https", "", "", 0, "invalid syntax"},
 		{"🔐.example.com:123", "xn--jv8h.example.com", "xn--jv8h.example.com.", 123, ""},
-		{"🔐.example.com:007", "", "", 0, "decimal representation required"},
+		{"🔐.example.com:007", "xn--jv8h.example.com", "xn--jv8h.example.com.", 7, ""},
 	} {
 		t.Run(fmt.Sprintf("%d: %s", i+1, tt.hostPort), func(t *testing.T) {
 			a := assert.New(t)
@@ -515,7 +515,7 @@ func TestHostNormalization(t *testing.T) {
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com", 123, false, ""},
 		{"smtp", "✉️.example.com.", "xn--4bi.example.com.", 25, false, ""},
 		{"https", "🔐.example.com:123", "xn--jv8h.example.com.", 123, true, ""},
-		{"https", "🔐.example.com:007", "xn--jv8h.example.com.", 0, true, "invalid port number 007: decimal representation required"},
+		{"https", "🔐.example.com:007", "xn--jv8h.example.com.", 7, true, ""},
 		{"smtp", "✉️.example.com", "xn--4bi.example.com.", 25, true, ""},
 	}
 
