@@ -421,7 +421,8 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
-func _normalizePort(s string) (port int, err error) {
+// normalizePort converts `s` to int if it represents a valid TCP port.
+func normalizePort(s string) (port int, err error) {
 	if strings.HasPrefix(s, "0") && s != "0" {
 		return 0, fmt.Errorf("invalid port number %s: decimal representation required", s)
 	}
@@ -435,7 +436,12 @@ func _normalizePort(s string) (port int, err error) {
 	return
 }
 
-func _normalizeHost(s string, forceFQDN bool) (string, error) {
+// normalizeHost returns normalized representation of host (Punycode for DNS
+// names, standardized IP address representation).
+//
+// If forceFQDN is true, returned normalized domain name will include a trailing
+// dot.
+func normalizeHost(s string, forceFQDN bool) (string, error) {
 	if ip := net.ParseIP(s); ip != nil {
 		// IP addresses might have different but equivalent representations
 		// (e.g., `2001:DB8::` and `2001:db8::` are the same address).
@@ -469,25 +475,25 @@ func normalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 	if err != nil {
 		return "", 0, err
 	}
-	host, err = _normalizeHost(host, forceFQDN)
+	host, err = normalizeHost(host, forceFQDN)
 	if err != nil {
 		return "", 0, err
 	}
-	port, err = _normalizePort(portString)
+	port, err = normalizePort(portString)
 	if err != nil {
 		return "", 0, err
 	}
 	return
 }
 
-// normalizeHostWithOptionalPort returns host (as string) and port (as int) derived from the
-// `hostPort` string. `hostPort` is a colon-separated (':') DNS name and port.
+// normalizeHostWithOptionalPort returns host (as string) and port (as int)
+// normalized with `normalizeHost` and `normalizePort`.
 //
-// If no port is specified, the scheme string is used to find the default port.
-// If forceFQDN is true, returned normalized domain name will be an FQDN.
+// `hostPort` is a bare host or a colon-separated (':') host name and port.
+// If no port is specified, the `scheme`` string is used to find the default
+// port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
 //
-// Returns a normalized representation of host (Punycode for DNS names,
-// standardized IP address representation), as well as the port number.
+// If `forceFQDN`` is true, returned normalized domain name will be an FQDN.
 func normalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (string, int, error) {
 	var err error
 	const noPort = -1
@@ -507,7 +513,7 @@ func normalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (str
 		if err != nil {
 			return "", noPort, err
 		}
-		port, err = _normalizePort(portString)
+		port, err = normalizePort(portString)
 		if err != nil {
 			return "", noPort, err
 		}
@@ -521,7 +527,7 @@ func normalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (str
 		}
 	}
 
-	host, err = _normalizeHost(host, forceFQDN)
+	host, err = normalizeHost(host, forceFQDN)
 	if err != nil {
 		return "", noPort, err
 	}
