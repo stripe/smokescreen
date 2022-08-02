@@ -13,14 +13,20 @@ import (
 // a persistent tag with the metric. This list must be updated with new metric names
 // if the metric should support persistent tagging.
 var metrics = []string{
+	// ACL decision statistics
 	"acl.allow",
 	"acl.decide_error",
 	"acl.deny",
 	"acl.report",
 	"acl.role_not_determined",
 	"acl.unknown_error",
-	"cn.atpt.connect.time",
-	"cn.atpt.total",
+
+	// Connection statistics (cn.atpt == connection attempt)
+	"cn.atpt.total",        // Total connection attempts, tagged by success
+	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
+	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
+
+	// DNS resolution statistics
 	"resolver.allow.default",
 	"resolver.allow.user_configured",
 	"resolver.attempts_total",

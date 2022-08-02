@@ -288,6 +288,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
 		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
+		reportConnError(sctx.cfg.MetricsClient, err)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
@@ -318,6 +319,32 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+// reportConnError emits a detailed metric about a connection error, with a tag corresponding to
+// the failure type. If err is not a net.Error, does nothing.
+func reportConnError(mc *MetricsClient, err error) {
+	e, ok := err.(net.Error)
+	if !ok {
+		return
+	}
+
+	const m = "cn.atpt.connect.err"
+	var etag string
+	switch {
+	case e.Timeout():
+		etag = "type:timeout"
+	case errors.Is(e, syscall.ECONNREFUSED):
+		etag = "type:refused"
+	case errors.Is(e, syscall.ECONNRESET):
+		etag = "type:reset"
+	case errors.Is(e, syscall.ECONNABORTED):
+		etag = "type:aborted"
+	default:
+		etag = "type:unknown"
+	}
+
+	mc.IncrWithTags("cn.atpt.connect.err", []string{etag}, 1)
 }
 
 // HTTPErrorHandler allows returning a custom error response when smokescreen
@@ -489,10 +516,10 @@ func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 // normalized with `normalizeHost` and `normalizePort`.
 //
 // `hostPort` is a bare host or a colon-separated (':') host name and port.
-// If no port is specified, the `scheme`` string is used to find the default
+// If no port is specified, the `scheme“ string is used to find the default
 // port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
 //
-// If `forceFQDN`` is true, returned normalized domain name will be an FQDN.
+// If `forceFQDN“ is true, returned normalized domain name will be an FQDN.
 func NormalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (string, int, error) {
 	var err error
 	const noPort = -1
