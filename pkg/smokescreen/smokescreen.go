@@ -321,32 +321,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-// reportConnError emits a detailed metric about a connection error, with a tag corresponding to
-// the failure type. If err is not a net.Error, does nothing.
-func reportConnError(mc *MetricsClient, err error) {
-	e, ok := err.(net.Error)
-	if !ok {
-		return
-	}
-
-	const m = "cn.atpt.connect.err"
-	var etag string
-	switch {
-	case e.Timeout():
-		etag = "type:timeout"
-	case errors.Is(e, syscall.ECONNREFUSED):
-		etag = "type:refused"
-	case errors.Is(e, syscall.ECONNRESET):
-		etag = "type:reset"
-	case errors.Is(e, syscall.ECONNABORTED):
-		etag = "type:aborted"
-	default:
-		etag = "type:unknown"
-	}
-
-	mc.IncrWithTags("cn.atpt.connect.err", []string{etag}, 1)
-}
-
 // HTTPErrorHandler allows returning a custom error response when smokescreen
 // fails to connect to the proxy target.
 func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {

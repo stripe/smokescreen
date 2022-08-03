@@ -1,8 +1,11 @@
 package smokescreen
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -126,4 +129,27 @@ func (mc *MetricsClient) TimingWithTags(metric string, d time.Duration, rate flo
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
 	return mc.StatsdClient.Timing(metric, d, tags, rate)
+}
+
+// reportConnError emits a detailed metric about a connection error, with a tag corresponding to
+// the failure type. If err is not a net.Error, does nothing.
+func reportConnError(mc *MetricsClient, err error) {
+	e, ok := err.(net.Error)
+	if !ok {
+		return
+	}
+
+	etag := "type:unknown"
+	switch {
+	case e.Timeout():
+		etag = "type:timeout"
+	case errors.Is(e, syscall.ECONNREFUSED):
+		etag = "type:refused"
+	case errors.Is(e, syscall.ECONNRESET):
+		etag = "type:reset"
+	case errors.Is(e, syscall.ECONNABORTED):
+		etag = "type:aborted"
+	}
+
+	mc.IncrWithTags("cn.atpt.connect.err", []string{etag}, 1)
 }
