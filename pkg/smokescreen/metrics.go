@@ -45,8 +45,18 @@ var metrics = []string{
 // MetricsClient is not thread safe and should not be used concurrently.
 type MetricsClient struct {
 	metricsTags  map[string][]string
-	StatsdClient statsd.ClientInterface
+	statsdClient statsd.ClientInterface
 	started      atomic.Value
+}
+
+type MetricsClientInterface interface {
+	AddMetricTags(string, []string) error
+	Incr(string, float64) error
+	IncrWithTags(string, []string, float64) error
+	Timing(string, time.Duration, float64) error
+	TimingWithTags(string, time.Duration, float64, []string) error
+	StatsdClient() statsd.ClientInterface
+	SetStarted()
 }
 
 // NewMetricsClient creates a new MetricsClient with the provided statsd address and
@@ -66,7 +76,7 @@ func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
 
 	return &MetricsClient{
 		metricsTags:  metricsTags,
-		StatsdClient: c,
+		statsdClient: c,
 	}, nil
 }
 
@@ -81,7 +91,7 @@ func NewNoOpMetricsClient() *MetricsClient {
 
 	return &MetricsClient{
 		metricsTags:  metricsTags,
-		StatsdClient: &statsd.NoOpClient{},
+		statsdClient: &statsd.NoOpClient{},
 	}
 }
 
@@ -111,29 +121,40 @@ func (mc *MetricsClient) GetMetricTags(metric string) []string {
 
 func (mc *MetricsClient) Incr(metric string, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
-	return mc.StatsdClient.Incr(metric, mTags, rate)
+	return mc.statsdClient.Incr(metric, mTags, rate)
 }
 
 func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
-	return mc.StatsdClient.Incr(metric, tags, rate)
+	return mc.statsdClient.Incr(metric, tags, rate)
 }
 
 func (mc *MetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
-	return mc.StatsdClient.Timing(metric, d, mTags, rate)
+	return mc.statsdClient.Timing(metric, d, mTags, rate)
 }
 
 func (mc *MetricsClient) TimingWithTags(metric string, d time.Duration, rate float64, tags []string) error {
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
-	return mc.StatsdClient.Timing(metric, d, tags, rate)
+	return mc.statsdClient.Timing(metric, d, tags, rate)
 }
+
+func (mc *MetricsClient) StatsdClient() statsd.ClientInterface {
+	return mc.statsdClient
+}
+
+func (mc *MetricsClient) SetStarted() {
+	mc.started.Store(true)
+}
+
+// MetricsClient implements MetricsClientInterface
+var _ MetricsClientInterface = &MetricsClient{}
 
 // reportConnError emits a detailed metric about a connection error, with a tag corresponding to
 // the failure type. If err is not a net.Error, does nothing.
-func reportConnError(mc *MetricsClient, err error) {
+func reportConnError(mc MetricsClientInterface, err error) {
 	e, ok := err.(net.Error)
 	if !ok {
 		return

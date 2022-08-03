@@ -777,7 +777,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	// Setup connection tracking if not already set in config
 	if config.ConnTracker == nil {
-		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown, nil)
+		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient(), config.Log, config.ShuttingDown, nil)
 	}
 
 	server := http.Server{
@@ -792,7 +792,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		server.IdleTimeout = config.IdleTimeout
 	}
 
-	config.MetricsClient.started.Store(true)
+	config.MetricsClient.SetStarted()
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 }

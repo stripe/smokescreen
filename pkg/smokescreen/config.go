@@ -37,7 +37,7 @@ type Config struct {
 	Resolver                     *net.Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
-	MetricsClient                *MetricsClient
+	MetricsClient                MetricsClientInterface
 	EgressACL                    acl.Decider
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config

@@ -787,6 +787,13 @@ func TestProxyTimeouts(t *testing.T) {
 
 		cfg.ConnTracker.Wg.Wait()
 
+		// Check that the count of connection errors was incremented
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, 1)
+
 		entry := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(entry)
 	})
@@ -1054,8 +1061,8 @@ func testConfig(role string) (*Config, error) {
 		return role, nil
 	}
 
-	mc := NewNoOpMetricsClient()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{}, nil)
+	mc := NewMockMetricsClient()
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient(), conf.Log, atomic.Value{}, nil)
 	conf.MetricsClient = mc
 	return conf, nil
 }
