@@ -287,9 +287,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
+		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
+	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
 
 	if conn != nil {
 		fields := logrus.Fields{}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
+	cache "github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,6 +15,8 @@ type Tracker struct {
 	ShuttingDown atomic.Value
 	Wg           *sync.WaitGroup
 	statsc       statsd.ClientInterface
+
+	CnAttempts *cache.Cache
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
 	// many seconds.
@@ -27,7 +30,24 @@ func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logru
 		Wg:           &sync.WaitGroup{},
 		IdleTimeout:  idle,
 		statsc:       statsc,
+		CnAttempts:   cache.New(time.Second*30, time.Second*30),
 	}
+}
+
+// RecordAttempt stores the result of the most recent connection attempt for a destination.
+func (tr *Tracker) RecordAttempt(dest string, success bool) {
+	tr.CnAttempts.Set(dest, success, cache.DefaultExpiration)
+}
+
+func (tr *Tracker) GetConnectionSuccessRate() float64 {
+	var total, succeeded int
+	for _, success := range tr.CnAttempts.Items() {
+		total++
+		if success.Object.(bool) {
+			succeeded++
+		}
+	}
+	return (float64(total-succeeded) / float64(total)) * 100
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked

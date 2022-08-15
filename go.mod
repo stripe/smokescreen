@@ -8,6 +8,7 @@ require (
 	github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
 	github.com/carlmjohnson/versioninfo v0.22.4
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.8.0
