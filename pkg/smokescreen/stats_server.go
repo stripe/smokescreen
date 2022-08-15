@@ -86,9 +86,8 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (s *StatsServer) connSuccess(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "text/plain")
-
-	io.WriteString(rw, fmt.Sprintf("%.2f", s.config.ConnTracker.GetConnectionSuccessRate()))
+	rw.Header().Set("Content-Type", "application/json")
+	io.WriteString(rw, s.config.ConnTracker.ReportConnectionSuccessRate())
 }
 
 func StartStatsServer(config *Config) *StatsServer {

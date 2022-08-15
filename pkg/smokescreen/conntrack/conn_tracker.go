@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,7 +40,7 @@ func (tr *Tracker) RecordAttempt(dest string, success bool) {
 	tr.CnAttempts.Set(dest, success, cache.DefaultExpiration)
 }
 
-func (tr *Tracker) GetConnectionSuccessRate() float64 {
+func (tr *Tracker) ReportConnectionSuccessRate() string {
 	var total, succeeded int
 	for _, success := range tr.CnAttempts.Items() {
 		total++
@@ -47,7 +48,23 @@ func (tr *Tracker) GetConnectionSuccessRate() float64 {
 			succeeded++
 		}
 	}
-	return (float64(total-succeeded) / float64(total)) * 100
+	var successRate float64
+	// Avoid divide by zero errors
+	if total == 0 {
+		successRate = float64(100)
+	} else {
+		successRate = (float64(succeeded) / float64(total)) * 100
+	}
+	jsondata := map[string]interface{}{
+		"destinations_attempted":  total,
+		"destinations_succeeded":  succeeded,
+		"connection_success_rate": successRate,
+	}
+
+	data, _ := json.Marshal(jsondata)
+
+	return string(data)
+
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked
