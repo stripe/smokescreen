@@ -774,8 +774,10 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		listener = tls.NewListener(listener, config.TlsConfig)
 	}
 
-	// Setup connection tracking
-	config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown)
+	// Setup connection tracking if not already set in config
+	if config.ConnTracker == nil {
+		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown)
+	}
 
 	server := http.Server{
 		Handler: handler,
