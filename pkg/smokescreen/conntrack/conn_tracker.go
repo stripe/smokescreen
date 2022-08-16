@@ -38,25 +38,28 @@ func StartNewCnSuccessRateTracker(calculateEvery time.Duration) *CnSuccessRateTr
 	newSuccessTracker := &CnSuccessRateTracker{
 		CnAttempts: cache.New(time.Second*30, time.Second*30),
 	}
+	newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: 100, TotalCns: 0})
 
 	go func() {
-		var total, succeeded int
-		for _, success := range newSuccessTracker.CnAttempts.Items() {
-			total++
-			if success.Object.(bool) {
-				succeeded++
+		for {
+			var total, succeeded int
+			for _, success := range newSuccessTracker.CnAttempts.Items() {
+				total++
+				if success.Object.(bool) {
+					succeeded++
+				}
 			}
-		}
-		var successRate float64
-		// Avoid divide by zero errors
-		if total == 0 {
-			successRate = float64(100)
-		} else {
-			successRate = (float64(succeeded) / float64(total)) * 100
-		}
-		newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: successRate, TotalCns: total})
+			var successRate float64
+			// Avoid divide by zero errors
+			if total == 0 {
+				successRate = float64(100)
+			} else {
+				successRate = (float64(succeeded) / float64(total)) * 100
+			}
+			newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: successRate, TotalCns: total})
 
-		time.Sleep(calculateEvery)
+			time.Sleep(calculateEvery)
+		}
 	}()
 
 	return newSuccessTracker
