@@ -43,6 +43,8 @@ func StartNewCnSuccessRateTracker(calculateEvery time.Duration) *CnSuccessRateTr
 	go func() {
 		for {
 			var total, succeeded int
+			// temp: make total nonzero to test calculation
+			total++
 			for _, success := range newSuccessTracker.CnAttempts.Items() {
 				total++
 				if success.Object.(bool) {
