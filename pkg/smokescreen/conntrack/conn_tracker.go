@@ -1,7 +1,6 @@
 package conntrack
 
 import (
-	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,54 +16,70 @@ type Tracker struct {
 	Wg           *sync.WaitGroup
 	statsc       statsd.ClientInterface
 
-	CnAttempts *cache.Cache
+	SuccessRateTracker *CnSuccessRateTracker
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
 	// many seconds.
 	IdleTimeout time.Duration
 }
 
+type CnSuccessRateTracker struct {
+	CnAttempts         *cache.Cache
+	CnSuccessRateStats atomic.Value
+}
+
+type CnSuccessRateStats struct {
+	CalculatedAt  time.Time
+	CnSuccessRate float64
+	TotalCns      int
+}
+
+func StartNewCnSuccessRateTracker(calculateEvery time.Duration) *CnSuccessRateTracker {
+	newSuccessTracker := &CnSuccessRateTracker{
+		CnAttempts: cache.New(time.Second*30, time.Second*30),
+	}
+
+	go func() {
+		var total, succeeded int
+		for _, success := range newSuccessTracker.CnAttempts.Items() {
+			total++
+			if success.Object.(bool) {
+				succeeded++
+			}
+		}
+		var successRate float64
+		// Avoid divide by zero errors
+		if total == 0 {
+			successRate = float64(100)
+		} else {
+			successRate = (float64(succeeded) / float64(total)) * 100
+		}
+		newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: successRate, TotalCns: total})
+
+		time.Sleep(calculateEvery)
+	}()
+
+	return newSuccessTracker
+}
+
 func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value) *Tracker {
 	return &Tracker{
-		Map:          &sync.Map{},
-		ShuttingDown: sd,
-		Wg:           &sync.WaitGroup{},
-		IdleTimeout:  idle,
-		statsc:       statsc,
-		CnAttempts:   cache.New(time.Second*30, time.Second*30),
+		Map:                &sync.Map{},
+		ShuttingDown:       sd,
+		Wg:                 &sync.WaitGroup{},
+		IdleTimeout:        idle,
+		statsc:             statsc,
+		SuccessRateTracker: StartNewCnSuccessRateTracker(time.Second * 3),
 	}
 }
 
 // RecordAttempt stores the result of the most recent connection attempt for a destination.
 func (tr *Tracker) RecordAttempt(dest string, success bool) {
-	tr.CnAttempts.Set(dest, success, cache.DefaultExpiration)
+	tr.SuccessRateTracker.CnAttempts.Set(dest, success, cache.DefaultExpiration)
 }
 
-func (tr *Tracker) ReportConnectionSuccessRate() string {
-	var total, succeeded int
-	for _, success := range tr.CnAttempts.Items() {
-		total++
-		if success.Object.(bool) {
-			succeeded++
-		}
-	}
-	var successRate float64
-	// Avoid divide by zero errors
-	if total == 0 {
-		successRate = float64(100)
-	} else {
-		successRate = (float64(succeeded) / float64(total)) * 100
-	}
-	jsondata := map[string]interface{}{
-		"destinations_attempted":  total,
-		"destinations_succeeded":  succeeded,
-		"connection_success_rate": successRate,
-	}
-
-	data, _ := json.Marshal(jsondata)
-
-	return string(data)
-
+func (tr *Tracker) ReportConnectionSuccessRate() CnSuccessRateStats {
+	return tr.SuccessRateTracker.CnSuccessRateStats.Load().(CnSuccessRateStats)
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked

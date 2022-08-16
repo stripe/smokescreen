@@ -2,7 +2,6 @@ package smokescreen
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -24,7 +23,6 @@ func newServer(config *Config) (s *StatsServer) {
 	}
 
 	s.mux.HandleFunc("/", s.stats)
-	s.mux.HandleFunc("/conns", s.connSuccess)
 	return
 }
 
@@ -83,11 +81,6 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 		byte(']'),
 		byte('\n'),
 	})
-}
-
-func (s *StatsServer) connSuccess(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "application/json")
-	io.WriteString(rw, s.config.ConnTracker.ReportConnectionSuccessRate())
 }
 
 func StartStatsServer(config *Config) *StatsServer {
