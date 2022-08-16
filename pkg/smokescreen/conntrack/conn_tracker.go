@@ -16,36 +16,46 @@ type Tracker struct {
 	Wg           *sync.WaitGroup
 	statsc       statsd.ClientInterface
 
-	SuccessRateTracker *CnSuccessRateTracker
+	SuccessRateTracker *ConnSuccessRateTracker
 
 	// A connection is idle if it has been inactive (no bytes in/out) for this
 	// many seconds.
 	IdleTimeout time.Duration
 }
 
-type CnSuccessRateTracker struct {
-	CnAttempts         *cache.Cache
-	CnSuccessRateStats atomic.Value
+// ConnSuccessRateTracker tracks statistics about the overall success rate
+// of connection attempts over some time interval (which is set in StartNewConnSuccessRateTracker()).
+//
+// It tracks only the *most recently seen* connection to an individual destination host within the configured
+// time interval, to prevent a single destination host from having an outsized
+// impact on statistics.
+type ConnSuccessRateTracker struct {
+	ConnAttempts *cache.Cache
+	// The success rate of connection attempts, calculated over
+	// ConnAttempts over the interval configured in StartNewConnSuccessRateTracker()
+	ConnSuccessRateStats atomic.Value
 }
 
-type CnSuccessRateStats struct {
-	CalculatedAt  time.Time
-	CnSuccessRate float64
-	TotalCns      int
+// ConnSuccessRateStats represents a timestamped output of computations performed over
+// connection attempts.
+type ConnSuccessRateStats struct {
+	CalculatedAt    time.Time
+	ConnSuccessRate float64
+	TotalConns      int
 }
 
-func StartNewCnSuccessRateTracker(calculateEvery time.Duration) *CnSuccessRateTracker {
-	newSuccessTracker := &CnSuccessRateTracker{
-		CnAttempts: cache.New(time.Second*30, time.Second*30),
+// StartNewConnSuccessRateTracker creates a new ConnSuccessRateTracker with a specific calculation interval at which
+// ConnSuccessRateStats will be recomputed, and a time window to calculate those statistics over.
+func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration) *ConnSuccessRateTracker {
+	newSuccessTracker := &ConnSuccessRateTracker{
+		ConnAttempts: cache.New(calculationWindow, time.Second*10),
 	}
-	newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: 100, TotalCns: 0})
+	newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: 100, TotalConns: 0})
 
 	go func() {
 		for {
 			var total, succeeded int
-			// temp: make total nonzero to test calculation
-			total++
-			for _, success := range newSuccessTracker.CnAttempts.Items() {
+			for _, success := range newSuccessTracker.ConnAttempts.Items() {
 				total++
 				if success.Object.(bool) {
 					succeeded++
@@ -58,33 +68,39 @@ func StartNewCnSuccessRateTracker(calculateEvery time.Duration) *CnSuccessRateTr
 			} else {
 				successRate = (float64(succeeded) / float64(total)) * 100
 			}
-			newSuccessTracker.CnSuccessRateStats.Store(CnSuccessRateStats{CalculatedAt: time.Now(), CnSuccessRate: successRate, TotalCns: total})
+			newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: successRate, TotalConns: total})
 
-			time.Sleep(calculateEvery)
+			time.Sleep(calculationInterval)
 		}
 	}()
 
 	return newSuccessTracker
 }
 
-func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value) *Tracker {
+func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
 	return &Tracker{
 		Map:                &sync.Map{},
 		ShuttingDown:       sd,
 		Wg:                 &sync.WaitGroup{},
 		IdleTimeout:        idle,
 		statsc:             statsc,
-		SuccessRateTracker: StartNewCnSuccessRateTracker(time.Second * 3),
+		SuccessRateTracker: successRateTracker,
 	}
 }
 
 // RecordAttempt stores the result of the most recent connection attempt for a destination.
 func (tr *Tracker) RecordAttempt(dest string, success bool) {
-	tr.SuccessRateTracker.CnAttempts.Set(dest, success, cache.DefaultExpiration)
+	if tr.SuccessRateTracker == nil {
+		return
+	}
+	tr.SuccessRateTracker.ConnAttempts.Set(dest, success, cache.DefaultExpiration)
 }
 
-func (tr *Tracker) ReportConnectionSuccessRate() CnSuccessRateStats {
-	return tr.SuccessRateTracker.CnSuccessRateStats.Load().(CnSuccessRateStats)
+func (tr *Tracker) ReportConnectionSuccessRate() ConnSuccessRateStats {
+	if tr.SuccessRateTracker != nil {
+		return tr.SuccessRateTracker.ConnSuccessRateStats.Load().(ConnSuccessRateStats)
+	}
+	return ConnSuccessRateStats{}
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked
