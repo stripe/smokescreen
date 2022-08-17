@@ -49,5 +49,5 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	sd := atomic.Value{}
 	sd.Store(false)
 
-	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd)
+	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd, nil)
 }
