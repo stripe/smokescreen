@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -89,18 +90,19 @@ func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logru
 }
 
 // RecordAttempt stores the result of the most recent connection attempt for a destination.
-func (tr *Tracker) RecordAttempt(dest string, success bool) {
+func (tr *Tracker) RecordAttempt(dest string, success bool) error {
 	if tr.SuccessRateTracker == nil {
-		return
+		return errors.New("attempting to record connection attempt, but no ConnSuccessRateTracker exists")
 	}
 	tr.SuccessRateTracker.ConnAttempts.Set(dest, success, cache.DefaultExpiration)
+	return nil
 }
 
-func (tr *Tracker) ReportConnectionSuccessRate() ConnSuccessRateStats {
+func (tr *Tracker) ReportConnectionSuccessRate() (ConnSuccessRateStats, error) {
 	if tr.SuccessRateTracker != nil {
-		return tr.SuccessRateTracker.ConnSuccessRateStats.Load().(ConnSuccessRateStats)
+		return tr.SuccessRateTracker.ConnSuccessRateStats.Load().(ConnSuccessRateStats), nil
 	}
-	return ConnSuccessRateStats{}
+	return ConnSuccessRateStats{}, errors.New("trying to report connection success rate, but no ConnSuccessRateTracker exists")
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked

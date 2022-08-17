@@ -287,11 +287,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
-		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
+		recordConnectionAttempt(sctx, false)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
-	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
+	recordConnectionAttempt(sctx, true)
 
 	if conn != nil {
 		fields := logrus.Fields{}
@@ -318,6 +318,16 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func recordConnectionAttempt(sctx *smokescreenContext, success bool) {
+	if sctx.cfg.ConnTracker.SuccessRateTracker != nil {
+		err := sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, success)
+		if err != nil {
+			sctx.cfg.Log.Error(err)
+		}
+	}
+
 }
 
 // HTTPErrorHandler allows returning a custom error response when smokescreen

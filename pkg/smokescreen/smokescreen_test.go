@@ -248,7 +248,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -289,7 +289,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	var logHook logrustest.Hook
 	conf := NewConfig()
 	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -1055,7 +1055,7 @@ func testConfig(role string) (*Config, error) {
 	}
 
 	mc := NewNoOpMetricsClient()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{})
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{}, nil)
 	conf.MetricsClient = mc
 	return conf, nil
 }
