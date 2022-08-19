@@ -73,6 +73,8 @@ func TestConnSuccessRateTracker(t *testing.T) {
 		{"expire-records", []record{{"foo.com", true}, {"bar.com", false}}, 3 * time.Second, 100.0, 0},
 		// Only the most recent record for a host is used in the computation
 		{"dedup-hosts", []record{{"foo.com", false}, {"bar.com", false}, {"foo.com", true}}, 1 * time.Second, 50.0, 2},
+		// Our normalization scheme should resolve all of these to "foo.com"
+		{"hostnames-normalized", []record{{"one.foo.com:443", false}, {"two.foo.com:80", false}, {"three.bar.foo.com", true}}, 1 * time.Second, 100.0, 1},
 	}
 
 	for _, tc := range testCases {
@@ -117,6 +119,7 @@ func TestNormalizeDomainName(t *testing.T) {
 		{"bbc.co.uk:12345", "bbc.co.uk"},
 		{"ab.cd.ef.co:000", "ef.co"},
 		{"172.168.0.1:555", "172.168.0.1"},
+		{"[2001:db8::1]:80", "2001:db8::1"},
 	}
 
 	for _, tc := range testCases {

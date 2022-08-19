@@ -50,9 +50,9 @@ type ConnSuccessRateStats struct {
 
 // StartNewConnSuccessRateTracker creates a new ConnSuccessRateTracker with a specific calculation interval at which
 // ConnSuccessRateStats will be recomputed, and a time window to calculate those statistics over.
-// - calculationInterval is how often statistics will be recomputed, in seconds.
-// - calculationWindow is the period that statistics will be calculated over, in seconds.
-// - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory, in seconds.
+// - calculationInterval is how often statistics will be recomputed.
+// - calculationWindow is the period that statistics will be calculated over.
+// - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory.
 func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration) *ConnSuccessRateTracker {
 	newSuccessTracker := &ConnSuccessRateTracker{
 		ConnAttempts: cache.New(calculationWindow, time.Second*cleanupInterval),
@@ -115,7 +115,14 @@ func (tr *Tracker) ReportConnectionSuccessRate() *ConnSuccessRateStats {
 // If it is a hostname, we return the eTLD + 1 if we are able to parse it, or the unchanged hostname otherwise.
 func normalizeDomainName(requested_host string) string {
 	// Strip port number
-	d := strings.Split(requested_host, ":")[0]
+	d := requested_host
+	if strings.Contains(requested_host, ":") {
+		host, _, err := net.SplitHostPort(requested_host)
+		if err != nil {
+			return requested_host
+		}
+		d = host
+	}
 	if net.ParseIP(d) != nil {
 		return d
 	}
