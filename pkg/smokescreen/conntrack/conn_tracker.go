@@ -32,8 +32,8 @@ type Tracker struct {
 // impact on statistics.
 type ConnSuccessRateTracker struct {
 	ConnAttempts *cache.Cache
-	// The success rate of connection attempts, calculated over
-	// ConnAttempts over the interval configured in StartNewConnSuccessRateTracker()
+	// A ConnSuccessRateStats representing the success rate of connection attempts
+	// over the interval configured in StartNewConnSuccessRateTracker().
 	ConnSuccessRateStats atomic.Value
 }
 
