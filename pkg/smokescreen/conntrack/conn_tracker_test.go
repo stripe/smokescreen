@@ -52,6 +52,8 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd, nil)
 }
 
+// TestConnSuccessRateTracker tests that a ConnTracker with a ConnSuccessRateTracker correctly
+// records connection attempts, calculates a success rate, and expires stored attempts.
 func TestConnSuccessRateTracker(t *testing.T) {
 	type record struct {
 		host    string
@@ -79,7 +81,7 @@ func TestConnSuccessRateTracker(t *testing.T) {
 
 			sd := atomic.Value{}
 			sd.Store(false)
-			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second))
+			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second))
 
 			for _, record := range tc.additions {
 				tracker.RecordAttempt(record.host, record.success)
@@ -87,8 +89,8 @@ func TestConnSuccessRateTracker(t *testing.T) {
 
 			time.Sleep(tc.waitTime)
 
-			stats, _ := tracker.ReportConnectionSuccessRate()
-			assert.Equal(tc.expectedRate, stats.ConnSuccessRate)
+			stats := tracker.ReportConnectionSuccessRate()
+			assert.InDelta(tc.expectedRate, stats.ConnSuccessRate, 0.01)
 			assert.Equal(tc.totalConns, stats.TotalConns)
 		})
 	}
@@ -98,8 +100,28 @@ func TestNoConnSuccessRateTracker(t *testing.T) {
 	assert := assert.New(t)
 	tracker := NewTestTracker(time.Second)
 
-	assert.Error(tracker.RecordAttempt("foo.com", true))
-	_, err := tracker.ReportConnectionSuccessRate()
-	assert.Error(err)
+	assert.NotPanics(func() { tracker.RecordAttempt("foo.com", true) })
+	stats := tracker.ReportConnectionSuccessRate()
+	assert.Nil(stats)
 
+}
+
+func TestNormalizeDomainName(t *testing.T) {
+
+	var testCases = []struct {
+		domain     string
+		normalized string
+	}{
+		{"34wfasdaskjgsf.hosting.company.com:443", "company.com"},
+		{"foo.com", "foo.com"},
+		{"bbc.co.uk:12345", "bbc.co.uk"},
+		{"ab.cd.ef.co:000", "ef.co"},
+		{"172.168.0.1:555", "172.168.0.1"},
+	}
+
+	for _, tc := range testCases {
+		t.Run("normalize_test_"+tc.domain, func(t *testing.T) {
+			assert.Equal(t, tc.normalized, normalizeDomainName(tc.domain))
+		})
+	}
 }

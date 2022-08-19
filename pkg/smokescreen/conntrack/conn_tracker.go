@@ -1,7 +1,8 @@
 package conntrack
 
 import (
-	"errors"
+	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/publicsuffix"
 )
 
 type Tracker struct {
@@ -31,14 +33,15 @@ type Tracker struct {
 // time interval, to prevent a single destination host from having an outsized
 // impact on statistics.
 type ConnSuccessRateTracker struct {
-	ConnAttempts *cache.Cache
-	// A ConnSuccessRateStats representing the success rate of connection attempts
-	// over the interval configured in StartNewConnSuccessRateTracker().
+	ConnAttempts         *cache.Cache
 	ConnSuccessRateStats atomic.Value
 }
 
 // ConnSuccessRateStats represents a timestamped output of computations performed over
 // connection attempts.
+//
+// ConnSuccessRate represents the proportion of unique domains whose most recent connection attempt
+// was successful, compared to the total number of domains with connection attempts.
 type ConnSuccessRateStats struct {
 	CalculatedAt    time.Time
 	ConnSuccessRate float64
@@ -47,9 +50,12 @@ type ConnSuccessRateStats struct {
 
 // StartNewConnSuccessRateTracker creates a new ConnSuccessRateTracker with a specific calculation interval at which
 // ConnSuccessRateStats will be recomputed, and a time window to calculate those statistics over.
-func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration) *ConnSuccessRateTracker {
+// - calculationInterval is how often statistics will be recomputed, in seconds.
+// - calculationWindow is the period that statistics will be calculated over, in seconds.
+// - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory, in seconds.
+func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration) *ConnSuccessRateTracker {
 	newSuccessTracker := &ConnSuccessRateTracker{
-		ConnAttempts: cache.New(calculationWindow, time.Second*10),
+		ConnAttempts: cache.New(calculationWindow, time.Second*cleanupInterval),
 	}
 	newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: 100, TotalConns: 0})
 
@@ -90,19 +96,34 @@ func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logru
 }
 
 // RecordAttempt stores the result of the most recent connection attempt for a destination.
-func (tr *Tracker) RecordAttempt(dest string, success bool) error {
+func (tr *Tracker) RecordAttempt(dest string, success bool) {
 	if tr.SuccessRateTracker == nil {
-		return errors.New("attempting to record connection attempt, but no ConnSuccessRateTracker exists")
+		return
 	}
-	tr.SuccessRateTracker.ConnAttempts.Set(dest, success, cache.DefaultExpiration)
+	tr.SuccessRateTracker.ConnAttempts.Set(normalizeDomainName(dest), success, cache.DefaultExpiration)
+}
+
+func (tr *Tracker) ReportConnectionSuccessRate() *ConnSuccessRateStats {
+	if tr.SuccessRateTracker != nil {
+		stats := tr.SuccessRateTracker.ConnSuccessRateStats.Load().(ConnSuccessRateStats)
+		return &stats
+	}
 	return nil
 }
 
-func (tr *Tracker) ReportConnectionSuccessRate() (ConnSuccessRateStats, error) {
-	if tr.SuccessRateTracker != nil {
-		return tr.SuccessRateTracker.ConnSuccessRateStats.Load().(ConnSuccessRateStats), nil
+// Removes the port number if it exists. If the string passed in is an IP address, the IP address is returned.
+// If it is a hostname, we return the eTLD + 1 if we are able to parse it, or the unchanged hostname otherwise.
+func normalizeDomainName(requested_host string) string {
+	// Strip port number
+	d := strings.Split(requested_host, ":")[0]
+	if net.ParseIP(d) != nil {
+		return d
 	}
-	return ConnSuccessRateStats{}, errors.New("trying to report connection success rate, but no ConnSuccessRateTracker exists")
+	etldPlusOne, err := publicsuffix.EffectiveTLDPlusOne(d)
+	if err != nil {
+		return d
+	}
+	return etldPlusOne
 }
 
 // MaybeIdleIn returns the longest amount of time it will take for all tracked
