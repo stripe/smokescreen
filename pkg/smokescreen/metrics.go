@@ -26,8 +26,8 @@ var metrics = []string{
 
 	// Connection statistics (cn.atpt == connection attempt)
 	"cn.atpt.total",        // Total connection attempts, tagged by success
-	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
 	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
+	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
 
 	// DNS resolution statistics
 	"resolver.allow.default",
