@@ -493,7 +493,7 @@ func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 // If no port is specified, the `scheme` string is used to find the default
 // port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
 //
-// If `forceFQDN“ is true, returned normalized domain name will be an FQDN.
+// If forceFQDN is true, returned normalized domain name will be an FQDN.
 func NormalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (string, int, error) {
 	var err error
 	const noPort = -1
