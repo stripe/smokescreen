@@ -62,6 +62,7 @@ func TestMetricsClient(t *testing.T) {
 	})
 }
 
+// MockMetricsClient is a MetricsClient that counts metric updates.
 type MockMetricsClient struct {
 	MetricsClient
 
@@ -69,6 +70,8 @@ type MockMetricsClient struct {
 	mu     sync.Mutex
 }
 
+// NewMockMetricsClient returns a new MockMetricsClient that wraps a NoOpMetricsClient
+// with counters to track metric updates.
 func NewMockMetricsClient() *MockMetricsClient {
 	return &MockMetricsClient{
 		*NewNoOpMetricsClient(),
