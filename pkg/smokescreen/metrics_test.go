@@ -62,6 +62,53 @@ func TestMetricsClient(t *testing.T) {
 	})
 }
 
+func TestMockMetricsClient(t *testing.T) {
+	r := require.New(t)
+
+	t.Run("Incr", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		m.Incr("foobar", 1)
+		c, err := m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+	})
+
+	t.Run("IncrWithTags", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		tags := []string{"foo", "bar"}
+		m.IncrWithTags("foobar", tags, 1)
+		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+	})
+
+	t.Run("IncrWithTags", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		tags := []string{"foo", "bar"}
+		m.IncrWithTags("foobar", tags, 1)
+		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+	})
+
+	t.Run("Timing", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		m.Timing("foobar", time.Second, 1)
+		c, err := m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+	})
+
+	t.Run("TimingWithTags", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		tags := []string{"foo", "bar"}
+		m.TimingWithTags("foobar", time.Second, 1, tags)
+		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+	})
+}
+
 // MockMetricsClient is a MetricsClient that counts metric updates.
 type MockMetricsClient struct {
 	MetricsClient
