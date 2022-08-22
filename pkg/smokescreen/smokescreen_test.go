@@ -861,6 +861,56 @@ func TestProxyTimeouts(t *testing.T) {
 	})
 }
 
+// TestProxyConnectFailure tests that the proxy correctly handles non-timeout connection failures.
+// In general, the proxy should respond with "Bad Gateway" and record failure statistics
+// reflecting the cause of the failure.
+func TestProxyConnectFailure(t *testing.T) {
+	r := require.New(t)
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(time.Second)
+		w.Write([]byte("OK"))
+	})
+
+	t.Run("CONNECT proxy dial refused", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		// Don't time out immediately
+		cfg.ConnectTimeout = time.Minute
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		// Shut down the handler so that the proxy won't be able to connect at all
+		remote.Close()
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "Bad gateway")
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:refused")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+	})
+}
+
 // TestProxyHalfClosed tests that the proxy and proxy client correctly
 // closes all connections if the proxy target attempts to half-close
 // the TCP connection.
@@ -959,6 +1009,15 @@ func TestCustomDialTimeout(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "Gateway timeout")
 		r.Equal(custom, true)
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
 	})
 
 	t.Run("HTTP proxy custom dial timeouts", func(t *testing.T) {
@@ -992,6 +1051,16 @@ func TestCustomDialTimeout(t *testing.T) {
 		r.NotEqual("", resp.Header.Get(errorHeader))
 
 		r.Equal(custom, true)
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+
 	})
 }
 
