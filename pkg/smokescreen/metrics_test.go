@@ -3,6 +3,7 @@ package smokescreen
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -76,6 +77,16 @@ func NewMockMetricsClient() *MockMetricsClient {
 	}
 }
 
+// countOne increments a metric count by 1, starting the count at 1 if the metric has
+// not yet been counted. Call with m.mu.Lock held.
+func (m *MockMetricsClient) countOne(metric string) {
+	if i, ok := m.counts[metric]; ok {
+		m.counts[metric] = i + 1
+	} else {
+		m.counts[metric] = 1
+	}
+}
+
 func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -87,7 +98,11 @@ func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, err
 	}
 	i, ok := m.counts[mName]
 	if !ok {
-		return 0, fmt.Errorf("unknown metric")
+		keys := make([]string, len(m.counts))
+		for k, _ := range m.counts {
+			keys = append(keys, k)
+		}
+		return 0, fmt.Errorf("unknown metric %s (know %s)", mName, strings.Join(keys, ","))
 	}
 
 	return i, nil
@@ -96,9 +111,7 @@ func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, err
 func (m *MockMetricsClient) Incr(metric string, rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if i, ok := m.counts[metric]; ok {
-		m.counts[metric] = i + 1
-	}
+	m.countOne(metric)
 
 	return m.MetricsClient.Incr(metric, rate)
 }
@@ -109,9 +122,7 @@ func (m *MockMetricsClient) IncrWithTags(metric string, tags []string, rate floa
 
 	sort.Strings(tags)
 	mName := fmt.Sprintf("%s %v", metric, tags)
-	if i, ok := m.counts[mName]; ok {
-		m.counts[metric] = i + 1
-	}
+	m.countOne(mName)
 
 	return m.MetricsClient.IncrWithTags(metric, tags, rate)
 }
@@ -119,9 +130,7 @@ func (m *MockMetricsClient) IncrWithTags(metric string, tags []string, rate floa
 func (m *MockMetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if i, ok := m.counts[metric]; ok {
-		m.counts[metric] = i + 1
-	}
+	m.countOne(metric)
 
 	return m.MetricsClient.Timing(metric, d, rate)
 }
@@ -132,9 +141,7 @@ func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate 
 
 	sort.Strings(tags)
 	mName := fmt.Sprintf("%s %v", metric, tags)
-	if i, ok := m.counts[mName]; ok {
-		m.counts[metric] = i + 1
-	}
+	m.countOne(mName)
 
 	return m.MetricsClient.TimingWithTags(metric, d, rate, tags)
 }
