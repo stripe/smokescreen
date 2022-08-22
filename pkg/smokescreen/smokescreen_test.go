@@ -787,12 +787,13 @@ func TestProxyTimeouts(t *testing.T) {
 
 		cfg.ConnTracker.Wg.Wait()
 
-		// Check that the count of connection errors was incremented
+		// The metrics client records success:true because of the way Goproxy surfaces CONNECT
+		// timeouts to Smokescreen; same reasons we test for EOF above.
 		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		i, err := tmc.GetCount("cn.atpt.total", "success:true")
 		r.NoError(err)
-		r.Equal(i, 1)
+		r.Equal(i, uint64(1))
 
 		entry := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(entry)
@@ -823,6 +824,15 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Nil(resp)
 		r.Error(err)
 		r.Contains(err.Error(), "Gateway timeout")
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
 	})
 
 	t.Run("HTTP proxy dial timeouts", func(t *testing.T) {
