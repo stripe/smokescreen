@@ -73,13 +73,19 @@ func TestMockMetricsClient(t *testing.T) {
 		r.Equal(c, uint64(1))
 	})
 
-	t.Run("IncrWithTags", func(t *testing.T) {
+	t.Run("Multiple Incr", func(t *testing.T) {
 		m := NewMockMetricsClient()
-		tags := []string{"foo", "bar"}
-		m.IncrWithTags("foobar", tags, 1)
-		c, err := m.GetCount("foobar", tags...)
+		m.Incr("foobar", 1)
+		m.Incr("foobar", 1)
+		m.Incr("foobar", 1)
+		c, err := m.GetCount("foobar")
 		r.NoError(err)
-		r.Equal(c, uint64(1))
+		r.Equal(c, uint64(3))
+
+		m.Incr("foobar", 123)
+		c, err = m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(4))
 	})
 
 	t.Run("IncrWithTags", func(t *testing.T) {
@@ -87,6 +93,9 @@ func TestMockMetricsClient(t *testing.T) {
 		tags := []string{"foo", "bar"}
 		m.IncrWithTags("foobar", tags, 1)
 		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+		c, err = m.GetCount("foobar")
 		r.NoError(err)
 		r.Equal(c, uint64(1))
 	})
@@ -104,6 +113,9 @@ func TestMockMetricsClient(t *testing.T) {
 		tags := []string{"foo", "bar"}
 		m.TimingWithTags("foobar", time.Second, 1, tags)
 		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+		c, err = m.GetCount("foobar")
 		r.NoError(err)
 		r.Equal(c, uint64(1))
 	})
@@ -137,6 +149,10 @@ func (m *MockMetricsClient) countOne(metric string) {
 	}
 }
 
+// GetCount returns the number of times metric has been updated since the MockMetricsClient was
+// created. To support GetCount being called with or without tags for a given metric, tagged metrics
+// are counted twice: once for the untagged metric ("foo") and once for the metric with its tags
+// sorted("foo [a b c]").
 func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -170,6 +186,10 @@ func (m *MockMetricsClient) IncrWithTags(metric string, tags []string, rate floa
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Count the metric name without tags
+	m.countOne(metric)
+
+	// Count the metric name with its tags sorted
 	sort.Strings(tags)
 	mName := fmt.Sprintf("%s %v", metric, tags)
 	m.countOne(mName)
@@ -189,6 +209,10 @@ func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Count the metric name without tags
+	m.countOne(metric)
+
+	// Count the metric name with its tags sorted
 	sort.Strings(tags)
 	mName := fmt.Sprintf("%s %v", metric, tags)
 	m.countOne(mName)
