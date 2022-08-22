@@ -287,9 +287,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
+		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
+	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
 
 	if conn != nil {
 		fields := logrus.Fields{}
@@ -772,8 +774,10 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		listener = tls.NewListener(listener, config.TlsConfig)
 	}
 
-	// Setup connection tracking
-	config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown)
+	// Setup connection tracking if not already set in config
+	if config.ConnTracker == nil {
+		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown, nil)
+	}
 
 	server := http.Server{
 		Handler: handler,
