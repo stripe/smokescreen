@@ -787,6 +787,14 @@ func TestProxyTimeouts(t *testing.T) {
 
 		cfg.ConnTracker.Wg.Wait()
 
+		// The metrics client records success:true because of the way Goproxy surfaces CONNECT
+		// timeouts to Smokescreen; same reasons we test for EOF above.
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+
 		entry := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(entry)
 	})
@@ -816,6 +824,15 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Nil(resp)
 		r.Error(err)
 		r.Contains(err.Error(), "Gateway timeout")
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
 	})
 
 	t.Run("HTTP proxy dial timeouts", func(t *testing.T) {
@@ -841,6 +858,56 @@ func TestProxyTimeouts(t *testing.T) {
 		resp, _ := client.Do(req)
 		r.Equal(http.StatusGatewayTimeout, resp.StatusCode)
 		r.NotEqual("", resp.Header.Get(errorHeader))
+	})
+}
+
+// TestProxyConnectFailure tests that the proxy correctly handles non-timeout connection failures.
+// In general, the proxy should respond with "Bad gateway" and record failure statistics
+// reflecting the cause of the failure.
+func TestProxyConnectFailure(t *testing.T) {
+	r := require.New(t)
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(time.Second)
+		w.Write([]byte("OK"))
+	})
+
+	t.Run("CONNECT proxy dial refused", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		// Don't time out immediately
+		cfg.ConnectTimeout = time.Minute
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		// Shut down the handler so that the proxy won't be able to connect at all
+		remote.Close()
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+		resp, err := client.Do(req)
+		r.Nil(resp)
+		r.Error(err)
+		r.Contains(err.Error(), "Bad gateway")
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:refused")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
 	})
 }
 
@@ -899,6 +966,12 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	cfg.ConnTracker.Wg.Wait()
 
+	tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+	r.True(ok)
+	i, err := tmc.GetCount("cn.atpt.total", "success:true")
+	r.NoError(err)
+	r.Equal(i, uint64(1))
+
 	entry := findCanonicalProxyClose(logHook.AllEntries())
 	r.NotNil(entry)
 }
@@ -942,6 +1015,15 @@ func TestCustomDialTimeout(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "Gateway timeout")
 		r.Equal(custom, true)
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
 	})
 
 	t.Run("HTTP proxy custom dial timeouts", func(t *testing.T) {
@@ -975,6 +1057,16 @@ func TestCustomDialTimeout(t *testing.T) {
 		r.NotEqual("", resp.Header.Get(errorHeader))
 
 		r.Equal(custom, true)
+
+		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+
 	})
 }
 
@@ -1054,8 +1146,8 @@ func testConfig(role string) (*Config, error) {
 		return role, nil
 	}
 
-	mc := NewNoOpMetricsClient()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient, conf.Log, atomic.Value{}, nil)
+	mc := NewMockMetricsClient()
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient(), conf.Log, atomic.Value{}, nil)
 	conf.MetricsClient = mc
 	return conf, nil
 }

@@ -1,8 +1,11 @@
 package smokescreen
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -13,14 +16,20 @@ import (
 // a persistent tag with the metric. This list must be updated with new metric names
 // if the metric should support persistent tagging.
 var metrics = []string{
+	// ACL decision statistics
 	"acl.allow",
 	"acl.decide_error",
 	"acl.deny",
 	"acl.report",
 	"acl.role_not_determined",
 	"acl.unknown_error",
-	"cn.atpt.connect.time",
-	"cn.atpt.total",
+
+	// Connection statistics (cn.atpt == connection attempt)
+	"cn.atpt.total",        // Total connection attempts, tagged by success
+	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
+	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
+
+	// DNS resolution statistics
 	"resolver.allow.default",
 	"resolver.allow.user_configured",
 	"resolver.attempts_total",
@@ -36,8 +45,18 @@ var metrics = []string{
 // MetricsClient is not thread safe and should not be used concurrently.
 type MetricsClient struct {
 	metricsTags  map[string][]string
-	StatsdClient statsd.ClientInterface
+	statsdClient statsd.ClientInterface
 	started      atomic.Value
+}
+
+type MetricsClientInterface interface {
+	AddMetricTags(string, []string) error
+	Incr(string, float64) error
+	IncrWithTags(string, []string, float64) error
+	Timing(string, time.Duration, float64) error
+	TimingWithTags(string, time.Duration, float64, []string) error
+	StatsdClient() statsd.ClientInterface
+	SetStarted()
 }
 
 // NewMetricsClient creates a new MetricsClient with the provided statsd address and
@@ -57,7 +76,7 @@ func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
 
 	return &MetricsClient{
 		metricsTags:  metricsTags,
-		StatsdClient: c,
+		statsdClient: c,
 	}, nil
 }
 
@@ -72,7 +91,7 @@ func NewNoOpMetricsClient() *MetricsClient {
 
 	return &MetricsClient{
 		metricsTags:  metricsTags,
-		StatsdClient: &statsd.NoOpClient{},
+		statsdClient: &statsd.NoOpClient{},
 	}
 }
 
@@ -102,22 +121,56 @@ func (mc *MetricsClient) GetMetricTags(metric string) []string {
 
 func (mc *MetricsClient) Incr(metric string, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
-	return mc.StatsdClient.Incr(metric, mTags, rate)
+	return mc.statsdClient.Incr(metric, mTags, rate)
 }
 
 func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
-	return mc.StatsdClient.Incr(metric, tags, rate)
+	return mc.statsdClient.Incr(metric, tags, rate)
 }
 
 func (mc *MetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
-	return mc.StatsdClient.Timing(metric, d, mTags, rate)
+	return mc.statsdClient.Timing(metric, d, mTags, rate)
 }
 
 func (mc *MetricsClient) TimingWithTags(metric string, d time.Duration, rate float64, tags []string) error {
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
-	return mc.StatsdClient.Timing(metric, d, tags, rate)
+	return mc.statsdClient.Timing(metric, d, tags, rate)
+}
+
+func (mc *MetricsClient) StatsdClient() statsd.ClientInterface {
+	return mc.statsdClient
+}
+
+func (mc *MetricsClient) SetStarted() {
+	mc.started.Store(true)
+}
+
+// MetricsClient implements MetricsClientInterface
+var _ MetricsClientInterface = &MetricsClient{}
+
+// reportConnError emits a detailed metric about a connection error, with a tag corresponding to
+// the failure type. If err is not a net.Error, does nothing.
+func reportConnError(mc MetricsClientInterface, err error) {
+	e, ok := err.(net.Error)
+	if !ok {
+		return
+	}
+
+	etag := "type:unknown"
+	switch {
+	case e.Timeout():
+		etag = "type:timeout"
+	case errors.Is(e, syscall.ECONNREFUSED):
+		etag = "type:refused"
+	case errors.Is(e, syscall.ECONNRESET):
+		etag = "type:reset"
+	case errors.Is(e, syscall.ECONNABORTED):
+		etag = "type:aborted"
+	}
+
+	mc.IncrWithTags("cn.atpt.connect.err", []string{etag}, 1)
 }

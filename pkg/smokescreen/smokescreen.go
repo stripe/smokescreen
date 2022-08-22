@@ -288,6 +288,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
 		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
+		reportConnError(sctx.cfg.MetricsClient, err)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
@@ -489,10 +490,10 @@ func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 // normalized with `normalizeHost` and `normalizePort`.
 //
 // `hostPort` is a bare host or a colon-separated (':') host name and port.
-// If no port is specified, the `scheme`` string is used to find the default
+// If no port is specified, the `scheme` string is used to find the default
 // port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
 //
-// If `forceFQDN`` is true, returned normalized domain name will be an FQDN.
+// If forceFQDN is true, returned normalized domain name will be an FQDN.
 func NormalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (string, int, error) {
 	var err error
 	const noPort = -1
@@ -776,7 +777,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	// Setup connection tracking if not already set in config
 	if config.ConnTracker == nil {
-		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient, config.Log, config.ShuttingDown, nil)
+		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient(), config.Log, config.ShuttingDown, nil)
 	}
 
 	server := http.Server{
@@ -791,7 +792,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		server.IdleTimeout = config.IdleTimeout
 	}
 
-	config.MetricsClient.started.Store(true)
+	config.MetricsClient.SetStarted()
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
 }
