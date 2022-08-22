@@ -966,6 +966,12 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	cfg.ConnTracker.Wg.Wait()
 
+	tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+	r.True(ok)
+	i, err := tmc.GetCount("cn.atpt.total", "success:true")
+	r.NoError(err)
+	r.Equal(i, uint64(1))
+
 	entry := findCanonicalProxyClose(logHook.AllEntries())
 	r.NotNil(entry)
 }
