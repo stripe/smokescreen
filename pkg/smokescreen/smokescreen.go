@@ -490,7 +490,7 @@ func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 // normalized with `normalizeHost` and `normalizePort`.
 //
 // `hostPort` is a bare host or a colon-separated (':') host name and port.
-// If no port is specified, the `scheme“ string is used to find the default
+// If no port is specified, the `scheme` string is used to find the default
 // port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
 //
 // If `forceFQDN“ is true, returned normalized domain name will be an FQDN.
