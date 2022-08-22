@@ -862,7 +862,7 @@ func TestProxyTimeouts(t *testing.T) {
 }
 
 // TestProxyConnectFailure tests that the proxy correctly handles non-timeout connection failures.
-// In general, the proxy should respond with "Bad Gateway" and record failure statistics
+// In general, the proxy should respond with "Bad gateway" and record failure statistics
 // reflecting the cause of the failure.
 func TestProxyConnectFailure(t *testing.T) {
 	r := require.New(t)
