@@ -127,6 +127,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "unsafe-allow-private-ranges",
 			Usage: "Allow private ip ranges by default",
 		},
+		cli.BoolFlag{
+			Name:  "allow-invalid-domains",
+			Usage: "Whether to allow requests for invalid domain names (e.g., with underscores)",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -169,9 +173,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			conf.ConnectTimeout = c.Duration("timeout")
 		}
 
-		if c.IsSet("proxy-protocol") {
-			conf.SupportProxyProtocol = c.Bool("proxy-protocol")
-		}
+		conf.SupportProxyProtocol = c.Bool("proxy-protocol")
 
 		if c.IsSet("additional-error-message-on-deny") {
 			conf.AdditionalErrorMessageOnDeny = c.String("additional-error-message-on-deny")
@@ -241,9 +243,8 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
-		if c.IsSet("unsafe-allow-private-ranges") {
-			conf.UnsafeAllowPrivateRanges = c.Bool("unsafe-allow-private-ranges")
-		}
+		conf.UnsafeAllowPrivateRanges = c.Bool("unsafe-allow-private-ranges")
+		conf.AllowInvalidDomainNames = c.Bool("allow-invalid-domains")
 
 		// FIXME: mixing and matching parts of TLS config between cli and file
 		// hasn't been thought through and likely won't work

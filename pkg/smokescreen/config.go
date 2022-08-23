@@ -78,6 +78,10 @@ type Config struct {
 	// ranges by default (exempting loopback and unicast ranges)
 	// This setting can be used to configure Smokescreen with a blocklist, rather than an allowlist
 	UnsafeAllowPrivateRanges bool
+
+	// AllowInvalidDomainNames uses the domain name as provided by the client if
+	// the normalization process fails.
+	AllowInvalidDomainNames bool
 }
 
 type missingRoleError struct {

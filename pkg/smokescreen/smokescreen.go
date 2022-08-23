@@ -436,8 +436,9 @@ func NormalizePort(s string) (port int, err error) {
 	return
 }
 
-// NormalizeHost returns normalized representation of host (Punycode for DNS
-// names, standardized IP address representation).
+// NormalizeHost returns, if possible, a normalized representation of host
+// (Punycode for DNS names, standardized IP address representation). Returned
+// error indicates whether normalization was successful.
 //
 // If forceFQDN is true, returned normalized domain name will include a trailing
 // dot.
@@ -448,15 +449,18 @@ func NormalizeHost(s string, forceFQDN bool) (string, error) {
 		// This function provides a consistent representation.
 		return ip.String(), nil
 	}
-	// If it's not an IP address then it must be a domain name.
+
+	// If it's not an IP address then it must be a domain name. Add the trailing
+	// dot if FQDN is needed.
+	if forceFQDN && !strings.HasSuffix(s, ".") {
+		s += "."
+	}
+
 	// Convert it to Punycode it so that we deal only with with ASCII from now on.
 	// This way we can find out whether the domain name is malformed.
 	domain, err := idna.Lookup.ToASCII(s)
 	if err != nil {
-		return "", fmt.Errorf("invalid domain '%v': %v", s, err)
-	}
-	if forceFQDN && !strings.HasSuffix(domain, ".") {
-		domain += "."
+		return s, fmt.Errorf("invalid domain '%v': %v", s, err)
 	}
 	return domain, nil
 }
@@ -464,6 +468,9 @@ func NormalizeHost(s string, forceFQDN bool) (string, error) {
 // NormalizeHostPort takes a colon-separated host and port and returns a
 // normalized representation of host (Punycode for DNS names, standardized IP
 // address representation) and a port number.
+//
+// If provided host cannot be normalized, an error is returned as well as the
+// unnormalized host (and port).
 //
 // `hostPort` string needs to conform to `authority-form` as defined by
 // https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.3. In particular,
@@ -475,19 +482,19 @@ func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, 
 	if err != nil {
 		return "", 0, err
 	}
-	host, err = NormalizeHost(host, forceFQDN)
-	if err != nil {
-		return "", 0, err
-	}
 	port, err = NormalizePort(portString)
 	if err != nil {
 		return "", 0, err
 	}
+	host, err = NormalizeHost(host, forceFQDN)
 	return
 }
 
 // NormalizeHostWithOptionalPort returns host (as string) and port (as int)
 // normalized with `normalizeHost` and `normalizePort`.
+//
+// If provided host cannot be normalized, an error is returned as well as the
+// unnormalized host (and port).
 //
 // `hostPort` is a bare host or a colon-separated (':') host name and port.
 // If no port is specified, the `scheme` string is used to find the default
@@ -528,11 +535,7 @@ func NormalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (str
 	}
 
 	host, err = NormalizeHost(host, forceFQDN)
-	if err != nil {
-		return "", noPort, err
-	}
-
-	return host, port, nil
+	return host, port, err
 }
 
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
@@ -579,7 +582,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		// Build an address parsable by net.ResolveTCPAddr
 		remoteHost, remotePort, err := NormalizeHostWithOptionalPort(req.Host, req.URL.Scheme, false)
-		if err != nil {
+		if err != nil && (!config.AllowInvalidDomainNames || remoteHost == "" || remotePort <= 0) {
 			pctx.Error = denyError{err}
 			return req, rejectResponse(pctx, pctx.Error)
 		}
@@ -716,7 +719,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 
 	// Check if requesting role is allowed to talk to remote
 	remoteHost, remotePort, err := NormalizeHostPort(pctx.Req.Host, false)
-	if err != nil {
+	if err != nil && (!config.AllowInvalidDomainNames || remoteHost == "" || remotePort <= 0) {
 		pctx.Error = denyError{err}
 		return "", pctx.Error
 	}
