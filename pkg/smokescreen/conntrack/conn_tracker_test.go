@@ -2,6 +2,7 @@ package conntrack
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func TestConnSuccessRateTracker(t *testing.T) {
 		totalConns   int
 	}{
 		{"fifty-percent-success", []record{{"foo.com", true}, {"bar.com", false}}, 1 * time.Second, 50.0, 2},
-		{"no-records", []record{}, 0 * time.Second, 100.0, 0},
+		{"no-records", []record{}, 2 * time.Second, 100.0, 0},
 		// If we wait beyond the calculation window, we should have no records and return the default 100% rate
 		{"expire-records", []record{{"foo.com", true}, {"bar.com", false}}, 3 * time.Second, 100.0, 0},
 		// Only the most recent record for a host is used in the computation
@@ -83,7 +84,8 @@ func TestConnSuccessRateTracker(t *testing.T) {
 
 			sd := atomic.Value{}
 			sd.Store(false)
-			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second))
+			mockMetricsClient := &mockClientInterface{}
+			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 
 			for _, record := range tc.additions {
 				tracker.RecordAttempt(record.host, record.success)
@@ -94,6 +96,10 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			stats := tracker.ReportConnectionSuccessRate()
 			assert.InDelta(tc.expectedRate, stats.ConnSuccessRate, 0.01)
 			assert.Equal(tc.totalConns, stats.TotalConns)
+
+			assert.Equal(tc.expectedRate, mockMetricsClient.getValue("cn.atpt.distinct_domains_success_rate"))
+			assert.Equal(float64(tc.totalConns), mockMetricsClient.getValue("cn.atpt.distinct_domains"))
+
 		})
 	}
 }
@@ -127,4 +133,26 @@ func TestNormalizeDomainName(t *testing.T) {
 			assert.Equal(t, tc.normalized, normalizeDomainName(tc.domain))
 		})
 	}
+}
+
+type mockClientInterface struct {
+	statsd.ClientInterface
+
+	stats sync.Map
+}
+
+func newMockClientInterface() *mockClientInterface {
+	client := mockClientInterface{}
+	client.stats = sync.Map{}
+	return &client
+}
+
+func (m *mockClientInterface) Gauge(name string, value float64, tags []string, rate float64) error {
+	m.stats.Store(name, value)
+	return nil
+}
+
+func (m *mockClientInterface) getValue(name string) float64 {
+	val, _ := m.stats.Load(name)
+	return val.(float64)
 }

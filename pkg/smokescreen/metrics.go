@@ -28,6 +28,9 @@ var metrics = []string{
 	"cn.atpt.total",        // Total connection attempts, tagged by success
 	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
 	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
+	// The following are only emitted if Smokescreen is configured to use a ConnSuccessRateTracker.
+	"cn.atpt.distinct_domains",              // Number of distinct domains seen by ConnSuccessRateTracker in computation window
+	"cn.atpt.distinct_domains_success_rate", // Domain connection success rate computed by ConnSuccessRateTracker
 
 	// DNS resolution statistics
 	"resolver.allow.default",

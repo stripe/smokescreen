@@ -53,7 +53,7 @@ type ConnSuccessRateStats struct {
 // - calculationInterval is how often statistics will be recomputed.
 // - calculationWindow is the period that statistics will be calculated over.
 // - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory.
-func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration) *ConnSuccessRateTracker {
+func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration, statsc statsd.ClientInterface) *ConnSuccessRateTracker {
 	newSuccessTracker := &ConnSuccessRateTracker{
 		ConnAttempts: cache.New(calculationWindow, time.Second*cleanupInterval),
 	}
@@ -76,6 +76,8 @@ func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculati
 				successRate = (float64(succeeded) / float64(total)) * 100
 			}
 			newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: successRate, TotalConns: total})
+			statsc.Gauge("cn.atpt.distinct_domains", float64(total), []string{}, 1)
+			statsc.Gauge("cn.atpt.distinct_domains_success_rate", successRate, []string{}, 1)
 
 			time.Sleep(calculationInterval)
 		}
