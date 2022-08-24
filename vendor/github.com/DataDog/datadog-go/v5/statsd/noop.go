@@ -81,9 +81,14 @@ func (n *NoOpClient) Flush() error {
 	return nil
 }
 
-// SetWriteTimeout does nothing and returns nil
-func (n *NoOpClient) SetWriteTimeout(d time.Duration) error {
-	return nil
+// IsClosed does nothing and return false
+func (n *NoOpClient) IsClosed() bool {
+	return false
+}
+
+// GetTelemetry does nothing and returns an empty Telemetry
+func (n *NoOpClient) GetTelemetry() Telemetry {
+	return Telemetry{}
 }
 
 // Verify that NoOpClient implements the ClientInterface.

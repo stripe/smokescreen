@@ -23,7 +23,7 @@ func newCountMetric(name string, value int64, tags []string) *countMetric {
 	return &countMetric{
 		value: value,
 		name:  name,
-		tags:  tags,
+		tags:  copySlice(tags),
 	}
 }
 
@@ -53,7 +53,7 @@ func newGaugeMetric(name string, value float64, tags []string) *gaugeMetric {
 	return &gaugeMetric{
 		value: math.Float64bits(value),
 		name:  name,
-		tags:  tags,
+		tags:  copySlice(tags),
 	}
 }
 
@@ -84,7 +84,7 @@ func newSetMetric(name string, value string, tags []string) *setMetric {
 	set := &setMetric{
 		data: map[string]struct{}{},
 		name: name,
-		tags: tags,
+		tags: copySlice(tags),
 	}
 	set.data[value] = struct{}{}
 	return set

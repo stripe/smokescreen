@@ -46,7 +46,7 @@ func NewServiceCheck(name string, status ServiceCheckStatus) *ServiceCheck {
 }
 
 // Check verifies that a service check is valid.
-func (sc ServiceCheck) Check() error {
+func (sc *ServiceCheck) Check() error {
 	if len(sc.Name) == 0 {
 		return fmt.Errorf("statsd.ServiceCheck name is required")
 	}
@@ -54,17 +54,4 @@ func (sc ServiceCheck) Check() error {
 		return fmt.Errorf("statsd.ServiceCheck status has invalid value")
 	}
 	return nil
-}
-
-// Encode returns the dogstatsd wire protocol representation for a service check.
-// Tags may be passed which will be added to the encoded output but not to
-// the Service Check's list of tags, eg. for default tags.
-func (sc ServiceCheck) Encode(tags ...string) (string, error) {
-	err := sc.Check()
-	if err != nil {
-		return "", err
-	}
-	var buffer []byte
-	buffer = appendServiceCheck(buffer, sc, tags)
-	return string(buffer), nil
 }

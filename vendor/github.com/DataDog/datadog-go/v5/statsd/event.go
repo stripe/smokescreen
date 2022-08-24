@@ -37,7 +37,7 @@ const (
 type Event struct {
 	// Title of the event.  Required.
 	Title string
-	// Text is the description of the event.  Required.
+	// Text is the description of the event.
 	Text string
 	// Timestamp is a timestamp for the event.  If not provided, the dogstatsd
 	// server will set this to the current time.
@@ -67,25 +67,9 @@ func NewEvent(title, text string) *Event {
 }
 
 // Check verifies that an event is valid.
-func (e Event) Check() error {
+func (e *Event) Check() error {
 	if len(e.Title) == 0 {
 		return fmt.Errorf("statsd.Event title is required")
 	}
-	if len(e.Text) == 0 {
-		return fmt.Errorf("statsd.Event text is required")
-	}
 	return nil
-}
-
-// Encode returns the dogstatsd wire protocol representation for an event.
-// Tags may be passed which will be added to the encoded output but not to
-// the Event's list of tags, eg. for default tags.
-func (e Event) Encode(tags ...string) (string, error) {
-	err := e.Check()
-	if err != nil {
-		return "", err
-	}
-	var buffer []byte
-	buffer = appendEvent(buffer, e, tags)
-	return string(buffer), nil
 }

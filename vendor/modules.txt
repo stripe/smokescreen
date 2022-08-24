@@ -1,8 +1,7 @@
-# github.com/DataDog/datadog-go v4.5.1+incompatible
+# github.com/DataDog/datadog-go/v5 v5.1.1
 ## explicit
 github.com/DataDog/datadog-go/v5/statsd
-# github.com/Microsoft/go-winio v0.4.17
-## explicit
+# github.com/Microsoft/go-winio v0.5.0
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
 # github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
