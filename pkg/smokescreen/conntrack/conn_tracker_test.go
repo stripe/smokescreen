@@ -141,11 +141,6 @@ type mockClientInterface struct {
 	stats sync.Map
 }
 
-type stat struct {
-	name  string
-	value float64
-}
-
 func newMockClientInterface() *mockClientInterface {
 	client := mockClientInterface{}
 	client.stats = sync.Map{}
