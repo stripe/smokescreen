@@ -1,6 +1,6 @@
 # github.com/DataDog/datadog-go v4.5.1+incompatible
 ## explicit
-github.com/DataDog/datadog-go/statsd
+github.com/DataDog/datadog-go/v5/statsd
 # github.com/Microsoft/go-winio v0.4.17
 ## explicit
 github.com/Microsoft/go-winio
