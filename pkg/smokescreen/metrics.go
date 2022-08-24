@@ -62,11 +62,10 @@ type MetricsClientInterface interface {
 // NewMetricsClient creates a new MetricsClient with the provided statsd address and
 // namespace.
 func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
-	c, err := statsd.New(addr)
+	c, err := statsd.New(addr, statsd.WithNamespace(namespace))
 	if err != nil {
 		return nil, err
 	}
-	c.Namespace = namespace
 
 	// Populate the client's map to hold metric tags
 	metricsTags := make(map[string][]string)
