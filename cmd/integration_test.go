@@ -560,7 +560,7 @@ func TestClientHalfCloseConnection(t *testing.T) {
 	// logged a connection close event
 	tcpConn.CloseWrite()
 
-	conf.ConnTracker.Wg.Wait()
+	conf.ConnTracker.Wg().Wait()
 
 	entries := logHook.AllEntries()
 	entry := findLogEntry(entries, "CANONICAL-PROXY-CN-CLOSE")
