@@ -70,7 +70,7 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *logrus.Entry, role,
 	}
 
 	ic.tracker.Store(ic, nil)
-	ic.tracker.Wg.Add(1)
+	ic.tracker.Wg().Add(1)
 
 	return ic
 }
@@ -130,7 +130,7 @@ func (ic *InstrumentedConn) Close() error {
 		LogFieldOutboundAddr: outboundAddr,
 	}).Info(CanonicalProxyConnClose)
 
-	ic.tracker.Wg.Done()
+	ic.tracker.Wg().Done()
 	ic.CloseError = ic.Conn.Close()
 	return ic.CloseError
 }

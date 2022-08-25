@@ -858,7 +858,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
-			config.ConnTracker.Wg.Wait()
+			config.ConnTracker.Wg().Wait()
 			config.Log.Print("All connections are closed. Continuing with shutdown...")
 			exit <- Closed
 		}()
