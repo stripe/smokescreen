@@ -50,9 +50,9 @@ func (hp HostPort) String() string {
 //
 // If forceFQDN is true, returned normalized domain name will be an FQDN.
 func New(s string, forceFQDN bool) (hostport HostPort, err error) {
-	var portString string
-	hostport = HostPort{Port: NoPort}
+	hostport.Port = NoPort
 
+	var portString string
 	hostport.Host, portString, err = net.SplitHostPort(s)
 	if err != nil {
 		return
@@ -74,7 +74,7 @@ func New(s string, forceFQDN bool) (hostport HostPort, err error) {
 //
 // If forceFQDN is true, returned normalized domain name will be an FQDN.
 func NewWithScheme(s, scheme string, forceFQDN bool) (hostport HostPort, err error) {
-	hostport = HostPort{Port: NoPort}
+	hostport.Port = NoPort
 
 	// net.SplitHostPort() doesn't handle bare IPv6 addresses well so
 	// handle that case first.
