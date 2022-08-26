@@ -51,7 +51,7 @@ type Config struct {
 	StatsSocketDir               string
 	StatsSocketFileMode          os.FileMode
 	StatsServer                  *StatsServer // StatsServer
-	ConnTracker                  *conntrack.Tracker
+	ConnTracker                  conntrack.TrackerInterface
 	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
 
