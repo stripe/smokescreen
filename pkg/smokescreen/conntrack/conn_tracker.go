@@ -168,3 +168,5 @@ func (tr *Tracker) MaybeIdleIn(d time.Duration) time.Duration {
 func (tr *Tracker) Wg() *sync.WaitGroup {
 	return tr.wg
 }
+
+var _ TrackerInterface = &Tracker{}
