@@ -20,6 +20,7 @@ type TrackerInterface interface {
 	NewInstrumentedConn(net.Conn, *logrus.Entry, string, string, string) *InstrumentedConn
 	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *logrus.Entry, string, string, string) *InstrumentedConn
 	Wg() *sync.WaitGroup
+	Range(f func(key any, value any) bool)
 }
 
 type Tracker struct {
