@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -22,7 +21,7 @@ import (
 	"github.com/stripe/smokescreen/internal/einhorn"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
-	"golang.org/x/net/idna"
+	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 )
 
 const (
@@ -419,122 +418,6 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 	}
 }
 
-// HasPort returns true if the provided address does not include a port number.
-func HasPort(s string) bool {
-	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
-}
-
-// NormalizePort converts `s` to int if it represents a valid TCP port.
-func NormalizePort(s string) (port int, err error) {
-	port, err = strconv.Atoi(s)
-	if err != nil {
-		return 0, fmt.Errorf("invalid port number %q: %v", s, err)
-	}
-	if port < portMin || port > portMax {
-		return 0, fmt.Errorf("invalid port number %d: must be between %d and %d", port, portMin, portMax)
-	}
-	return
-}
-
-// NormalizeHost returns normalized representation of host (Punycode for DNS
-// names, standardized IP address representation).
-//
-// If forceFQDN is true, returned normalized domain name will include a trailing
-// dot.
-func NormalizeHost(s string, forceFQDN bool) (string, error) {
-	if ip := net.ParseIP(s); ip != nil {
-		// IP addresses might have different but equivalent representations
-		// (e.g., `2001:DB8::` and `2001:db8::` are the same address).
-		// This function provides a consistent representation.
-		return ip.String(), nil
-	}
-	// If it's not an IP address then it must be a domain name.
-	// Convert it to Punycode it so that we deal only with with ASCII from now on.
-	// This way we can find out whether the domain name is malformed.
-	domain, err := idna.Lookup.ToASCII(s)
-	if err != nil {
-		return "", fmt.Errorf("invalid domain '%v': %v", s, err)
-	}
-	if forceFQDN && !strings.HasSuffix(domain, ".") {
-		domain += "."
-	}
-	return domain, nil
-}
-
-// NormalizeHostPort takes a colon-separated host and port and returns a
-// normalized representation of host (Punycode for DNS names, standardized IP
-// address representation) and a port number.
-//
-// `hostPort` string needs to conform to `authority-form` as defined by
-// https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.3. In particular,
-// port is not optional and must be provided.
-//
-// If forceFQDN is true, returned normalized domain name will be an FQDN.
-func NormalizeHostPort(hostPort string, forceFQDN bool) (host string, port int, err error) {
-	host, portString, err := net.SplitHostPort(hostPort)
-	if err != nil {
-		return "", 0, err
-	}
-	host, err = NormalizeHost(host, forceFQDN)
-	if err != nil {
-		return "", 0, err
-	}
-	port, err = NormalizePort(portString)
-	if err != nil {
-		return "", 0, err
-	}
-	return
-}
-
-// NormalizeHostWithOptionalPort returns host (as string) and port (as int)
-// normalized with `normalizeHost` and `normalizePort`.
-//
-// `hostPort` is a bare host or a colon-separated (':') host name and port.
-// If no port is specified, the `scheme` string is used to find the default
-// port (https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3).
-//
-// If forceFQDN is true, returned normalized domain name will be an FQDN.
-func NormalizeHostWithOptionalPort(hostPort, scheme string, forceFQDN bool) (string, int, error) {
-	var err error
-	const noPort = -1
-	host, port := hostPort, noPort
-
-	// net.SplitHostPort() doesn't handle bare IPv6 addresses well so
-	// handle that case first.
-	if ip := net.ParseIP(hostPort); ip != nil && ip.To4() == nil {
-		// IP addresses might have different but equivalent representations
-		// (e.g., `2001:DB8::` and `2001:db8::` are the same address).
-		// Let's make sure we use a consistent representation from now on.
-		host = ip.String()
-	} else if HasPort(hostPort) {
-		// Extract host and port if both are provided.
-		var portString string
-		host, portString, err = net.SplitHostPort(hostPort)
-		if err != nil {
-			return "", noPort, err
-		}
-		port, err = NormalizePort(portString)
-		if err != nil {
-			return "", noPort, err
-		}
-	}
-
-	if port == noPort {
-		// Port was not provided so try to determine it based on scheme.
-		port, err = net.LookupPort("tcp", scheme)
-		if err != nil {
-			return "", noPort, errors.New("unable to determine port for " + scheme)
-		}
-	}
-
-	host, err = NormalizeHost(host, forceFQDN)
-	if err != nil {
-		return "", noPort, err
-	}
-
-	return host, port, nil
-}
-
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = false
@@ -578,7 +461,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		pctx.RoundTripper = rtFn
 
 		// Build an address parsable by net.ResolveTCPAddr
-		remoteHost, remotePort, err := NormalizeHostWithOptionalPort(req.Host, req.URL.Scheme, false)
+		destination, err := hostport.NewWithScheme(req.Host, req.URL.Scheme, false)
 		if err != nil {
 			pctx.Error = denyError{err}
 			return req, rejectResponse(pctx, pctx.Error)
@@ -586,7 +469,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
-		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, remoteHost, remotePort)
+		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
@@ -715,12 +598,12 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	sctx := pctx.UserData.(*smokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
-	remoteHost, remotePort, err := NormalizeHostPort(pctx.Req.Host, false)
+	destination, err := hostport.New(pctx.Req.Host, false)
 	if err != nil {
 		pctx.Error = denyError{err}
 		return "", pctx.Error
 	}
-	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, remoteHost, remotePort)
+	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		return "", denyError{pctx.Error}
 	}
@@ -728,7 +611,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		return "", denyError{errors.New(sctx.decision.reason)}
 	}
 
-	return net.JoinHostPort(remoteHost, strconv.Itoa(remotePort)), nil
+	return destination.String(), nil
 }
 
 func findListener(ip string, defaultPort uint16) (net.Listener, error) {
@@ -947,13 +830,13 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, host string, port int) (*aclDecision, time.Duration, error) {
-	decision := checkACLsForRequest(config, req, host, port)
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destination hostport.HostPort) (*aclDecision, time.Duration, error) {
+	decision := checkACLsForRequest(config, req, destination)
 
 	var lookupTime time.Duration
 	if decision.allow {
 		start := time.Now()
-		hostPort := net.JoinHostPort(host, strconv.Itoa(port))
+		hostPort := destination.String()
 		resolved, reason, err := safeResolve(config, "tcp", hostPort)
 		lookupTime = time.Since(start)
 		if err != nil {
@@ -971,9 +854,9 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, host strin
 	return decision, lookupTime, nil
 }
 
-func checkACLsForRequest(config *Config, req *http.Request, host string, port int) *aclDecision {
+func checkACLsForRequest(config *Config, req *http.Request, destination hostport.HostPort) *aclDecision {
 	decision := &aclDecision{
-		outboundHost: net.JoinHostPort(host, strconv.Itoa(port)),
+		outboundHost: destination.String(),
 	}
 
 	if config.EgressACL == nil {
@@ -993,12 +876,12 @@ func checkACLsForRequest(config *Config, req *http.Request, host string, port in
 
 	// This host validation prevents IPv6 addresses from being used as destinations.
 	// Added for backwards compatibility.
-	if strings.ContainsAny(host, ":") {
+	if strings.ContainsAny(destination.Host, ":") {
 		decision.reason = "Destination host cannot be determined"
 		return decision
 	}
 
-	aclDecision, err := config.EgressACL.Decide(role, host)
+	aclDecision, err := config.EgressACL.Decide(role, destination.Host)
 	decision.project = aclDecision.Project
 	decision.reason = aclDecision.Reason
 	if err != nil {
@@ -1035,7 +918,7 @@ func checkACLsForRequest(config *Config, req *http.Request, host string, port in
 	default:
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
-			"destination": host,
+			"destination": destination.Host,
 			"action":      aclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
