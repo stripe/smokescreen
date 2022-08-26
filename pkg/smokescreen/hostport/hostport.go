@@ -134,7 +134,7 @@ func NormalizeHost(s string, forceFQDN bool) (string, error) {
 	// This way we can find out whether the domain name is malformed.
 	domain, err := idna.Lookup.ToASCII(s)
 	if err != nil {
-		return "", fmt.Errorf("invalid domain '%v': %v", s, err)
+		return "", fmt.Errorf("invalid domain %q: %w", s, err)
 	}
 	if forceFQDN && domain != "" && !strings.HasSuffix(domain, ".") {
 		domain += "."
@@ -146,7 +146,7 @@ func NormalizeHost(s string, forceFQDN bool) (string, error) {
 func NormalizePort(s string) (port int, err error) {
 	port, err = strconv.Atoi(s)
 	if err != nil {
-		return NoPort, fmt.Errorf("invalid port number %q: %v", s, err)
+		return NoPort, fmt.Errorf("invalid port number %q: %w", s, err)
 	}
 	if port < portMin || port > portMax {
 		return NoPort, fmt.Errorf("invalid port number %d: must be between %d and %d", port, portMin, portMax)

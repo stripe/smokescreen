@@ -71,7 +71,7 @@ func TestNewWithScheme(t *testing.T) {
 		{"http", "example.com", "example.com", 80, false, ""},
 		{"http", "127.0.0.1", "127.0.0.1", 80, false, ""},
 		{"https", "127.0.0.1:123", "127.0.0.1", 123, false, ""},
-		{"https", "[2001:DB8::1337]", "", 443, false, "invalid domain '[2001:DB8::1337]': idna: disallowed rune U+005B"},
+		{"https", "[2001:DB8::1337]", "", 443, false, "invalid domain \"[2001:DB8::1337]\": idna: disallowed rune U+005B"},
 		{"https", "2001:DB8::1337", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:DB8::1337]:443", "2001:db8::1337", 443, false, ""},
 		{"https", "[2001:db8::1337]:443", "2001:db8::1337", 443, false, ""},
