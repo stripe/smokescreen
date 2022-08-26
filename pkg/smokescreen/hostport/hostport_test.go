@@ -66,7 +66,7 @@ func TestNewWithScheme(t *testing.T) {
 		host      string
 		port      int
 		forceFQDN bool
-		errorMsg  string
+		err       string
 	}{
 		{"http", "example.com", "example.com", 80, false, ""},
 		{"http", "127.0.0.1", "127.0.0.1", 80, false, ""},
@@ -95,8 +95,8 @@ func TestNewWithScheme(t *testing.T) {
 			r.Equal(tt.host, hp.Host)
 			r.Equal(tt.port, hp.Port)
 
-			if err != nil {
-				r.EqualError(err, tt.errorMsg)
+			if tt.err != "" {
+				r.EqualError(err, tt.err)
 			} else {
 				r.NoError(err)
 			}
