@@ -13,10 +13,19 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+type TrackerInterface interface {
+	ReportConnectionSuccessRate() *ConnSuccessRateStats
+	RecordAttempt(string, bool)
+	MaybeIdleIn(time.Duration) time.Duration
+	NewInstrumentedConn(net.Conn, *logrus.Entry, string, string, string) *InstrumentedConn
+	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *logrus.Entry, string, string, string) *InstrumentedConn
+	Wg() *sync.WaitGroup
+}
+
 type Tracker struct {
 	*sync.Map
 	ShuttingDown atomic.Value
-	Wg           *sync.WaitGroup
+	wg           *sync.WaitGroup
 	statsc       statsd.ClientInterface
 
 	SuccessRateTracker *ConnSuccessRateTracker
@@ -90,7 +99,7 @@ func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logru
 	return &Tracker{
 		Map:                &sync.Map{},
 		ShuttingDown:       sd,
-		Wg:                 &sync.WaitGroup{},
+		wg:                 &sync.WaitGroup{},
 		IdleTimeout:        idle,
 		statsc:             statsc,
 		SuccessRateTracker: successRateTracker,
@@ -155,3 +164,9 @@ func (tr *Tracker) MaybeIdleIn(d time.Duration) time.Duration {
 	})
 	return longest
 }
+
+func (tr *Tracker) Wg() *sync.WaitGroup {
+	return tr.wg
+}
+
+var _ TrackerInterface = &Tracker{}

@@ -785,7 +785,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
 
-		cfg.ConnTracker.Wg.Wait()
+		cfg.ConnTracker.Wg().Wait()
 
 		// The metrics client records success:true because of the way Goproxy surfaces CONNECT
 		// timeouts to Smokescreen; same reasons we test for EOF above.
@@ -964,7 +964,7 @@ func TestProxyHalfClosed(t *testing.T) {
 	resp.Body.Close()
 	r.Equal(http.StatusOK, resp.StatusCode)
 
-	cfg.ConnTracker.Wg.Wait()
+	cfg.ConnTracker.Wg().Wait()
 
 	tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
 	r.True(ok)
