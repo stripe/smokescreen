@@ -29,6 +29,7 @@ import (
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 var ProxyTargetHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -606,7 +607,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*smokescr
 		conf.RoleFromRequest = testRFRHeader
 	}
 
-	conf.MetricsClient = smokescreen.NewNoOpMetricsClient()
+	conf.MetricsClient = metrics.NewNoOpMetricsClient()
 
 	conf.ConnectTimeout = time.Second
 

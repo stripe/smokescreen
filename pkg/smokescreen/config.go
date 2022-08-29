@@ -21,6 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 type RuleRange struct {
@@ -37,7 +38,7 @@ type Config struct {
 	Resolver                     *net.Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
-	MetricsClient                MetricsClientInterface
+	MetricsClient                metrics.MetricsClientInterface
 	EgressACL                    acl.Decider
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
@@ -229,7 +230,7 @@ func NewConfig() *Config {
 		ExitTimeout:             500 * time.Minute,
 		StatsSocketFileMode:     os.FileMode(0700),
 		ShuttingDown:            atomic.Value{},
-		MetricsClient:           NewNoOpMetricsClient(),
+		MetricsClient:           metrics.NewNoOpMetricsClient(),
 		Network:                 "ip",
 	}
 }
@@ -301,11 +302,11 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
 		fmt.Println("warn: no statsd addr provided, using noop client")
-		config.MetricsClient = NewNoOpMetricsClient()
+		config.MetricsClient = metrics.NewNoOpMetricsClient()
 		return nil
 	}
 
-	mc, err := NewMetricsClient(addr, namespace)
+	mc, err := metrics.NewMetricsClient(addr, namespace)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 var testLogger = logrus.New()
@@ -50,7 +51,7 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	sd := atomic.Value{}
 	sd.Store(false)
 
-	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd, nil)
+	return NewTracker(idle, metrics.NewNoOpMetricsClient(), logrus.New(), sd, nil)
 }
 
 // TestConnSuccessRateTracker tests that a ConnTracker with a ConnSuccessRateTracker correctly
@@ -85,7 +86,7 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			sd := atomic.Value{}
 			sd.Store(false)
 			mockMetricsClient := &mockClientInterface{}
-			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
+			tracker := NewTracker(time.Second, metrics.NewNoOpMetricsClient(), logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 
 			for _, record := range tc.additions {
 				tracker.RecordAttempt(record.host, record.success)

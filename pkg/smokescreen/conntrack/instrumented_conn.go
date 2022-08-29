@@ -97,16 +97,16 @@ func (ic *InstrumentedConn) Close() error {
 		fmt.Sprintf("role:%s", ic.Role),
 	}
 
-	ic.tracker.statsc.Incr("cn.close", tags, 1)
-	ic.tracker.statsc.Histogram("cn.duration", duration, tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_in", float64(atomic.LoadUint64(ic.BytesIn)), tags, 1)
-	ic.tracker.statsc.Histogram("cn.bytes_out", float64(atomic.LoadUint64(ic.BytesOut)), tags, 1)
+	ic.tracker.statsc.IncrWithTags("cn.close", tags, 1)
+	ic.tracker.statsc.HistogramWithTags("cn.duration", duration, tags, 1)
+	ic.tracker.statsc.HistogramWithTags("cn.bytes_in", float64(atomic.LoadUint64(ic.BytesIn)), tags, 1)
+	ic.tracker.statsc.HistogramWithTags("cn.bytes_out", float64(atomic.LoadUint64(ic.BytesOut)), tags, 1)
 
 	// Track when we terminate active connections during a shutdown
 	if ic.tracker.ShuttingDown.Load() == true {
 		if !ic.Idle() {
 			ic.logger = ic.logger.WithField("active_at_termination", true)
-			ic.tracker.statsc.Incr("cn.active_at_termination", tags, 1)
+			ic.tracker.statsc.IncrWithTags("cn.active_at_termination", tags, 1)
 		}
 	}
 

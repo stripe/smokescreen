@@ -10,6 +10,7 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -27,7 +28,7 @@ type Tracker struct {
 	*sync.Map
 	ShuttingDown atomic.Value
 	wg           *sync.WaitGroup
-	statsc       statsd.ClientInterface
+	statsc       metrics.MetricsClientInterface
 
 	SuccessRateTracker *ConnSuccessRateTracker
 
@@ -96,7 +97,7 @@ func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculati
 	return newSuccessTracker
 }
 
-func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
+func NewTracker(idle time.Duration, statsc metrics.MetricsClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
 	return &Tracker{
 		Map:                &sync.Map{},
 		ShuttingDown:       sd,

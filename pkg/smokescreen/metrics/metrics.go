@@ -1,4 +1,4 @@
-package smokescreen
+package metrics
 
 import (
 	"errors"
@@ -56,6 +56,8 @@ type MetricsClientInterface interface {
 	AddMetricTags(string, []string) error
 	Incr(string, float64) error
 	IncrWithTags(string, []string, float64) error
+	Histogram(string, float64, float64) error
+	HistogramWithTags(string, float64, []string, float64) error
 	Timing(string, time.Duration, float64) error
 	TimingWithTags(string, time.Duration, float64, []string) error
 	StatsdClient() statsd.ClientInterface
@@ -133,6 +135,17 @@ func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64
 	return mc.statsdClient.Incr(metric, tags, rate)
 }
 
+func (mc *MetricsClient) Histogram(metric string, value float64, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	return mc.statsdClient.Histogram(metric, value, mTags, rate)
+}
+
+func (mc *MetricsClient) HistogramWithTags(metric string, value float64, tags []string, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	tags = append(tags, mTags...)
+	return mc.statsdClient.Histogram(metric, value, tags, rate)
+}
+
 func (mc *MetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
 	return mc.statsdClient.Timing(metric, d, mTags, rate)
@@ -157,7 +170,7 @@ var _ MetricsClientInterface = &MetricsClient{}
 
 // reportConnError emits a detailed metric about a connection error, with a tag corresponding to
 // the failure type. If err is not a net.Error, does nothing.
-func reportConnError(mc MetricsClientInterface, err error) {
+func ReportConnError(mc MetricsClientInterface, err error) {
 	e, ok := err.(net.Error)
 	if !ok {
 		return
