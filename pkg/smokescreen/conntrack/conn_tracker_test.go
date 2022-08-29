@@ -2,12 +2,10 @@ package conntrack
 
 import (
 	"net"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -85,7 +83,7 @@ func TestConnSuccessRateTracker(t *testing.T) {
 
 			sd := atomic.Value{}
 			sd.Store(false)
-			mockMetricsClient := &mockClientInterface{}
+			mockMetricsClient := metrics.NewMockMetricsClient()
 			tracker := NewTracker(time.Second, metrics.NewNoOpMetricsClient(), logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 
 			for _, record := range tc.additions {
@@ -98,8 +96,13 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			assert.InDelta(tc.expectedRate, stats.ConnSuccessRate, 0.01)
 			assert.Equal(tc.totalConns, stats.TotalConns)
 
-			assert.Equal(tc.expectedRate, mockMetricsClient.getValue("cn.atpt.distinct_domains_success_rate"))
-			assert.Equal(float64(tc.totalConns), mockMetricsClient.getValue("cn.atpt.distinct_domains"))
+			v, err := mockMetricsClient.GetValues("cn.atpt.distinct_domains_success_rate")
+			assert.NoError(err)
+			assert.Equal(tc.expectedRate, v[len(v)-1])
+
+			v, err = mockMetricsClient.GetValues("cn.atpt.distinct_domains")
+			assert.NoError(err)
+			assert.Equal(tc.totalConns, int(v[len(v)-1]))
 
 		})
 	}
@@ -134,26 +137,4 @@ func TestNormalizeDomainName(t *testing.T) {
 			assert.Equal(t, tc.normalized, normalizeDomainName(tc.domain))
 		})
 	}
-}
-
-type mockClientInterface struct {
-	statsd.ClientInterface
-
-	stats sync.Map
-}
-
-func newMockClientInterface() *mockClientInterface {
-	client := mockClientInterface{}
-	client.stats = sync.Map{}
-	return &client
-}
-
-func (m *mockClientInterface) Gauge(name string, value float64, tags []string, rate float64) error {
-	m.stats.Store(name, value)
-	return nil
-}
-
-func (m *mockClientInterface) getValue(name string) float64 {
-	val, _ := m.stats.Load(name)
-	return val.(float64)
 }

@@ -123,6 +123,14 @@ func (m *MockMetricsClient) IncrWithTags(metric string, tags []string, rate floa
 	return m.MetricsClient.IncrWithTags(metric, tags, rate)
 }
 
+func (m *MockMetricsClient) Gauge(metric string, value float64, rate float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.countOneWithValue(metric, value)
+
+	return m.MetricsClient.Incr(metric, rate)
+}
+
 func (m *MockMetricsClient) Histogram(metric string, value float64, rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

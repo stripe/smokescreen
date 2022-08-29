@@ -56,6 +56,7 @@ type MetricsClientInterface interface {
 	AddMetricTags(string, []string) error
 	Incr(string, float64) error
 	IncrWithTags(string, []string, float64) error
+	Gauge(string, float64, float64) error
 	Histogram(string, float64, float64) error
 	HistogramWithTags(string, float64, []string, float64) error
 	Timing(string, time.Duration, float64) error
@@ -133,6 +134,11 @@ func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64
 	mTags := mc.GetMetricTags(metric)
 	tags = append(tags, mTags...)
 	return mc.statsdClient.Incr(metric, tags, rate)
+}
+
+func (mc *MetricsClient) Gauge(metric string, value float64, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	return mc.statsdClient.Gauge(metric, value, mTags, rate)
 }
 
 func (mc *MetricsClient) Histogram(metric string, value float64, rate float64) error {
