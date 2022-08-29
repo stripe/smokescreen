@@ -104,6 +104,11 @@ func NewNoOpMetricsClient() *MetricsClient {
 // AddMetricTags associates the provided tags slice with a given metric. The metric must be present
 // in the metrics slice.
 //
+// Once a metric has tags added via AddMetricTags, those tags will *always* be attached whenever
+// that metric is emitted.
+// For example, calling `AddMetricTags(foo, [bar])` will cause the `bar` tag to be added to
+// *every* metric `foo` that is emitted for the lifetime of the MetricsClient.
+//
 // This function is not thread safe, and adding persitent tags should only be done while initializing
 // the configuration and prior to running smokescreen.
 func (mc *MetricsClient) AddMetricTags(metric string, mTags []string) error {

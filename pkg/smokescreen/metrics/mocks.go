@@ -76,8 +76,8 @@ func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, err
 }
 
 // GetValues returns the values stored for a metric metric has been updated since the MockMetricsClient was
-// created. To support GetValues being called with or without tags for a given metric, tagged metrics
-// are counted twice: once for the untagged metric ("foo") and once for the metric with its tags
+// created. To support GetValues being called with or without tags for a given metric, the values for tagged
+// metrics are recorded twice: once for the untagged metric ("foo") and once for the metric with its tags
 // sorted("foo [a b c]").
 func (m *MockMetricsClient) GetValues(metric string, tags ...string) ([]float64, error) {
 	m.mu.Lock()

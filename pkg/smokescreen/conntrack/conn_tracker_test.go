@@ -84,7 +84,12 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			sd := atomic.Value{}
 			sd.Store(false)
 			mockMetricsClient := metrics.NewMockMetricsClient()
-			tracker := NewTracker(time.Second, metrics.NewNoOpMetricsClient(), logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
+			tracker := NewTracker(
+				time.Second,
+				metrics.NewNoOpMetricsClient(), // We aren't testing metrics for the Tracker here, only for the embedded ConnSuccessRateTracker
+				logrus.New(),
+				sd,
+				StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 
 			for _, record := range tc.additions {
 				tracker.RecordAttempt(record.host, record.success)
