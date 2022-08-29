@@ -96,6 +96,36 @@ func TestMockMetricsClient(t *testing.T) {
 		r.Equal(c, uint64(1))
 	})
 
+	t.Run("Histogram", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		m.Histogram("foobar", 2.0, 1)
+		m.Histogram("foobar", 3.0, 1)
+		c, err := m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(2))
+		v, err := m.GetValues("foobar")
+		r.NoError(err)
+		r.Equal([]float64{2.0, 3.0}, v)
+	})
+
+	t.Run("HistogramWithTags", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		tags := []string{"foo", "bar"}
+		m.HistogramWithTags("foobar", 2.0, tags, 1)
+		c, err := m.GetCount("foobar", tags...)
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+		c, err = m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(1))
+		v, err := m.GetValues("foobar")
+		r.NoError(err)
+		r.Equal([]float64{2.0}, v)
+		v, err = m.GetValues("foobar", tags...)
+		r.NoError(err)
+		r.Equal([]float64{2.0}, v)
+	})
+
 	t.Run("Timing", func(t *testing.T) {
 		m := NewMockMetricsClient()
 		m.Timing("foobar", time.Second, 1)
