@@ -96,6 +96,18 @@ func TestMockMetricsClient(t *testing.T) {
 		r.Equal(c, uint64(1))
 	})
 
+	t.Run("Gauge", func(t *testing.T) {
+		m := NewMockMetricsClient()
+		m.Gauge("foobar", 2.0, 1)
+		m.Gauge("foobar", 3.0, 1)
+		c, err := m.GetCount("foobar")
+		r.NoError(err)
+		r.Equal(c, uint64(2))
+		v, err := m.GetValues("foobar")
+		r.NoError(err)
+		r.Equal([]float64{2.0, 3.0}, v)
+	})
+
 	t.Run("Histogram", func(t *testing.T) {
 		m := NewMockMetricsClient()
 		m.Histogram("foobar", 2.0, 1)
