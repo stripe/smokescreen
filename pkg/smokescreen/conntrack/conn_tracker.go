@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -27,7 +27,7 @@ type Tracker struct {
 	*sync.Map
 	ShuttingDown atomic.Value
 	wg           *sync.WaitGroup
-	statsc       statsd.ClientInterface
+	statsc       metrics.MetricsClientInterface
 
 	SuccessRateTracker *ConnSuccessRateTracker
 
@@ -63,7 +63,7 @@ type ConnSuccessRateStats struct {
 // - calculationInterval is how often statistics will be recomputed.
 // - calculationWindow is the period that statistics will be calculated over.
 // - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory.
-func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration, statsc statsd.ClientInterface) *ConnSuccessRateTracker {
+func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration, statsc metrics.MetricsClientInterface) *ConnSuccessRateTracker {
 	newSuccessTracker := &ConnSuccessRateTracker{
 		ConnAttempts: cache.New(calculationWindow, time.Second*cleanupInterval),
 	}
@@ -86,8 +86,8 @@ func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculati
 				successRate = (float64(succeeded) / float64(total)) * 100
 			}
 			newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: successRate, TotalConns: total})
-			statsc.Gauge("cn.atpt.distinct_domains", float64(total), []string{}, 1)
-			statsc.Gauge("cn.atpt.distinct_domains_success_rate", successRate, []string{}, 1)
+			statsc.Gauge("cn.atpt.distinct_domains", float64(total), 1)
+			statsc.Gauge("cn.atpt.distinct_domains_success_rate", successRate, 1)
 
 			time.Sleep(calculationInterval)
 		}
@@ -96,7 +96,7 @@ func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculati
 	return newSuccessTracker
 }
 
-func NewTracker(idle time.Duration, statsc statsd.ClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
+func NewTracker(idle time.Duration, statsc metrics.MetricsClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
 	return &Tracker{
 		Map:                &sync.Map{},
 		ShuttingDown:       sd,
