@@ -28,7 +28,7 @@ func TestMetricsTags(t *testing.T) {
 		r.Len(tags, 2)
 	})
 
-	t.Run("add invalid tags", func(t *testing.T) {
+	t.Run("add tags to a nonexistent metric", func(t *testing.T) {
 		metric := "acl.does.not.exist"
 		mc := NewNoOpMetricsClient()
 
