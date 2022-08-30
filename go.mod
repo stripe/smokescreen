@@ -1,6 +1,6 @@
 module github.com/stripe/smokescreen
 
-go 1.15
+go 1.17
 
 require (
 	github.com/DataDog/datadog-go v4.5.1+incompatible

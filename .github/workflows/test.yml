@@ -4,19 +4,16 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.17.x, 1.18.x]
-        platform: [ubuntu-latest]
-    runs-on: ${{ matrix.platform }}
+        go-version: ['1.17', '1.18', '1.19']
+    runs-on: ubuntu-latest
     steps:
-    - name: Install Go
-      uses: actions/setup-go@v2
+    - uses: actions/checkout@v3
+    - uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go-version }}
     - name: Setup env
       run: |
         echo "{GOFLAGS}={-mod=vendor}" >> $GITHUB_ENV
-    - name: Checkout code
-      uses: actions/checkout@v2
     - name: Vet
       run: |
         go vet -v ./...
