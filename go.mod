@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/DataDog/datadog-go v4.5.1+incompatible
-	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
 	github.com/carlmjohnson/versioninfo v0.22.4
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
@@ -16,4 +15,13 @@ require (
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.2.8
+)
+
+require (
+	github.com/Microsoft/go-winio v0.4.17 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
+	golang.org/x/text v0.3.7 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
