@@ -130,11 +130,38 @@ func NormalizeHost(s string, forceFQDN bool) (string, error) {
 		return ip.String(), nil
 	}
 	// If it's not an IP address then it must be a domain name.
+	//
+	// [idna]'s Lookup profile does not accept underscores (`_`) in domain names,
+	// an RFC violation that is unfortunately too common.
+	//
+	// Since there is no way to customize the Lookup profile, it needs to be
+	// recreated here while keeping in mind that the upstream's version is
+	// subject to change. Based on:
+	// https://cs.opensource.google/go/x/net/+/b0a4917e:idna/idna10.0.0.go;l=286-295
+	idnaProfile := idna.New(
+		idna.MapForLookup(),
+		idna.BidiRule(),
+		idna.StrictDomainName(false), // Intended diversion from idna.Lookup profile.
+	)
 	// Convert it to Punycode it so that we deal only with with ASCII from now on.
-	// This way we can find out whether the domain name is malformed.
-	domain, err := idna.Lookup.ToASCII(s)
+	// This way we can also find out whether the domain name is malformed.
+	domain, err := idnaProfile.ToASCII(s)
 	if err != nil {
 		return "", fmt.Errorf("invalid domain %q: %w", s, err)
+	}
+
+	// Given that DNS is not case sensitive, let's use the lowercase form.
+	domain = strings.ToLower(domain)
+
+	// Since we disable StrictDomainName() checks, apply our own more lenient checks.
+	// The permittable set of characters is identical to the one defined by
+	// [RFC 1034] with the notable addition of an underscore (`_`) due to its
+	// widespread use.
+	//
+	// [RFC 1034]: https://tools.ietf.org/html/rfc1034
+	const validDNSCharacters = "abcdefghijklmnopqrstuvwxyz0123456789.-_"
+	if invalid := strings.Trim(domain, validDNSCharacters); len(invalid) > 0 {
+		return domain, fmt.Errorf("invalid domain %q: disallowed rune %U", s, invalid[0])
 	}
 	if forceFQDN && domain != "" && !strings.HasSuffix(domain, ".") {
 		domain += "."

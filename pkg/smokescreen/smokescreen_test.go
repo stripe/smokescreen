@@ -449,11 +449,11 @@ var hostSquareBracketsCases = []struct {
 	hostname  string
 	msg       string
 }{
-	{"http", "http", "[stripe.com]", "invalid domain \"[stripe.com]\": idna: disallowed rune U+005B"},
+	{"http", "http", "[stripe.com]", "invalid domain \"[stripe.com]\": disallowed rune U+005B"},
 	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
-	{"http", "http", "[[stripe.com]]", "invalid domain \"[[stripe.com]]\": idna: disallowed rune U+005B"},
+	{"http", "http", "[[stripe.com]]", "invalid domain \"[[stripe.com]]\": disallowed rune U+005B"},
 	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
-	{"http", "http", "[[[stripe.com]]]", "invalid domain \"[[[stripe.com]]]\": idna: disallowed rune U+005B"},
+	{"http", "http", "[[[stripe.com]]]", "invalid domain \"[[[stripe.com]]]\": disallowed rune U+005B"},
 	{"https", "connect", "[2001:Db8::]:443", "Destination host cannot be determined"},
 	// These somewhat confusing error messages originate from net.SplitHostPort().
 	{"https", "connect", "[[[stripe.com]]]", "address [[stripe.com]]:443: missing port in address"},
