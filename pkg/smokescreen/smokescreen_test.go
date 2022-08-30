@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 var allowRanges = []string{
@@ -248,7 +248,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{}, nil)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), conf.Log, atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -289,7 +289,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	var logHook logrustest.Hook
 	conf := NewConfig()
 	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, &statsd.NoOpClient{}, conf.Log, atomic.Value{}, nil)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), conf.Log, atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -691,11 +691,11 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "EOF")
 
-		cfg.ConnTracker.Wg.Wait()
+		cfg.ConnTracker.Wg().Wait()
 
 		// The metrics client records success:true because of the way Goproxy surfaces CONNECT
 		// timeouts to Smokescreen; same reasons we test for EOF above.
-		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", "success:true")
 		r.NoError(err)
@@ -731,7 +731,7 @@ func TestProxyTimeouts(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "Gateway timeout")
 
-		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", "success:false")
 		r.NoError(err)
@@ -806,7 +806,7 @@ func TestProxyConnectFailure(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "Bad gateway")
 
-		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", "success:false")
 		r.NoError(err)
@@ -870,9 +870,9 @@ func TestProxyHalfClosed(t *testing.T) {
 	resp.Body.Close()
 	r.Equal(http.StatusOK, resp.StatusCode)
 
-	cfg.ConnTracker.Wg.Wait()
+	cfg.ConnTracker.Wg().Wait()
 
-	tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+	tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 	r.True(ok)
 	i, err := tmc.GetCount("cn.atpt.total", "success:true")
 	r.NoError(err)
@@ -922,7 +922,7 @@ func TestCustomDialTimeout(t *testing.T) {
 		r.Contains(err.Error(), "Gateway timeout")
 		r.Equal(custom, true)
 
-		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", "success:false")
 		r.NoError(err)
@@ -964,7 +964,7 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		r.Equal(custom, true)
 
-		tmc, ok := cfg.MetricsClient.(*MockMetricsClient)
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", "success:false")
 		r.NoError(err)
@@ -1052,8 +1052,8 @@ func testConfig(role string) (*Config, error) {
 		return role, nil
 	}
 
-	mc := NewMockMetricsClient()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc.StatsdClient(), conf.Log, atomic.Value{}, nil)
+	mc := metrics.NewMockMetricsClient()
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc, conf.Log, atomic.Value{}, nil)
 	conf.MetricsClient = mc
 	return conf, nil
 }

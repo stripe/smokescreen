@@ -22,6 +22,7 @@ import (
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 const (
@@ -287,7 +288,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:false"}, 1)
 		sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, false)
-		reportConnError(sctx.cfg.MetricsClient, err)
+		metrics.ReportConnError(sctx.cfg.MetricsClient, err)
 		return nil, err
 	}
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", []string{"success:true"}, 1)
@@ -660,7 +661,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 
 	// Setup connection tracking if not already set in config
 	if config.ConnTracker == nil {
-		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient.StatsdClient(), config.Log, config.ShuttingDown, nil)
+		config.ConnTracker = conntrack.NewTracker(config.IdleTimeout, config.MetricsClient, config.Log, config.ShuttingDown, nil)
 	}
 
 	server := http.Server{
@@ -741,7 +742,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 		// This subroutine blocks until all connections close.
 		go func() {
 			config.Log.Print("Waiting for all connections to close...")
-			config.ConnTracker.Wg.Wait()
+			config.ConnTracker.Wg().Wait()
 			config.Log.Print("All connections are closed. Continuing with shutdown...")
 			exit <- Closed
 		}()

@@ -1,4 +1,4 @@
-package smokescreen
+package metrics
 
 import (
 	"errors"
@@ -28,6 +28,9 @@ var metrics = []string{
 	"cn.atpt.total",        // Total connection attempts, tagged by success
 	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
 	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
+	// The following are only emitted if Smokescreen is configured to use a ConnSuccessRateTracker.
+	"cn.atpt.distinct_domains",              // Number of distinct domains seen by ConnSuccessRateTracker in computation window
+	"cn.atpt.distinct_domains_success_rate", // Domain connection success rate computed by ConnSuccessRateTracker
 
 	// DNS resolution statistics
 	"resolver.allow.default",
@@ -53,6 +56,9 @@ type MetricsClientInterface interface {
 	AddMetricTags(string, []string) error
 	Incr(string, float64) error
 	IncrWithTags(string, []string, float64) error
+	Gauge(string, float64, float64) error
+	Histogram(string, float64, float64) error
+	HistogramWithTags(string, float64, []string, float64) error
 	Timing(string, time.Duration, float64) error
 	TimingWithTags(string, time.Duration, float64, []string) error
 	StatsdClient() statsd.ClientInterface
@@ -98,6 +104,11 @@ func NewNoOpMetricsClient() *MetricsClient {
 // AddMetricTags associates the provided tags slice with a given metric. The metric must be present
 // in the metrics slice.
 //
+// Once a metric has tags added via AddMetricTags, those tags will *always* be attached whenever
+// that metric is emitted.
+// For example, calling `AddMetricTags(foo, [bar])` will cause the `bar` tag to be added to
+// *every* metric `foo` that is emitted for the lifetime of the MetricsClient.
+//
 // This function is not thread safe, and adding persitent tags should only be done while initializing
 // the configuration and prior to running smokescreen.
 func (mc *MetricsClient) AddMetricTags(metric string, mTags []string) error {
@@ -130,6 +141,22 @@ func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64
 	return mc.statsdClient.Incr(metric, tags, rate)
 }
 
+func (mc *MetricsClient) Gauge(metric string, value float64, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	return mc.statsdClient.Gauge(metric, value, mTags, rate)
+}
+
+func (mc *MetricsClient) Histogram(metric string, value float64, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	return mc.statsdClient.Histogram(metric, value, mTags, rate)
+}
+
+func (mc *MetricsClient) HistogramWithTags(metric string, value float64, tags []string, rate float64) error {
+	mTags := mc.GetMetricTags(metric)
+	tags = append(tags, mTags...)
+	return mc.statsdClient.Histogram(metric, value, tags, rate)
+}
+
 func (mc *MetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	mTags := mc.GetMetricTags(metric)
 	return mc.statsdClient.Timing(metric, d, mTags, rate)
@@ -154,7 +181,7 @@ var _ MetricsClientInterface = &MetricsClient{}
 
 // reportConnError emits a detailed metric about a connection error, with a tag corresponding to
 // the failure type. If err is not a net.Error, does nothing.
-func reportConnError(mc MetricsClientInterface, err error) {
+func ReportConnError(mc MetricsClientInterface, err error) {
 	e, ok := err.(net.Error)
 	if !ok {
 		return

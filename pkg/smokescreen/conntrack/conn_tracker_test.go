@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 var testLogger = logrus.New()
@@ -49,7 +49,7 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	sd := atomic.Value{}
 	sd.Store(false)
 
-	return NewTracker(idle, &statsd.NoOpClient{}, logrus.New(), sd, nil)
+	return NewTracker(idle, metrics.NewNoOpMetricsClient(), logrus.New(), sd, nil)
 }
 
 // TestConnSuccessRateTracker tests that a ConnTracker with a ConnSuccessRateTracker correctly
@@ -68,7 +68,7 @@ func TestConnSuccessRateTracker(t *testing.T) {
 		totalConns   int
 	}{
 		{"fifty-percent-success", []record{{"foo.com", true}, {"bar.com", false}}, 1 * time.Second, 50.0, 2},
-		{"no-records", []record{}, 0 * time.Second, 100.0, 0},
+		{"no-records", []record{}, 2 * time.Second, 100.0, 0},
 		// If we wait beyond the calculation window, we should have no records and return the default 100% rate
 		{"expire-records", []record{{"foo.com", true}, {"bar.com", false}}, 3 * time.Second, 100.0, 0},
 		// Only the most recent record for a host is used in the computation
@@ -83,7 +83,13 @@ func TestConnSuccessRateTracker(t *testing.T) {
 
 			sd := atomic.Value{}
 			sd.Store(false)
-			tracker := NewTracker(time.Second, &statsd.NoOpClient{}, logrus.New(), sd, StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second))
+			mockMetricsClient := metrics.NewMockMetricsClient()
+			tracker := NewTracker(
+				time.Second,
+				metrics.NewNoOpMetricsClient(), // We aren't testing metrics for the Tracker here, only for the embedded ConnSuccessRateTracker
+				logrus.New(),
+				sd,
+				StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 
 			for _, record := range tc.additions {
 				tracker.RecordAttempt(record.host, record.success)
@@ -94,6 +100,15 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			stats := tracker.ReportConnectionSuccessRate()
 			assert.InDelta(tc.expectedRate, stats.ConnSuccessRate, 0.01)
 			assert.Equal(tc.totalConns, stats.TotalConns)
+
+			v, err := mockMetricsClient.GetValues("cn.atpt.distinct_domains_success_rate")
+			assert.NoError(err)
+			assert.Equal(tc.expectedRate, v[len(v)-1])
+
+			v, err = mockMetricsClient.GetValues("cn.atpt.distinct_domains")
+			assert.NoError(err)
+			assert.Equal(tc.totalConns, int(v[len(v)-1]))
+
 		})
 	}
 }
