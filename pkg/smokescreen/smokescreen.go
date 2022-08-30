@@ -266,6 +266,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		}
 	}
 
+	// This represents the elapsed time between the proxy request being received until
+	// we attempt to dial the remote host. This is intended to measure the latency
+	// cost incurred by Smokescreen.
+	sctx.cfg.MetricsClient.Timing("proxy_duration_ms", time.Since(sctx.start), 1)
+
 	var conn net.Conn
 	var err error
 
