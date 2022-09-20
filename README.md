@@ -126,7 +126,7 @@ Three policies are supported:
 | Report  | Allows all traffic for this service and warns if client accesses a remote host which is not in the list        |
 | Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
 
-A host can be specified with or without a globbing prefix
+A host can be specified with or without a globbing prefix. The host (without the globbing prefix) must be in Punycode to prevent ambiguity.
 
 | host                | valid   |
 | ------------------- | ------- |
@@ -135,6 +135,7 @@ A host can be specified with or without a globbing prefix
 | `api.*.example.com` | no      |
 | `*example.com`      | no      |
 | `ex*ample.com`      | no      |
+| `éxämple.com`       | no      |
 | `example.*`         | hell no |
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
