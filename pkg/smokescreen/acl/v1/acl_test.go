@@ -238,26 +238,44 @@ func TestACLMalformedPolicyDisable(t *testing.T) {
 }
 
 func TestACLAddInvalidGlob(t *testing.T) {
-	a := assert.New(t)
-
-	invalidGlobs := []string{
-		"*.*.stripe.com", // multiple wildcards
-		"*",              // matches everything
-		"*.",             // matches everything
+	invalidGlobs := map[string]struct {
+		glob     string
+		errorMsg string
+	}{
+		"multiple wildcards": {
+			"*.*.stripe.com",
+			"domain globs are only supported as prefix",
+		},
+		"matches everything (*)": {
+			"*",
+			"domain glob must not match everything",
+		},
+		"matches everything (*.)": {
+			"*.",
+			"domain glob must not match everything",
+		},
+		"non-normalized domain": {
+			"éxämple.com",
+			"incorrect ACL entry; use \"xn--xmple-gra7a.com\"",
+		},
 	}
 
 	acl := &ACL{
 		Rules: make(map[string]Rule),
 	}
 
-	for _, glob := range invalidGlobs {
-		err := acl.Add("acl", Rule{
-			Project:     "security",
-			Policy:      Open,
-			DomainGlobs: []string{glob},
-		})
+	for name, g := range invalidGlobs {
+		t.Run(name, func(t *testing.T) {
+			a := assert.New(t)
 
-		a.Errorf(err, "did not reject invalid glob %q", glob)
+			err := acl.Add("acl", Rule{
+				Project:     "security",
+				Policy:      Open,
+				DomainGlobs: []string{g.glob},
+			})
+
+			a.ErrorContains(err, g.errorMsg)
+		})
 	}
 }
 

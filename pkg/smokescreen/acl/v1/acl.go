@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 )
 
 type Decider interface {
@@ -175,6 +176,8 @@ func (acl *ACL) Validate() error {
 //
 // Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
 // pattern is allowed. Globs must include text after a wildcard.
+//
+// Domains must use their normalized form (e.g., Punycode)
 func (acl *ACL) ValidateDomainGlobs(svc string, globs []string) error {
 	for _, glob := range globs {
 		if glob == "" {
@@ -192,6 +195,19 @@ func (acl *ACL) ValidateDomainGlobs(svc string, globs []string) error {
 		domainToCheck := strings.TrimPrefix(glob, "*")
 		if strings.Contains(domainToCheck, "*") {
 			return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
+		}
+
+		normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
+
+		if err != nil {
+			return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
+		} else if normalizedDomain != domainToCheck {
+			// There was no error but the config contains a non-normalized form
+			if strings.HasPrefix(glob, "*.") {
+				// (Re-add) wildcard if one was provided (for the error message)
+				normalizedDomain = "*." + normalizedDomain
+			}
+			return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
 		}
 	}
 	return nil
