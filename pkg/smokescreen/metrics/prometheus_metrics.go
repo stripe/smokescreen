@@ -177,7 +177,6 @@ func mapKeys[T comparable, U any](inputMap map[T]U) []T {
 	for k := range inputMap {
 		keys = append(keys, k)
 	}
-
 	return keys
 }
 

@@ -54,14 +54,15 @@ func (m *MockMetricsClient) countOneWithValue(metric string, value float64) {
 // created. To support GetCount being called with or without tags for a given metric, tagged metrics
 // are counted twice: once for the untagged metric ("foo") and once for the metric with its tags
 // sorted("foo [a b c]").
-func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, error) {
+func (m *MockMetricsClient) GetCount(metric string, tags map[string]string) (uint64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	mName := metric
-	sort.Strings(tags)
+	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
+	sort.Strings(comparableTags)
 	if len(tags) > 0 {
-		mName = fmt.Sprintf("%s %v", mName, tags)
+		mName = fmt.Sprintf("%s %v", mName, comparableTags)
 	}
 	i, ok := m.counts[mName]
 	if !ok {
@@ -79,12 +80,13 @@ func (m *MockMetricsClient) GetCount(metric string, tags ...string) (uint64, err
 // created. To support GetValues being called with or without tags for a given metric, the values for tagged
 // metrics are recorded twice: once for the untagged metric ("foo") and once for the metric with its tags
 // sorted("foo [a b c]").
-func (m *MockMetricsClient) GetValues(metric string, tags ...string) ([]float64, error) {
+func (m *MockMetricsClient) GetValues(metric string, tags map[string]string) ([]float64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	mName := metric
-	sort.Strings(tags)
+	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
+	sort.Strings(comparableTags)
 	if len(tags) > 0 {
 		mName = fmt.Sprintf("%s %v", mName, tags)
 	}
@@ -178,3 +180,11 @@ func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate 
 }
 
 var _ MetricsClientInterface = &MockMetricsClient{}
+
+func convertMapOfTagsToArrayOfStrings(inputMap map[string]string) []string {
+	var tags []string
+	for k, v := range inputMap {
+		tags = append(tags, fmt.Sprintf("%s:%s", k, v))
+	}
+	return tags
+}
