@@ -319,7 +319,7 @@ func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 		return nil
 	}
 
-	mc, err := metrics.NewMetricsClient(addr, namespace)
+	mc, err := metrics.NewStatsdMetricsClient(addr, namespace)
 	if err != nil {
 		return err
 	}
@@ -329,6 +329,15 @@ func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 
 func (config *Config) SetupStatsd(addr string) error {
 	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
+}
+
+func (config *Config) SetupPrometheus(endpoint string) error {
+	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint)
+	if err != nil {
+		return err
+	}
+	config.MetricsClient = metricsClient
+	return nil
 }
 
 func (config *Config) SetupEgressAcl(aclFile string) error {

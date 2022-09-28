@@ -95,6 +95,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
 		},
 		cli.StringFlag{
+			Name:  "prometheus-endpoint",
+			Usage: "Expose metrics via prometheus on `ENDPOINT`.",
+		},
+		cli.StringFlag{
 			Name:  "tls-server-bundle-file",
 			Usage: "Authenticate to clients using key and certs from `FILE`",
 		},
@@ -225,6 +229,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("statsd-address") {
 			if err := conf.SetupStatsd(c.String("statsd-address")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("prometheus-endpoint") {
+			if err := conf.SetupPrometheus(c.String("prometheus-endpoint")); err != nil {
 				return err
 			}
 		}
