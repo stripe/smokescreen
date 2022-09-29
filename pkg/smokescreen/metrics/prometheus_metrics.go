@@ -25,8 +25,7 @@ type PrometheusMetricsClient struct {
 }
 
 func NewPrometheusMetricsClient(endpoint string) (*PrometheusMetricsClient, error) {
-	// TODO - Find where this should live
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle(endpoint, promhttp.Handler())
 	go http.ListenAndServe(":2112", nil)
 
 	metricsTags := make(map[string]map[string]string)
