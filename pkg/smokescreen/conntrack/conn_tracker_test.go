@@ -101,11 +101,11 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			assert.InDelta(tc.expectedRate, stats.ConnSuccessRate, 0.01)
 			assert.Equal(tc.totalConns, stats.TotalConns)
 
-			v, err := mockMetricsClient.GetValues("cn.atpt.distinct_domains_success_rate")
+			v, err := mockMetricsClient.GetValues("cn.atpt.distinct_domains_success_rate", map[string]string{})
 			assert.NoError(err)
 			assert.Equal(tc.expectedRate, v[len(v)-1])
 
-			v, err = mockMetricsClient.GetValues("cn.atpt.distinct_domains")
+			v, err = mockMetricsClient.GetValues("cn.atpt.distinct_domains", map[string]string{})
 			assert.NoError(err)
 			assert.Equal(tc.totalConns, int(v[len(v)-1]))
 

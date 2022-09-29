@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// MockMetricsClient is a StatsdMetricsClient that counts metric updates.
+// MockMetricsClient is a MetricsClient that counts metric updates.
 type MockMetricsClient struct {
-	StatsdMetricsClient
+	MetricsClientInterface
 
 	counts map[string]uint64
 	values map[string][]float64
@@ -21,7 +21,7 @@ type MockMetricsClient struct {
 // with counters to track metric updates.
 func NewMockMetricsClient() *MockMetricsClient {
 	return &MockMetricsClient{
-		*NewNoOpMetricsClient(),
+		&*NewNoOpMetricsClient(),
 		make(map[string]uint64),
 		make(map[string][]float64),
 		sync.Mutex{},
@@ -88,7 +88,7 @@ func (m *MockMetricsClient) GetValues(metric string, tags map[string]string) ([]
 	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
 	sort.Strings(comparableTags)
 	if len(tags) > 0 {
-		mName = fmt.Sprintf("%s %v", mName, tags)
+		mName = fmt.Sprintf("%s %v", mName, comparableTags)
 	}
 	i, ok := m.values[mName]
 	if !ok {
@@ -107,7 +107,7 @@ func (m *MockMetricsClient) Incr(metric string, rate float64) error {
 	defer m.mu.Unlock()
 	m.countOne(metric)
 
-	return m.StatsdMetricsClient.Incr(metric, rate)
+	return m.MetricsClientInterface.Incr(metric, rate)
 }
 
 func (m *MockMetricsClient) IncrWithTags(metric string, tags map[string]string, rate float64) error {
@@ -118,11 +118,12 @@ func (m *MockMetricsClient) IncrWithTags(metric string, tags map[string]string, 
 	m.countOne(metric)
 
 	// Count the metric name with its tags sorted
-	//sort.Strings(tags)
-	mName := fmt.Sprintf("%s %v", metric, tags)
+	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
+	sort.Strings(comparableTags)
+	mName := fmt.Sprintf("%s %v", metric, comparableTags)
 	m.countOne(mName)
 
-	return m.StatsdMetricsClient.IncrWithTags(metric, tags, rate)
+	return m.MetricsClientInterface.IncrWithTags(metric, tags, rate)
 }
 
 func (m *MockMetricsClient) Gauge(metric string, value float64, rate float64) error {
@@ -130,7 +131,7 @@ func (m *MockMetricsClient) Gauge(metric string, value float64, rate float64) er
 	defer m.mu.Unlock()
 	m.countOneWithValue(metric, value)
 
-	return m.StatsdMetricsClient.Incr(metric, rate)
+	return m.MetricsClientInterface.Incr(metric, rate)
 }
 
 func (m *MockMetricsClient) Histogram(metric string, value float64, rate float64) error {
@@ -138,7 +139,7 @@ func (m *MockMetricsClient) Histogram(metric string, value float64, rate float64
 	defer m.mu.Unlock()
 	m.countOneWithValue(metric, value)
 
-	return m.StatsdMetricsClient.Incr(metric, rate)
+	return m.MetricsClientInterface.Incr(metric, rate)
 }
 
 func (m *MockMetricsClient) HistogramWithTags(metric string, value float64, tags map[string]string, rate float64) error {
@@ -149,11 +150,12 @@ func (m *MockMetricsClient) HistogramWithTags(metric string, value float64, tags
 	m.countOneWithValue(metric, value)
 
 	// Count the metric name with its tags sorted
-	//sort.Strings(tags)
-	mName := fmt.Sprintf("%s %v", metric, tags)
+	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
+	sort.Strings(comparableTags)
+	mName := fmt.Sprintf("%s %v", metric, comparableTags)
 	m.countOneWithValue(mName, value)
 
-	return m.StatsdMetricsClient.IncrWithTags(metric, tags, rate)
+	return m.MetricsClientInterface.IncrWithTags(metric, tags, rate)
 }
 
 func (m *MockMetricsClient) Timing(metric string, d time.Duration, rate float64) error {
@@ -161,7 +163,7 @@ func (m *MockMetricsClient) Timing(metric string, d time.Duration, rate float64)
 	defer m.mu.Unlock()
 	m.countOne(metric)
 
-	return m.StatsdMetricsClient.Timing(metric, d, rate)
+	return m.MetricsClientInterface.Timing(metric, d, rate)
 }
 
 func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate float64, tags map[string]string) error {
@@ -172,11 +174,12 @@ func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate 
 	m.countOne(metric)
 
 	// Count the metric name with its tags sorted
-	//sort.Strings(tags)
-	mName := fmt.Sprintf("%s %v", metric, tags)
+	comparableTags := convertMapOfTagsToArrayOfStrings(tags)
+	sort.Strings(comparableTags)
+	mName := fmt.Sprintf("%s %v", metric, comparableTags)
 	m.countOne(mName)
 
-	return m.StatsdMetricsClient.TimingWithTags(metric, d, rate, tags)
+	return m.MetricsClientInterface.TimingWithTags(metric, d, rate, tags)
 }
 
 var _ MetricsClientInterface = &MockMetricsClient{}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 	"sync/atomic"
 	"time"
 )
@@ -23,8 +25,9 @@ type PrometheusMetricsClient struct {
 }
 
 func NewPrometheusMetricsClient(endpoint string) (*PrometheusMetricsClient, error) {
-	//fmt.Println("Starting prometheus endpoint")
-	//http.Handle(endpoint, promhttp.Handler())
+	// TODO - Find where this should live
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":2112", nil)
 
 	metricsTags := make(map[string]map[string]string)
 	for _, m := range Metrics {
@@ -162,7 +165,7 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 	value float64,
 	tags map[string]string) {
 	if existingHistogram, ok := mc.histograms[metric]; ok {
-		existingHistogram.With(prometheus.Labels{}).Observe(value)
+		existingHistogram.With(tags).Observe(value)
 	} else {
 		histogram := promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name: metric,

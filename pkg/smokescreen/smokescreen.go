@@ -925,12 +925,6 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		return decision
 	}
 
-	/*tags := []string{
-		fmt.Sprintf("role:%s", decision.role),
-		fmt.Sprintf("def_rule:%t", aclDecision.Default),
-		fmt.Sprintf("project:%s", aclDecision.Project),
-	}*/
-
 	tags := map[string]string{
 		"role":     decision.role,
 		"def_rule": fmt.Sprintf("%t", aclDecision.Default),
