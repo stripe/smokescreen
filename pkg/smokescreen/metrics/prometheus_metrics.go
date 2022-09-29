@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -21,7 +20,7 @@ type PrometheusMetricsClient struct {
 	counters   map[string]prometheus.CounterVec
 	gauges     map[string]prometheus.GaugeVec
 	histograms map[string]prometheus.HistogramVec
-	timings    map[string]prometheus.Timer
+	timings    map[string]prometheus.HistogramVec
 }
 
 func NewPrometheusMetricsClient(endpoint string) (*PrometheusMetricsClient, error) {
@@ -110,10 +109,11 @@ func (mc *PrometheusMetricsClient) HistogramWithTags(
 
 func (mc *PrometheusMetricsClient) Timing(
 	metric string,
-	d time.Duration,
+	duration time.Duration,
 	_ float64) error {
-	// TODO - JMcC complete
-	return errors.New("UNIMPLEMENTED")
+	baseTags := mc.GetMetricTags(metric)
+	mc.observeValuePrometheusTimer(metric, duration, baseTags)
+	return nil
 }
 
 func (mc *PrometheusMetricsClient) TimingWithTags(
@@ -121,8 +121,10 @@ func (mc *PrometheusMetricsClient) TimingWithTags(
 	d time.Duration,
 	_ float64,
 	tags map[string]string) error {
-	// TODO - JMcC complete
-	return errors.New("UNIMPLEMENTED")
+	baseTags := mc.GetMetricTags(metric)
+	mergeMaps(tags, baseTags)
+	mc.observeValuePrometheusTimer(metric, d, tags)
+	return nil
 }
 
 func (mc *PrometheusMetricsClient) SetStarted() {
@@ -170,6 +172,22 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 			Name: metric,
 		}, mapKeys(tags))
 		histogram.With(tags).Observe(value)
+		mc.histograms[metric] = *histogram
+	}
+}
+
+func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
+	metric string,
+	duration time.Duration,
+	tags map[string]string) {
+	if existingHistogram, ok := mc.timings[metric]; ok {
+		existingHistogram.With(tags).Observe(float64(duration.Milliseconds()))
+	} else {
+		histogram := promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name: metric,
+		}, mapKeys(tags))
+
+		histogram.With(tags).Observe(float64(duration.Milliseconds()))
 		mc.histograms[metric] = *histogram
 	}
 }
