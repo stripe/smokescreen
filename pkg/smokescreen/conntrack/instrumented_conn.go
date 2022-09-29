@@ -92,9 +92,6 @@ func (ic *InstrumentedConn) Close() error {
 	end := time.Now()
 	duration := end.Sub(ic.Start).Seconds()
 
-	/*tags := []string{
-		fmt.Sprintf("role:%s", ic.Role),
-	}*/
 	tags := map[string]string{
 		"role": ic.Role,
 	}

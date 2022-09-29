@@ -290,7 +290,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	if sctx.cfg.TimeConnect {
-		//domainTag := fmt.Sprintf("domain:%s", sctx.requestedHost)
 		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, 1, map[string]string{"domain": sctx.requestedHost})
 	}
 
@@ -695,8 +694,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	server := http.Server{
 		Handler: handler,
 	}
-
-	// If prometheus is used, the metrics endpoint is exposed
 
 	// This sets an IdleTimeout on _all_ client connections. CONNECT requests
 	// hijacked by goproxy inherit the deadline set here. The deadlines are
