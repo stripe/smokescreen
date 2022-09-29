@@ -6,6 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -35,18 +36,23 @@ func NewPrometheusMetricsClient(endpoint string) (*PrometheusMetricsClient, erro
 	return &PrometheusMetricsClient{
 		metricsTags: metricsTags,
 		endpoint:    endpoint,
+		counters:    map[string]prometheus.CounterVec{},
+		gauges:      map[string]prometheus.GaugeVec{},
+		histograms:  map[string]prometheus.HistogramVec{},
+		timings:     map[string]prometheus.HistogramVec{},
 	}, nil
 }
 
 func (mc *PrometheusMetricsClient) AddMetricTags(
 	metric string,
 	mTags map[string]string) error {
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
 	if mc.started.Load() != nil {
 		return fmt.Errorf("cannot add metrics tags after starting smokescreen")
 	}
-	if _, ok := mc.metricsTags[metric]; ok {
+	if _, ok := mc.metricsTags[sanitisedMetric]; ok {
 		for k, v := range mTags {
-			mc.metricsTags[metric][k] = v
+			mc.metricsTags[sanitisedMetric][k] = v
 		}
 		return nil
 	}
@@ -54,7 +60,8 @@ func (mc *PrometheusMetricsClient) AddMetricTags(
 }
 
 func (mc *PrometheusMetricsClient) GetMetricTags(metric string) map[string]string {
-	if tags, ok := mc.metricsTags[metric]; ok {
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+	if tags, ok := mc.metricsTags[sanitisedMetric]; ok {
 		return tags
 	}
 	return nil
@@ -63,8 +70,9 @@ func (mc *PrometheusMetricsClient) GetMetricTags(metric string) map[string]strin
 func (mc *PrometheusMetricsClient) Incr(
 	metric string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mc.incrementPrometheusCounter(metric, baseTags)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+	baseTags := mc.GetMetricTags(sanitisedMetric)
+	mc.incrementPrometheusCounter(sanitisedMetric, baseTags)
 	return nil
 }
 
@@ -72,9 +80,12 @@ func (mc *PrometheusMetricsClient) IncrWithTags(
 	metric string,
 	tags map[string]string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
 	mergeMaps(tags, baseTags)
-	mc.incrementPrometheusCounter(metric, tags)
+	mc.incrementPrometheusCounter(sanitisedMetric, tags)
+
 	return nil
 }
 
@@ -82,8 +93,11 @@ func (mc *PrometheusMetricsClient) Gauge(
 	metric string,
 	value float64,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mc.updatePrometheusGauge(metric, value, baseTags)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
+	mc.updatePrometheusGauge(sanitisedMetric, value, baseTags)
+
 	return nil
 }
 
@@ -91,8 +105,11 @@ func (mc *PrometheusMetricsClient) Histogram(
 	metric string,
 	value float64,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mc.observeValuePrometheusHistogram(metric, value, baseTags)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
+	mc.observeValuePrometheusHistogram(sanitisedMetric, value, baseTags)
+
 	return nil
 }
 
@@ -101,9 +118,12 @@ func (mc *PrometheusMetricsClient) HistogramWithTags(
 	value float64,
 	tags map[string]string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
 	mergeMaps(tags, baseTags)
-	mc.observeValuePrometheusHistogram(metric, value, tags)
+	mc.observeValuePrometheusHistogram(sanitisedMetric, value, tags)
+
 	return nil
 }
 
@@ -111,8 +131,11 @@ func (mc *PrometheusMetricsClient) Timing(
 	metric string,
 	duration time.Duration,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mc.observeValuePrometheusTimer(metric, duration, baseTags)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
+	mc.observeValuePrometheusTimer(sanitisedMetric, duration, baseTags)
+
 	return nil
 }
 
@@ -121,9 +144,12 @@ func (mc *PrometheusMetricsClient) TimingWithTags(
 	d time.Duration,
 	_ float64,
 	tags map[string]string) error {
-	baseTags := mc.GetMetricTags(metric)
+	sanitisedMetric := sanitisePrometheusMetricName(metric)
+
+	baseTags := mc.GetMetricTags(sanitisedMetric)
 	mergeMaps(tags, baseTags)
-	mc.observeValuePrometheusTimer(metric, d, tags)
+	mc.observeValuePrometheusTimer(sanitisedMetric, d, tags)
+
 	return nil
 }
 
@@ -136,12 +162,12 @@ var _ MetricsClientInterface = &PrometheusMetricsClient{}
 
 func (mc *PrometheusMetricsClient) incrementPrometheusCounter(metric string, tags map[string]string) {
 	if existingCounter, ok := mc.counters[metric]; ok {
-		existingCounter.With(prometheus.Labels{}).Inc()
+		existingCounter.With(tags).Inc()
 	} else {
 		counter := promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: metric,
 		}, mapKeys(tags))
-		counter.With(prometheus.Labels{}).Inc()
+		counter.With(tags).Inc()
 		mc.counters[metric] = *counter
 	}
 }
@@ -204,4 +230,8 @@ func mergeMaps[T comparable, U any](leftMap map[T]U, rightMap map[T]U) {
 	for k, v := range rightMap {
 		leftMap[k] = v
 	}
+}
+
+func sanitisePrometheusMetricName(metric string) string {
+	return strings.ReplaceAll(metric, ".", "_")
 }
