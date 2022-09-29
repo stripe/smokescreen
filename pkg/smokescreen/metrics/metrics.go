@@ -47,7 +47,7 @@ type MetricsClientInterface interface {
 	Histogram(string, float64, float64) error
 	HistogramWithTags(string, float64, map[string]string, float64) error
 	Timing(string, time.Duration, float64) error
-	TimingWithTags(string, time.Duration, float64, map[string]string) error
+	TimingWithTags(string, time.Duration, map[string]string, float64) error
 	SetStarted()
 }
 

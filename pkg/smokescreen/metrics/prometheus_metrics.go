@@ -45,13 +45,13 @@ func NewPrometheusMetricsClient(endpoint string) (*PrometheusMetricsClient, erro
 
 func (mc *PrometheusMetricsClient) AddMetricTags(
 	metric string,
-	mTags map[string]string) error {
+	additionalTags map[string]string) error {
 	sanitisedMetric := sanitisePrometheusMetricName(metric)
 	if mc.started.Load() != nil {
 		return fmt.Errorf("cannot add metrics tags after starting smokescreen")
 	}
 	if _, ok := mc.metricsTags[sanitisedMetric]; ok {
-		for k, v := range mTags {
+		for k, v := range additionalTags {
 			mc.metricsTags[sanitisedMetric][k] = v
 		}
 		return nil
@@ -69,22 +69,19 @@ func (mc *PrometheusMetricsClient) GetMetricTags(metric string) map[string]strin
 
 func (mc *PrometheusMetricsClient) Incr(
 	metric string,
-	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mc.incrementPrometheusCounter(sanitisedMetric, baseTags)
-	return nil
+	rate float64) error {
+	return mc.IncrWithTags(metric, map[string]string{}, rate)
 }
 
 func (mc *PrometheusMetricsClient) IncrWithTags(
 	metric string,
-	tags map[string]string,
+	additionalTags map[string]string,
 	_ float64) error {
 	sanitisedMetric := sanitisePrometheusMetricName(metric)
 
 	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mergeMaps(tags, baseTags)
-	mc.incrementPrometheusCounter(sanitisedMetric, tags)
+	mergeMaps(additionalTags, baseTags)
+	mc.incrementPrometheusCounter(sanitisedMetric, additionalTags)
 
 	return nil
 }
@@ -104,25 +101,20 @@ func (mc *PrometheusMetricsClient) Gauge(
 func (mc *PrometheusMetricsClient) Histogram(
 	metric string,
 	value float64,
-	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mc.observeValuePrometheusHistogram(sanitisedMetric, value, baseTags)
-
-	return nil
+	rate float64) error {
+	return mc.HistogramWithTags(metric, value, map[string]string{}, rate)
 }
 
 func (mc *PrometheusMetricsClient) HistogramWithTags(
 	metric string,
 	value float64,
-	tags map[string]string,
+	additionalTags map[string]string,
 	_ float64) error {
 	sanitisedMetric := sanitisePrometheusMetricName(metric)
 
 	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mergeMaps(tags, baseTags)
-	mc.observeValuePrometheusHistogram(sanitisedMetric, value, tags)
+	mergeMaps(additionalTags, baseTags)
+	mc.observeValuePrometheusHistogram(sanitisedMetric, value, additionalTags)
 
 	return nil
 }
@@ -130,25 +122,20 @@ func (mc *PrometheusMetricsClient) HistogramWithTags(
 func (mc *PrometheusMetricsClient) Timing(
 	metric string,
 	duration time.Duration,
-	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mc.observeValuePrometheusTimer(sanitisedMetric, duration, baseTags)
-
-	return nil
+	rate float64) error {
+	return mc.TimingWithTags(metric, duration, map[string]string{}, rate)
 }
 
 func (mc *PrometheusMetricsClient) TimingWithTags(
 	metric string,
 	d time.Duration,
-	_ float64,
-	tags map[string]string) error {
+	additionalTags map[string]string,
+	_ float64) error {
 	sanitisedMetric := sanitisePrometheusMetricName(metric)
 
 	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mergeMaps(tags, baseTags)
-	mc.observeValuePrometheusTimer(sanitisedMetric, d, tags)
+	mergeMaps(additionalTags, baseTags)
+	mc.observeValuePrometheusTimer(sanitisedMetric, d, additionalTags)
 
 	return nil
 }
@@ -160,7 +147,9 @@ func (mc *PrometheusMetricsClient) SetStarted() {
 // PrometheusMetricsClient implements MetricsClientInterface
 var _ MetricsClientInterface = &PrometheusMetricsClient{}
 
-func (mc *PrometheusMetricsClient) incrementPrometheusCounter(metric string, tags map[string]string) {
+func (mc *PrometheusMetricsClient) incrementPrometheusCounter(
+	metric string,
+	tags map[string]string) {
 	if existingCounter, ok := mc.counters[metric]; ok {
 		existingCounter.With(tags).Inc()
 	} else {

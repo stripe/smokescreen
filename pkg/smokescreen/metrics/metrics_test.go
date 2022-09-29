@@ -149,7 +149,7 @@ func TestMockMetricsClient(t *testing.T) {
 	t.Run("TimingWithTags", func(t *testing.T) {
 		m := NewMockMetricsClient()
 		tags := map[string]string{"foo": "value", "bar": "value"}
-		m.TimingWithTags("foobar", time.Second, 1, tags)
+		m.TimingWithTags("foobar", time.Second, tags, 1)
 		c, err := m.GetCount("foobar", tags)
 		r.NoError(err)
 		r.Equal(c, uint64(1))

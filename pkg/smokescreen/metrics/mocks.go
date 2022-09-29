@@ -110,7 +110,9 @@ func (m *MockMetricsClient) Incr(metric string, rate float64) error {
 	return m.MetricsClientInterface.Incr(metric, rate)
 }
 
-func (m *MockMetricsClient) IncrWithTags(metric string, tags map[string]string, rate float64) error {
+func (m *MockMetricsClient) IncrWithTags(
+	metric string,
+	tags map[string]string, rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -142,7 +144,11 @@ func (m *MockMetricsClient) Histogram(metric string, value float64, rate float64
 	return m.MetricsClientInterface.Incr(metric, rate)
 }
 
-func (m *MockMetricsClient) HistogramWithTags(metric string, value float64, tags map[string]string, rate float64) error {
+func (m *MockMetricsClient) HistogramWithTags(
+	metric string,
+	value float64,
+	tags map[string]string,
+	rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -166,7 +172,11 @@ func (m *MockMetricsClient) Timing(metric string, d time.Duration, rate float64)
 	return m.MetricsClientInterface.Timing(metric, d, rate)
 }
 
-func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate float64, tags map[string]string) error {
+func (m *MockMetricsClient) TimingWithTags(
+	metric string,
+	d time.Duration,
+	tags map[string]string,
+	rate float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -179,7 +189,7 @@ func (m *MockMetricsClient) TimingWithTags(metric string, d time.Duration, rate 
 	mName := fmt.Sprintf("%s %v", metric, comparableTags)
 	m.countOne(mName)
 
-	return m.MetricsClientInterface.TimingWithTags(metric, d, rate, tags)
+	return m.MetricsClientInterface.TimingWithTags(metric, d, tags, rate)
 }
 
 var _ MetricsClientInterface = &MockMetricsClient{}

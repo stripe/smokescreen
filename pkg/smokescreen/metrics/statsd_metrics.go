@@ -131,8 +131,8 @@ func (mc *StatsdMetricsClient) Timing(metric string, d time.Duration, rate float
 func (mc *StatsdMetricsClient) TimingWithTags(
 	metric string,
 	d time.Duration,
-	rate float64,
-	additionalTags map[string]string) error {
+	additionalTags map[string]string,
+	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
 	return mc.statsdClient.Timing(metric, d, combinedTags, rate)
