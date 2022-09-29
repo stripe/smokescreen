@@ -290,7 +290,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	if sctx.cfg.TimeConnect {
-		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, 1, map[string]string{"domain": sctx.requestedHost})
+		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, map[string]string{"domain": sctx.requestedHost}, 1)
 	}
 
 	if err != nil {

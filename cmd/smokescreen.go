@@ -85,6 +85,15 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "egress-acl-file",
 			Usage: "Validate egress traffic against `FILE`",
 		},
+		cli.StringFlag{
+			Name:  "prometheus-endpoint",
+			Usage: "Expose metrics via prometheus on `ENDPOINT`.",
+		},
+		cli.StringFlag{
+			Name:  "prometheus-port",
+			Value: "9810",
+			Usage: "Expose metrics via prometheus on `PORT`.",
+		},
 		cli.StringSliceFlag{
 			Name:  "resolver-address",
 			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable.",
@@ -93,10 +102,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "statsd-address",
 			Value: "127.0.0.1:8200",
 			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
-		},
-		cli.StringFlag{
-			Name:  "prometheus-endpoint",
-			Usage: "Expose metrics via prometheus on `ENDPOINT`.",
 		},
 		cli.StringFlag{
 			Name:  "tls-server-bundle-file",
@@ -234,7 +239,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		if c.IsSet("prometheus-endpoint") {
-			if err := conf.SetupPrometheus(c.String("prometheus-endpoint")); err != nil {
+			if err := conf.SetupPrometheus(c.String("prometheus-endpoint"), c.String("prometheus-port")); err != nil {
 				return err
 			}
 		}
