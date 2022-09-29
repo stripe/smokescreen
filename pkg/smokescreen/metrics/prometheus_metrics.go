@@ -29,7 +29,7 @@ func NewPrometheusMetricsClient(endpoint string, port string) (*PrometheusMetric
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
 	metricsTags := make(map[string]map[string]string)
-	for _, m := range Metrics {
+	for _, m := range metrics {
 		metricsTags[m] = map[string]string{}
 	}
 

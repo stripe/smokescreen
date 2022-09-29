@@ -28,7 +28,7 @@ func NewStatsdMetricsClient(addr, namespace string) (*StatsdMetricsClient, error
 
 	// Populate the client's map to hold metric tags
 	metricsTags := make(map[string][]string)
-	for _, m := range Metrics {
+	for _, m := range metrics {
 		metricsTags[m] = []string{}
 	}
 
@@ -43,7 +43,7 @@ func NewStatsdMetricsClient(addr, namespace string) (*StatsdMetricsClient, error
 func NewNoOpMetricsClient() *StatsdMetricsClient {
 	// Populate the client's map to hold metric tags
 	metricsTags := make(map[string][]string)
-	for _, m := range Metrics {
+	for _, m := range metrics {
 		metricsTags[m] = []string{}
 	}
 

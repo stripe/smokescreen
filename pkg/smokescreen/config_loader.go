@@ -51,68 +51,68 @@ type yamlConfig struct {
 	UnsafeAllowPrivateRanges bool `yaml:"unsafe_allow_private_ranges"`
 }
 
-func (config *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var yc yamlConfig
-	*config = *NewConfig()
+	*c = *NewConfig()
 
 	err := unmarshal(&yc)
 	if err != nil {
 		return err
 	}
 
-	config.Ip = yc.Ip
+	c.Ip = yc.Ip
 
 	if yc.Port != nil {
-		config.Port = *yc.Port
+		c.Port = *yc.Port
 	}
 
-	err = config.SetDenyRanges(yc.DenyRanges)
+	err = c.SetDenyRanges(yc.DenyRanges)
 	if err != nil {
 		return err
 	}
 
-	err = config.SetAllowRanges(yc.AllowRanges)
+	err = c.SetAllowRanges(yc.AllowRanges)
 	if err != nil {
 		return err
 	}
 
-	err = config.SetResolverAddresses(yc.Resolvers)
+	err = c.SetResolverAddresses(yc.Resolvers)
 	if err != nil {
 		return err
 	}
 
-	config.IdleTimeout = yc.IdleTimeout
-	config.ConnectTimeout = yc.ConnectTimeout
+	c.IdleTimeout = yc.IdleTimeout
+	c.ConnectTimeout = yc.ConnectTimeout
 	if yc.ExitTimeout != nil {
-		config.ExitTimeout = *yc.ExitTimeout
+		c.ExitTimeout = *yc.ExitTimeout
 	}
 
-	err = config.SetupStatsd(yc.StatsdAddress)
+	err = c.SetupStatsd(yc.StatsdAddress)
 	if err != nil {
 		return err
 	}
 
 	if yc.EgressAclFile != "" {
-		err = config.SetupEgressAcl(yc.EgressAclFile)
+		err = c.SetupEgressAcl(yc.EgressAclFile)
 		if err != nil {
 			return err
 		}
 	}
 
-	config.SupportProxyProtocol = yc.SupportProxyProtocol
+	c.SupportProxyProtocol = yc.SupportProxyProtocol
 
 	if yc.StatsSocketDir != "" {
-		config.StatsSocketDir = yc.StatsSocketDir
+		c.StatsSocketDir = yc.StatsSocketDir
 	}
 
 	if yc.StatsSocketFileMode != "" {
 		filemode, err := strconv.ParseInt(yc.StatsSocketFileMode, 8, 9)
 
 		if err != nil {
-			config.Log.Fatal(err)
+			c.Log.Fatal(err)
 		}
 
-		config.StatsSocketFileMode = os.FileMode(filemode)
+		c.StatsSocketFileMode = os.FileMode(filemode)
 	}
 
 	if yc.Tls != nil {
@@ -126,12 +126,12 @@ func (config *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			key_file = yc.Tls.CertFile
 		}
 
-		err = config.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
+		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
 		if err != nil {
 			return err
 		}
 
-		err = config.SetupCrls(yc.Tls.CRLFiles)
+		err = c.SetupCrls(yc.Tls.CRLFiles)
 		if err != nil {
 			return err
 		}
@@ -143,13 +143,13 @@ func (config *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		default:
 			return fmt.Errorf("invalid network type: %v", yc.Network)
 		}
-		config.Network = yc.Network
+		c.Network = yc.Network
 	}
 
-	config.AllowMissingRole = yc.AllowMissingRole
-	config.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
-	config.TimeConnect = yc.TimeConnect
-	config.UnsafeAllowPrivateRanges = yc.UnsafeAllowPrivateRanges
+	c.AllowMissingRole = yc.AllowMissingRole
+	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
+	c.TimeConnect = yc.TimeConnect
+	c.UnsafeAllowPrivateRanges = yc.UnsafeAllowPrivateRanges
 
 	return nil
 }

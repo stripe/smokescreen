@@ -11,7 +11,7 @@ import (
 // These are used to determine if a given metric name is valid before associating
 // a persistent tag with the metric. This list must be updated with new metric names
 // if the metric should support persistent tagging.
-var Metrics = []string{
+var metrics = []string{
 	// ACL decision statistics
 	"acl.allow",
 	"acl.decide_error",
