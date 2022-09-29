@@ -156,47 +156,47 @@ func parseAddresses(addressStrings []string) ([]RuleRange, error) {
 	return outRanges, nil
 }
 
-func (c *Config) SetDenyRanges(rangeStrings []string) error {
+func (config *Config) SetDenyRanges(rangeStrings []string) error {
 	var err error
 	ranges, err := parseRanges(rangeStrings)
 	if err != nil {
 		return err
 	}
-	c.DenyRanges = append(c.DenyRanges, ranges...)
+	config.DenyRanges = append(config.DenyRanges, ranges...)
 	return nil
 }
 
-func (c *Config) SetAllowRanges(rangeStrings []string) error {
+func (config *Config) SetAllowRanges(rangeStrings []string) error {
 	var err error
 	ranges, err := parseRanges(rangeStrings)
 	if err != nil {
 		return err
 	}
-	c.AllowRanges = append(c.AllowRanges, ranges...)
+	config.AllowRanges = append(config.AllowRanges, ranges...)
 	return nil
 }
 
-func (c *Config) SetDenyAddresses(addressStrings []string) error {
+func (config *Config) SetDenyAddresses(addressStrings []string) error {
 	var err error
 	ranges, err := parseAddresses(addressStrings)
 	if err != nil {
 		return err
 	}
-	c.DenyRanges = append(c.DenyRanges, ranges...)
+	config.DenyRanges = append(config.DenyRanges, ranges...)
 	return nil
 }
 
-func (c *Config) SetAllowAddresses(addressStrings []string) error {
+func (config *Config) SetAllowAddresses(addressStrings []string) error {
 	var err error
 	ranges, err := parseAddresses(addressStrings)
 	if err != nil {
 		return err
 	}
-	c.AllowRanges = append(c.AllowRanges, ranges...)
+	config.AllowRanges = append(config.AllowRanges, ranges...)
 	return nil
 }
 
-func (c *Config) SetResolverAddresses(resolverAddresses []string) error {
+func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 	// TODO: support round-robin between multiple addresses
 	if len(resolverAddresses) > 1 {
 		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
@@ -220,7 +220,7 @@ func (c *Config) SetResolverAddresses(resolverAddresses []string) error {
 			return d.DialContext(ctx, "udp", addr)
 		},
 	}
-	c.Resolver = &r
+	config.Resolver = &r
 	return nil
 }
 
@@ -248,7 +248,7 @@ func NewConfig() *Config {
 	}
 }
 
-func (c *Config) SetupCrls(crlFiles []string) error {
+func (config *Config) SetupCrls(crlFiles []string) error {
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
 		if err != nil {
@@ -282,11 +282,11 @@ func (c *Config) SetupCrls(crlFiles []string) error {
 		}
 
 		// Make sure we have a CA for this CRL or warn
-		caCert, ok := c.clientCasBySubjectKeyId[crlIssuerId]
+		caCert, ok := config.clientCasBySubjectKeyId[crlIssuerId]
 
 		if !ok {
 			log.Printf("warn: CRL loaded for issuer '%s' but no such CA loaded: ignoring it\n", hex.EncodeToString([]byte(crlIssuerId)))
-			fmt.Printf("%#v loaded certs\n", len(c.clientCasBySubjectKeyId))
+			fmt.Printf("%#v loaded certs\n", len(config.clientCasBySubjectKeyId))
 			continue
 		}
 
@@ -298,13 +298,13 @@ func (c *Config) SetupCrls(crlFiles []string) error {
 		}
 
 		// At this point, we have a new CRL which we trust. Let's evict the old one.
-		c.CrlByAuthorityKeyId[crlIssuerId] = certList
+		config.CrlByAuthorityKeyId[crlIssuerId] = certList
 		fmt.Printf("info: Loaded CRL for Authority ID '%s'\n", hex.EncodeToString([]byte(crlIssuerId)))
 	}
 
 	// Verify that all CAs loaded have a CRL
-	for k := range c.clientCasBySubjectKeyId {
-		_, ok := c.CrlByAuthorityKeyId[k]
+	for k := range config.clientCasBySubjectKeyId {
+		_, ok := config.CrlByAuthorityKeyId[k]
 		if !ok {
 			fmt.Printf("warn: no CRL loaded for Authority ID '%s'\n", hex.EncodeToString([]byte(k)))
 		}
@@ -312,10 +312,10 @@ func (c *Config) SetupCrls(crlFiles []string) error {
 	return nil
 }
 
-func (c *Config) SetupStatsdWithNamespace(addr, namespace string) error {
+func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
 		fmt.Println("warn: no statsd addr provided, using noop client")
-		c.MetricsClient = metrics.NewNoOpMetricsClient()
+		config.MetricsClient = metrics.NewNoOpMetricsClient()
 		return nil
 	}
 
@@ -323,37 +323,37 @@ func (c *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if err != nil {
 		return err
 	}
-	c.MetricsClient = mc
+	config.MetricsClient = mc
 	return nil
 }
 
-func (c *Config) SetupStatsd(addr string) error {
-	return c.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
+func (config *Config) SetupStatsd(addr string) error {
+	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
-func (c *Config) SetupPrometheus(endpoint string, port string) error {
+func (config *Config) SetupPrometheus(endpoint string, port string) error {
 	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port)
 	if err != nil {
 		return err
 	}
-	c.MetricsClient = metricsClient
+	config.MetricsClient = metricsClient
 	return nil
 }
 
-func (c *Config) SetupEgressAcl(aclFile string) error {
+func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
-		c.EgressACL = nil
+		config.EgressACL = nil
 		return nil
 	}
 
 	log.Printf("Loading egress ACL from %s", aclFile)
 
-	egressACL, err := acl.New(c.Log, acl.NewYAMLLoader(aclFile), c.DisabledAclPolicyActions)
+	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
 	if err != nil {
 		log.Print(err)
 		return err
 	}
-	c.EgressACL = egressACL
+	config.EgressACL = egressACL
 
 	return nil
 }
@@ -375,7 +375,7 @@ func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) erro
 }
 
 // certFile and keyFile may be the same file containing concatenated PEM blocks
-func (c *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) error {
+func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) error {
 	if certFile == "" || keyFile == "" {
 		return errors.New("both certificate and key files must be specified to set up TLS")
 	}
@@ -391,14 +391,14 @@ func (c *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) erro
 	if len(clientCAFiles) != 0 {
 		clientAuth = tls.VerifyClientCertIfGiven
 		for _, caFile := range clientCAFiles {
-			err = addCertsFromFile(c, clientCAs, caFile)
+			err = addCertsFromFile(config, clientCAs, caFile)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	c.TlsConfig = &tls.Config{
+	config.TlsConfig = &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   clientAuth,
 		ClientCAs:    clientCAs,
@@ -407,7 +407,7 @@ func (c *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) erro
 	return nil
 }
 
-func (c *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
+func (config *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
 
 	for len(pemCerts) > 0 {
 		var block *pem.Block
@@ -424,7 +424,7 @@ func (c *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
 			continue
 		}
 		fmt.Printf("info: Loaded CA with Authority ID '%s'\n", hex.EncodeToString(cert.SubjectKeyId))
-		c.clientCasBySubjectKeyId[string(cert.SubjectKeyId)] = cert
+		config.clientCasBySubjectKeyId[string(cert.SubjectKeyId)] = cert
 		ok = true
 	}
 	return
