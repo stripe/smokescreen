@@ -58,10 +58,11 @@ Here are the options you can give Smokescreen:
    --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
    --allow-address value                       Add IP[:PORT] to list of allowed IPs.  Repeatable.
    --egress-acl-file FILE                      Validate egress traffic against FILE
-   --prometheus-endpoint ENDPOINT              Expose Prometheus metrics on the given endpoint.
-                                                 If --prometheus-port isn't set, by default listens on 9810
-   --prometheus-port PORT                      Expose Prometheus metrics on the given port.
-                                                 Requires --prometheus-endpoint to be set.
+   --expose-prometheus-metrics                 Exposes metrics via a Prometheus scrapable endpoint.
+   --prometheus-endpoint ENDPOINT              Specify endpoint to host Prometheus metrics on. (default: "/metrics")
+                                                 Requires `--expose-prometheus-metrics` to be set.
+   --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default "9810")
+                                                 Requires `--expose-prometheus-metrics` to be set.
    --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
    --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
