@@ -164,7 +164,10 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
 - Aniket Joshi
 - Ben Ransford
 - Carl Jackson
+- Catherine Moresco
 - Craig Shannon
 - Evan Broder
+- Jessica Jiang
 - Marc-André Tremblay
+- Piotr Lewandowski
 - Ryan Koppenhaver
