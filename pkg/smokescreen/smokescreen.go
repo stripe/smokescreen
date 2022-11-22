@@ -475,6 +475,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
+		// verify the request based on the handler, if it exists
+		if config.VerifyRequestHandler != nil {
+			err = config.VerifyRequestHandler(pctx.Req)
+			if err != nil {
+				pctx.Error = denyError{err}
+				return req, rejectResponse(pctx, pctx.Error)
+			}
+		}
+
 		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
@@ -609,6 +618,16 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		pctx.Error = denyError{err}
 		return "", pctx.Error
 	}
+
+	// verify the request based on the handler, if it exists
+	if config.VerifyRequestHandler != nil {
+		err = config.VerifyRequestHandler(pctx.Req)
+		if err != nil {
+			pctx.Error = denyError{err}
+			return "", pctx.Error
+		}
+	}
+
 	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		return "", denyError{pctx.Error}

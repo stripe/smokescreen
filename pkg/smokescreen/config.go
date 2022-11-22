@@ -79,6 +79,10 @@ type Config struct {
 	// ranges by default (exempting loopback and unicast ranges)
 	// This setting can be used to configure Smokescreen with a blocklist, rather than an allowlist
 	UnsafeAllowPrivateRanges bool
+
+	// Customer handler for verifying requests, users can pass in custom methods to verify requests based
+	// on headers etc.
+	VerifyRequestHandler func(*http.Request) error
 }
 
 type missingRoleError struct {

@@ -182,7 +182,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
+		client, err := proxyClient(proxySrv.URL, nil)
 		r.NoError(err)
 
 		// Talk "through" the proxy to our malicious upstream that sets the
@@ -220,7 +220,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
+		client, err := proxyClient(proxySrv.URL, nil)
 		r.NoError(err)
 
 		resp, err := client.Get("http://127.0.0.1")
@@ -255,7 +255,7 @@ func TestConsistentHostHeader(t *testing.T) {
 	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 
-	client, err := proxyClient(proxySrv.URL)
+	client, err := proxyClient(proxySrv.URL, nil)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
@@ -296,7 +296,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 
-	client, err := proxyClient(proxySrv.URL)
+	client, err := proxyClient(proxySrv.URL, nil)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
@@ -416,7 +416,7 @@ func TestInvalidHost(t *testing.T) {
 			defer proxySrv.Close()
 
 			// Create a http.Client that uses our proxy
-			client, err := proxyClient(proxySrv.URL)
+			client, err := proxyClient(proxySrv.URL, nil)
 			r.NoError(err)
 
 			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.test", testCase.scheme))
@@ -473,7 +473,7 @@ func TestHostSquareBrackets(t *testing.T) {
 			defer proxySrv.Close()
 
 			// Create a http.Client that uses our proxy
-			client, err := proxyClient(proxySrv.URL)
+			client, err := proxyClient(proxySrv.URL, nil)
 			r.NoError(err)
 
 			resp, err := client.Get(fmt.Sprintf("%s://%s", testCase.scheme, testCase.hostname))
@@ -509,7 +509,7 @@ func TestErrorHeader(t *testing.T) {
 	defer proxySrv.Close()
 
 	// Create a http.Client that uses our proxy
-	client, err := proxyClient(proxySrv.URL)
+	client, err := proxyClient(proxySrv.URL, nil)
 	r.NoError(err)
 
 	resp, err := client.Get("http://example.com")
@@ -548,7 +548,7 @@ func TestProxyProtocols(t *testing.T) {
 		logHook := proxyLogHook(cfg)
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -588,7 +588,7 @@ func TestProxyProtocols(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -640,7 +640,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -680,7 +680,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -719,7 +719,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -755,7 +755,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -793,7 +793,7 @@ func TestProxyConnectFailure(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		// Shut down the handler so that the proxy won't be able to connect at all
@@ -859,7 +859,7 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	proxy := proxyServer(cfg)
 	remote := httptest.NewTLSServer(h)
-	client, err := proxyClient(proxy.URL)
+	client, err := proxyClient(proxy.URL, nil)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", remote.URL, nil)
@@ -909,7 +909,7 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -952,7 +952,7 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(proxy.URL, nil)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -995,11 +995,13 @@ func TestRejectResponseHandler(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
+		client, err := proxyClient(proxySrv.URL, nil)
 		r.NoError(err)
 
 		// Send a request that should be blocked
-		resp, err := client.Get("http://127.0.0.1")
+		req, err := http.NewRequest("GET", "http://127.0.0.1", nil)
+		req.Header.Set("hello", "hi")
+		resp, err := client.Do(req)
 		r.NoError(err)
 
 		// The RejectResponseHandler should set our custom header
@@ -1015,6 +1017,121 @@ func TestRejectResponseHandler(t *testing.T) {
 		h = resp.Header.Get(testHeader)
 		if h != "" {
 			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
+		}
+	})
+}
+
+func TestVerifyRequestHandler(t *testing.T) {
+	r := require.New(t)
+	testHeader := "X-Verify-Request-Header"
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+	v := func(r *http.Request) error {
+		header := r.Header.Get(testHeader)
+		if header == "" {
+			return errors.New("header doesn't exist")
+		}
+		if header != "valid" {
+			return errors.New("invalid header")
+		}
+		return nil
+	}
+
+	t.Run("Testing that verify request handler works for HTTPS", func(t *testing.T) {
+		testCases := []struct {
+			header        http.Header
+			expectedError bool
+		}{
+			{
+				header:        http.Header{testHeader: []string{"valid"}},
+				expectedError: false,
+			},
+			{
+				header:        http.Header{testHeader: []string{"invalid"}},
+				expectedError: true,
+			},
+		}
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+		cfg.VerifyRequestHandler = v
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		defer proxy.Close()
+		for _, testCase := range testCases {
+
+			client, err := proxyClient(proxy.URL, testCase.header)
+			r.NoError(err)
+
+			req, err := http.NewRequest("GET", remote.URL, nil)
+			r.NoError(err)
+			resp, err := client.Do(req)
+			if testCase.expectedError {
+				r.Nil(resp)
+				r.Contains(err.Error(), "Request rejected by proxy")
+			} else {
+				r.NoError(err)
+				r.Equal(200, resp.StatusCode)
+			}
+		}
+	})
+
+	t.Run("test that it works for HTTP (invalid)", func(t *testing.T) {
+		testCases := []struct {
+			header        string
+			expectedError bool
+		}{
+			{
+				header:        "valid",
+				expectedError: false,
+			},
+			{
+				header:        "invalid",
+				expectedError: true,
+			},
+		}
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+		cfg.VerifyRequestHandler = v
+
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		remote := httptest.NewServer(h)
+
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
+
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL, nil)
+		r.NoError(err)
+
+		for _, testCase := range testCases {
+			// Send a request that should be blocked
+			req, err := http.NewRequest("GET", remote.URL, nil)
+			r.NoError(err)
+			req.Header.Set(testHeader, testCase.header)
+			resp, err := client.Do(req)
+			if testCase.expectedError {
+				r.NoError(err)
+				errorMessage := resp.Header.Get("X-Smokescreen-Error")
+				r.Contains(errorMessage, "invalid header")
+
+			} else {
+				r.NoError(err)
+				r.Equal(200, resp.StatusCode)
+			}
 		}
 	})
 }
@@ -1069,7 +1186,7 @@ func proxyServer(conf *Config) *httptest.Server {
 	return httptest.NewServer(proxy)
 }
 
-func proxyClient(proxy string) (*http.Client, error) {
+func proxyClient(proxy string, h http.Header) (*http.Client, error) {
 	proxyUrl, err := url.Parse(proxy)
 	if err != nil {
 		return nil, err
@@ -1081,6 +1198,9 @@ func proxyClient(proxy string) (*http.Client, error) {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+			GetProxyConnectHeader: func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error) {
+				return h, nil
+			},
 		},
 	}, nil
 }
