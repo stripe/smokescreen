@@ -1198,9 +1198,7 @@ func proxyClient(proxy string, h http.Header) (*http.Client, error) {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-			GetProxyConnectHeader: func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error) {
-				return h, nil
-			},
+			ProxyConnectHeader:    h,
 		},
 	}, nil
 }
