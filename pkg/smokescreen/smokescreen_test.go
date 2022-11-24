@@ -999,9 +999,7 @@ func TestRejectResponseHandler(t *testing.T) {
 		r.NoError(err)
 
 		// Send a request that should be blocked
-		req, err := http.NewRequest("GET", "http://127.0.0.1", nil)
-		req.Header.Set("hello", "hi")
-		resp, err := client.Do(req)
+		resp, err := client.Get("http://127.0.0.1")
 		r.NoError(err)
 
 		// The RejectResponseHandler should set our custom header
