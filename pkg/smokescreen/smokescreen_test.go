@@ -1126,7 +1126,6 @@ func TestVerifyRequestHandler(t *testing.T) {
 		r.NoError(err)
 
 		for _, testCase := range testCases {
-			// Send a request that should be blocked
 			req, err := http.NewRequest("GET", remote.URL, nil)
 			r.NoError(err)
 			req.Header.Set(testHeader, testCase.header)
