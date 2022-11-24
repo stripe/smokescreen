@@ -1091,7 +1091,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("test that it works for HTTP (invalid)", func(t *testing.T) {
+	t.Run("test that it works for HTTP", func(t *testing.T) {
 		testCases := []struct {
 			header        string
 			expectedError bool
