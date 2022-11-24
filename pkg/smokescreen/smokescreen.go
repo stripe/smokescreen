@@ -477,7 +477,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		// Call the custom request handler if it exists
 		if config.CustomRequestHandler != nil {
-			err = config.CustomRequestHandler(pctx.Req)
+			err = config.CustomRequestHandler(req)
 			if err != nil {
 				pctx.Error = denyError{err}
 				return req, rejectResponse(pctx, pctx.Error)
