@@ -1184,7 +1184,7 @@ func proxyServer(conf *Config) *httptest.Server {
 	return httptest.NewServer(proxy)
 }
 
-func proxyClient(proxy string, h http.Header) (*http.Client, error) {
+func proxyClient(proxy string, proxyConnectHeaders http.Header) (*http.Client, error) {
 	proxyUrl, err := url.Parse(proxy)
 	if err != nil {
 		return nil, err
@@ -1196,7 +1196,7 @@ func proxyClient(proxy string, h http.Header) (*http.Client, error) {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-			ProxyConnectHeader:    h,
+			ProxyConnectHeader:    proxyConnectHeaders,
 		},
 	}, nil
 }
