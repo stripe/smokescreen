@@ -1020,7 +1020,7 @@ func TestRejectResponseHandler(t *testing.T) {
 	})
 }
 
-func TestVerifyRequestHandler(t *testing.T) {
+func TestCustomRequestHandler(t *testing.T) {
 	r := require.New(t)
 	testHeader := "X-Verify-Request-Header"
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1042,7 +1042,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 		return nil
 	}
 
-	t.Run("Testing that verify request handler works for HTTPS", func(t *testing.T) {
+	t.Run("CustomRequestHandler works for HTTPS", func(t *testing.T) {
 		testCases := []struct {
 			header        http.Header
 			expectedError bool
@@ -1091,7 +1091,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("test that it works for HTTP", func(t *testing.T) {
+	t.Run("CustomRequestHandler works for HTTP", func(t *testing.T) {
 		testCases := []struct {
 			header        string
 			expectedError bool
