@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -1023,10 +1024,15 @@ func TestVerifyRequestHandler(t *testing.T) {
 	r := require.New(t)
 	testHeader := "X-Verify-Request-Header"
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(testHeader) != "" {
+			w.Write([]byte("header not removed!"))
+			return
+		}
 		w.Write([]byte("OK"))
 	})
 	customRequestHandler := func(r *http.Request) error {
 		header := r.Header.Get(testHeader)
+		r.Header.Del(testHeader)
 		if header == "" {
 			return errors.New("header doesn't exist")
 		}
@@ -1077,6 +1083,10 @@ func TestVerifyRequestHandler(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(200, resp.StatusCode)
+				body, err := ioutil.ReadAll(resp.Body)
+				r.NoError(err)
+				resp.Body.Close()
+				r.Equal([]byte("OK"), body)
 			}
 		}
 	})
@@ -1129,6 +1139,11 @@ func TestVerifyRequestHandler(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(200, resp.StatusCode)
+				body, err := ioutil.ReadAll(resp.Body)
+				r.NoError(err)
+				resp.Body.Close()
+				r.Equal([]byte("OK"), body)
+
 			}
 		}
 	})
