@@ -1025,7 +1025,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
-	v := func(r *http.Request) error {
+	customRequestHandler := func(r *http.Request) error {
 		header := r.Header.Get(testHeader)
 		if header == "" {
 			return errors.New("header doesn't exist")
@@ -1054,7 +1054,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
-		cfg.VerifyRequestHandler = v
+		cfg.CustomRequestHandler = customRequestHandler
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -1099,7 +1099,7 @@ func TestVerifyRequestHandler(t *testing.T) {
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
-		cfg.VerifyRequestHandler = v
+		cfg.CustomRequestHandler = customRequestHandler
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)

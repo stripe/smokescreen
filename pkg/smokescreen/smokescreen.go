@@ -475,9 +475,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 
-		// verify the request based on the handler, if it exists
-		if config.VerifyRequestHandler != nil {
-			err = config.VerifyRequestHandler(pctx.Req)
+		// Call the custom request handler if it exists
+		if config.CustomRequestHandler != nil {
+			err = config.CustomRequestHandler(pctx.Req)
 			if err != nil {
 				pctx.Error = denyError{err}
 				return req, rejectResponse(pctx, pctx.Error)
@@ -619,9 +619,9 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		return "", pctx.Error
 	}
 
-	// verify the request based on the handler, if it exists
-	if config.VerifyRequestHandler != nil {
-		err = config.VerifyRequestHandler(pctx.Req)
+	// Call the custom request handler if it exists
+	if config.CustomRequestHandler != nil {
+		err = config.CustomRequestHandler(pctx.Req)
 		if err != nil {
 			pctx.Error = denyError{err}
 			return "", pctx.Error
