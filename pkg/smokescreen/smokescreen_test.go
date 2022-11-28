@@ -183,7 +183,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL, nil)
+		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
 		// Talk "through" the proxy to our malicious upstream that sets the
@@ -221,7 +221,7 @@ func TestClearsErrorHeader(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL, nil)
+		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
 		resp, err := client.Get("http://127.0.0.1")
@@ -256,7 +256,7 @@ func TestConsistentHostHeader(t *testing.T) {
 	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 
-	client, err := proxyClient(proxySrv.URL, nil)
+	client, err := proxyClient(proxySrv.URL)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
@@ -297,7 +297,7 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	proxy := BuildProxy(conf)
 	proxySrv := httptest.NewServer(proxy)
 
-	client, err := proxyClient(proxySrv.URL, nil)
+	client, err := proxyClient(proxySrv.URL)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
@@ -417,7 +417,7 @@ func TestInvalidHost(t *testing.T) {
 			defer proxySrv.Close()
 
 			// Create a http.Client that uses our proxy
-			client, err := proxyClient(proxySrv.URL, nil)
+			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
 			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.test", testCase.scheme))
@@ -474,7 +474,7 @@ func TestHostSquareBrackets(t *testing.T) {
 			defer proxySrv.Close()
 
 			// Create a http.Client that uses our proxy
-			client, err := proxyClient(proxySrv.URL, nil)
+			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
 			resp, err := client.Get(fmt.Sprintf("%s://%s", testCase.scheme, testCase.hostname))
@@ -510,7 +510,7 @@ func TestErrorHeader(t *testing.T) {
 	defer proxySrv.Close()
 
 	// Create a http.Client that uses our proxy
-	client, err := proxyClient(proxySrv.URL, nil)
+	client, err := proxyClient(proxySrv.URL)
 	r.NoError(err)
 
 	resp, err := client.Get("http://example.com")
@@ -549,7 +549,7 @@ func TestProxyProtocols(t *testing.T) {
 		logHook := proxyLogHook(cfg)
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -589,7 +589,7 @@ func TestProxyProtocols(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -641,7 +641,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -681,7 +681,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -720,7 +720,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -756,7 +756,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -794,7 +794,7 @@ func TestProxyConnectFailure(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		// Shut down the handler so that the proxy won't be able to connect at all
@@ -860,7 +860,7 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	proxy := proxyServer(cfg)
 	remote := httptest.NewTLSServer(h)
-	client, err := proxyClient(proxy.URL, nil)
+	client, err := proxyClient(proxy.URL)
 	r.NoError(err)
 
 	req, err := http.NewRequest("GET", remote.URL, nil)
@@ -910,7 +910,7 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -953,7 +953,7 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		proxy := proxyServer(cfg)
 		remote := httptest.NewServer(h)
-		client, err := proxyClient(proxy.URL, nil)
+		client, err := proxyClient(proxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -996,7 +996,7 @@ func TestRejectResponseHandler(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL, nil)
+		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
 		// Send a request that should be blocked
@@ -1071,7 +1071,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		defer proxy.Close()
 		for _, testCase := range testCases {
 
-			client, err := proxyClient(proxy.URL, testCase.header)
+			client, err := proxyClientWithConnectHeaders(proxy.URL, testCase.header)
 			r.NoError(err)
 
 			req, err := http.NewRequest("GET", remote.URL, nil)
@@ -1122,7 +1122,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		defer proxySrv.Close()
 
 		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL, nil)
+		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
 		for _, testCase := range testCases {
@@ -1198,7 +1198,11 @@ func proxyServer(conf *Config) *httptest.Server {
 	return httptest.NewServer(proxy)
 }
 
-func proxyClient(proxy string, proxyConnectHeaders http.Header) (*http.Client, error) {
+func proxyClient(proxy string) (*http.Client, error) {
+	return proxyClientWithConnectHeaders(proxy, nil)
+}
+
+func proxyClientWithConnectHeaders(proxy string, proxyConnectHeaders http.Header) (*http.Client, error) {
 	proxyUrl, err := url.Parse(proxy)
 	if err != nil {
 		return nil, err
