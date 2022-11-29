@@ -216,11 +216,15 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
 	config.MetricsClient.Incr("resolver.attempts_total", 1)
+
+	resolveStart := time.Now()
 	resolved, err := resolveTCPAddr(config, network, addr)
+	resolveDuration := time.Since(resolveStart)
 	if err != nil {
 		config.MetricsClient.Incr("resolver.errors_total", 1)
 		return nil, "", err
 	}
+	config.MetricsClient.Timing("resolver.lookup_time", resolveDuration, 0.5)
 
 	classification := classifyAddr(config, resolved)
 	config.MetricsClient.Incr(classification.statsdString(), 1)
