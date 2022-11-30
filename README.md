@@ -12,14 +12,15 @@ Smokescreen also allows us to centralize egress from Stripe, allowing us to give
 financial partners stable egress IP addresses and abstracting away the details
 of which Stripe service is making the request.
 
-Smokescreen can be contacted over TLS. You can provide it with one or more client certificate authority certificates as well as their CRLs.
-Smokescreen will warn you if you load a CA certificate with no associated CRL and will abort if you try to load a CRL which cannot be used (ex.: cannot be associated with loaded CA).
+In typical usage, clients contact Smokescreen over mTLS. Upon receiving a
+connection, Smokescreen authenticates the client's certificate against a
+configurable set of CAs and CRLs, extracts the client's identity, and checks
+the client's requested CONNECT destination against a configurable per-client
+ACL.
 
-Smokescreen can be provided with an ACL to determine which remote
-hosts a service is allowed to interact with.  By default, Smokescreen
-will identify clients by the "common name" in the TLS certificate they
-present, if any.  The client identification function can also be
-easily replaced; more on this in the usage section.
+By default, Smokescreen will identify clients by the "common name" in the TLS
+certificate they present, if any. The client identification function can also
+be easily replaced; more on this in the usage section.
 
 ## Dependencies
 
