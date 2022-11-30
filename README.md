@@ -71,7 +71,7 @@ Here are the options you can give Smokescreen:
    --version, -v                               print the version
 ```
 
-### Importing
+### Client Identification
 
 In order to override how Smokescreen identifies its clients, you must:
 
