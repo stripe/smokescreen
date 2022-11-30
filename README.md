@@ -154,6 +154,44 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
 
+# Development and Testing
+
+## Running locally
+
+To run Smokescreen locally, you can provide a minimal configuration file and use `curl` as a client. For example:
+
+```yaml
+# config.yaml
+---
+allow_missing_role: true  # skip mTLS client validation
+statsd_address: 127.0.0.1:8200
+```
+
+If you want to see metrics Smokescreen emits, listen on a local port:
+
+```shellsession
+$ nc -uklv 127.0.0.1 8200
+```
+
+Build and run Smokescreen:
+
+```shellsession
+$ go run . --config-file config.yaml
+{"level":"info","msg":"starting","time":"2022-11-30T15:19:08-08:00"}
+```
+
+Make a request using `curl`:
+
+```shellsession
+$ curl --proxytunnel -x localhost:4750 https://stripe.com/
+```
+
+## Testing
+
+```shellsession
+$ go test ./...
+```
+
 # Contributors
 
 - Aditya Mukerjee
