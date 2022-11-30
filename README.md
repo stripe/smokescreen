@@ -33,10 +33,8 @@ below:
 
 Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections.
 
-Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
-
-- go1.18.x
-- go1.17.x
+Generally, Smokescreen will only support the two most recent Go versions. See
+[the test configuration](.github/workflows/test.yaml) for details.
 
 [mod]: https://github.com/golang/go/wiki/Modules
 
