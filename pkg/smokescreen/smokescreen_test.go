@@ -559,8 +559,22 @@ func TestProxyProtocols(t *testing.T) {
 			client.Do(req)
 			clientCh <- true
 		}()
-
 		<-clientCh
+
+		// Metrics should show one successful connection and a corresponding successful
+		// DNS request along with its timing metric.
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		lookups, err := tmc.GetCount("resolver.attempts_total")
+		r.NoError(err)
+		r.Equal(lookups, uint64(1))
+		ltime, err := tmc.GetCount("resolver.lookup_time")
+		r.NoError(err)
+		r.Equal(ltime, uint64(1))
+
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
 
@@ -610,6 +624,20 @@ func TestProxyProtocols(t *testing.T) {
 
 		serverCh <- true
 		<-clientCh
+
+		// Metrics should show one successful connection and a corresponding successful
+		// DNS request along with its timing metric.
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		lookups, err := tmc.GetCount("resolver.attempts_total")
+		r.NoError(err)
+		r.Equal(lookups, uint64(1))
+		ltime, err := tmc.GetCount("resolver.lookup_time")
+		r.NoError(err)
+		r.Equal(ltime, uint64(1))
 
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
