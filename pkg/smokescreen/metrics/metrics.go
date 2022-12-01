@@ -39,6 +39,7 @@ var metrics = []string{
 	"resolver.deny.not_global_unicast",
 	"resolver.deny.private_range",
 	"resolver.deny.user_configured",
+	"resolver.lookup_time", // DNS lookup time in ms, not tagged
 	"resolver.errors_total",
 }
 
