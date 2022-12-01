@@ -12,14 +12,15 @@ Smokescreen also allows us to centralize egress from Stripe, allowing us to give
 financial partners stable egress IP addresses and abstracting away the details
 of which Stripe service is making the request.
 
-Smokescreen can be contacted over TLS. You can provide it with one or more client certificate authority certificates as well as their CRLs.
-Smokescreen will warn you if you load a CA certificate with no associated CRL and will abort if you try to load a CRL which cannot be used (ex.: cannot be associated with loaded CA).
+In typical usage, clients contact Smokescreen over mTLS. Upon receiving a
+connection, Smokescreen authenticates the client's certificate against a
+configurable set of CAs and CRLs, extracts the client's identity, and checks
+the client's requested CONNECT destination against a configurable per-client
+ACL.
 
-Smokescreen can be provided with an ACL to determine which remote
-hosts a service is allowed to interact with.  By default, Smokescreen
-will identify clients by the "common name" in the TLS certificate they
-present, if any.  The client identification function can also be
-easily replaced; more on this in the usage section.
+By default, Smokescreen will identify clients by the "common name" in the TLS
+certificate they present, if any. The client identification function can also
+be easily replaced; more on this in the usage section.
 
 ## Dependencies
 
@@ -32,10 +33,8 @@ below:
 
 Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy to allow us to support context passing and setting granular timeouts on proxy connections.
 
-Smokescreen is built and tested using the following Go releases. Generally, Smokescreen will only support the two most recent Go versions.
-
-- go1.18.x
-- go1.17.x
+Generally, Smokescreen will only support the two most recent Go versions. See
+[the test configuration](.github/workflows/test.yml) for details.
 
 [mod]: https://github.com/golang/go/wiki/Modules
 
@@ -72,7 +71,7 @@ Here are the options you can give Smokescreen:
    --version, -v                               print the version
 ```
 
-### Importing
+### Client Identification
 
 In order to override how Smokescreen identifies its clients, you must:
 
@@ -154,6 +153,44 @@ However, if the host specifies `malicious.com` in its `allowed_domains`, traffic
 If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
+
+# Development and Testing
+
+## Running locally
+
+To run Smokescreen locally, you can provide a minimal configuration file and use `curl` as a client. For example:
+
+```yaml
+# config.yaml
+---
+allow_missing_role: true  # skip mTLS client validation
+statsd_address: 127.0.0.1:8200
+```
+
+If you want to see metrics Smokescreen emits, listen on a local port:
+
+```shellsession
+$ nc -uklv 127.0.0.1 8200
+```
+
+Build and run Smokescreen:
+
+```shellsession
+$ go run . --config-file config.yaml
+{"level":"info","msg":"starting","time":"2022-11-30T15:19:08-08:00"}
+```
+
+Make a request using `curl`:
+
+```shellsession
+$ curl --proxytunnel -x localhost:4750 https://stripe.com/
+```
+
+## Testing
+
+```shellsession
+$ go test ./...
+```
 
 # Contributors
 
