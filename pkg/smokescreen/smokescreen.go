@@ -788,9 +788,11 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 			beginTs := time.Now()
 
 			// If idleTimeout is set to 0, fall back to using the exit timeout to avoid
-			// immediately closing active connections.
+			// immediately closing active connections. ExitTimeout supercedes IdleTimeout
+			// if an idle timeout would cause smokescreen to wait longer than the specified
+			// exit timeout.
 			idleTimeout := config.IdleTimeout
-			if idleTimeout == 0 {
+			if idleTimeout == 0 || config.ExitTimeout < idleTimeout {
 				idleTimeout = config.ExitTimeout
 			}
 
