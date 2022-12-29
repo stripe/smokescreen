@@ -54,6 +54,7 @@ const (
 	LogFieldContentLength    = "content_length"
 	LogFieldDecisionReason   = "decision_reason"
 	LogFieldEnforceWouldDeny = "enforce_would_deny"
+	LogFieldResolvedIPAddr   = "resolved_ip_addr"
 	LogFieldAllow            = "allow"
 	LogFieldError            = "error"
 	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
@@ -592,6 +593,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 
 	if sctx.decision != nil {
 		fields[LogFieldDecisionReason] = decision.reason
+		fields[LogFieldResolvedIPAddr] = decision.resolvedAddr.IP
 		fields[LogFieldEnforceWouldDeny] = decision.enforceWouldDeny
 		fields[LogFieldAllow] = decision.allow
 	}
