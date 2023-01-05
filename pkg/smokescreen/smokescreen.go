@@ -59,7 +59,7 @@ const (
 	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
 	LogFieldConnEstablishMS  = "conn_establish_time_ms"
 	LogFieldDNSLookupTime    = "dns_lookup_time_ms"
-	LogFieldLogMetadata      = "log_metadata"
+	LogFieldLogMetadata      = "custom_metadata"
 )
 
 type ipType int
