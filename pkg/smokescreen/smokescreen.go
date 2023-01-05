@@ -59,6 +59,7 @@ const (
 	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
 	LogFieldConnEstablishMS  = "conn_establish_time_ms"
 	LogFieldDNSLookupTime    = "dns_lookup_time_ms"
+	LogFieldLogMetadata      = "log_metadata"
 )
 
 type ipType int
@@ -149,6 +150,7 @@ func (t ipType) statsdString() string {
 const errorHeader = "X-Smokescreen-Error"
 const roleHeader = "X-Smokescreen-Role"
 const traceHeader = "X-Smokescreen-Trace-ID"
+const logMetadataHeader = "X-Smokescreen-Log-Metadata"
 
 func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 	for _, rng := range ranges {
@@ -417,6 +419,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 		LogFieldRequestedHost: req.Host,
 		LogFieldStartTime:     start.UTC(),
 		LogFieldTraceID:       req.Header.Get(traceHeader),
+		LogFieldLogMetadata:   req.Header.Get(logMetadataHeader),
 	})
 
 	return &smokescreenContext{
@@ -465,6 +468,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		defer func() {
 			req.Header.Del(roleHeader)
 			req.Header.Del(traceHeader)
+			req.Header.Del(logMetadataHeader)
 		}()
 
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
@@ -513,6 +517,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// on state set in handleConnect
 		defer logProxy(config, pctx)
 		defer pctx.Req.Header.Del(traceHeader)
+		defer pctx.Req.Header.Del(logMetadataHeader)
 
 		destination, err := handleConnect(config, pctx)
 		if err != nil {
