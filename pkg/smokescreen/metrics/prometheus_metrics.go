@@ -195,15 +195,16 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
 	metric string,
 	duration time.Duration,
 	tags map[string]string) {
-	if existingHistogram, ok := mc.timings[metric]; ok {
+	timerMetric := metric + "_timer"
+	if existingHistogram, ok := mc.timings[timerMetric]; ok {
 		existingHistogram.With(tags).Observe(float64(duration.Milliseconds()))
 	} else {
 		histogram := promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name: metric,
+			Name: timerMetric,
 		}, mapKeys(tags))
 
 		histogram.With(tags).Observe(float64(duration.Milliseconds()))
-		mc.histograms[metric] = *histogram
+		mc.timings[timerMetric] = *histogram
 	}
 }
 
