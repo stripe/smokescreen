@@ -99,7 +99,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 
 	// if the host matches any of the rule's allowed domains, allow
 	for _, dg := range rule.DomainGlobs {
-		if hostMatchesGlob(host, dg) {
+		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
 			return d, nil
 		}
@@ -107,7 +107,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 
 	// if the host matches any of the global deny list, deny
 	for _, dg := range acl.GlobalDenyList {
-		if hostMatchesGlob(host, dg) {
+		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Deny, "host matched rule in global deny list"
 			return d, nil
 		}
@@ -115,7 +115,7 @@ func (acl *ACL) Decide(service, host string) (Decision, error) {
 
 	// if the host matches any of the global allow list, allow
 	for _, dg := range acl.GlobalAllowList {
-		if hostMatchesGlob(host, dg) {
+		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched rule in global allow list"
 			return d, nil
 		}
@@ -241,11 +241,11 @@ func (acl *ACL) Rule(service string) *Rule {
 	return acl.DefaultRule
 }
 
-// hostMatchesGlob matches a hostname string against a domain glob after
+// HostMatchesGlob matches a hostname string against a domain glob after
 // converting both to a canonical form (lowercase with trailing dots removed).
 //
 // domainGlob should already have been passed through ACL.Validate().
-func hostMatchesGlob(host string, domainGlob string) bool {
+func HostMatchesGlob(host string, domainGlob string) bool {
 	if host == "" {
 		return false
 	}
