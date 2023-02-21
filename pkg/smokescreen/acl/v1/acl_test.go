@@ -353,7 +353,7 @@ func TestHostMatchesGlob(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			a.Equal(
 				g.match,
-				hostMatchesGlob(g.hostname, g.glob),
+				HostMatchesGlob(g.hostname, g.glob),
 			)
 		})
 	}
