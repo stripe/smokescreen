@@ -29,13 +29,20 @@ type RuleRange struct {
 	Port int
 }
 
+// Resolver implements the interface needed by smokescreen and implemented by *net.Resolver
+// This will allow different resolvers to also be provided
+type Resolver interface {
+	LookupPort(ctx context.Context, network, service string) (port int, err error)
+	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
+}
+
 type Config struct {
 	Ip                           string
 	Port                         uint16
 	Listener                     net.Listener
 	DenyRanges                   []RuleRange
 	AllowRanges                  []RuleRange
-	Resolver                     *net.Resolver
+	Resolver                     Resolver
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	MetricsClient                metrics.MetricsClientInterface
@@ -228,6 +235,7 @@ func NewConfig() *Config {
 	})
 
 	return &Config{
+		Resolver:                &net.Resolver{},
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log:                     log.New(),
