@@ -927,6 +927,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		fmt.Sprintf("role:%s", decision.role),
 		fmt.Sprintf("def_rule:%t", aclDecision.Default),
 		fmt.Sprintf("project:%s", aclDecision.Project),
+		fmt.Sprintf("requested_host:%s", destination.Host),
 	}
 
 	switch aclDecision.Result {
