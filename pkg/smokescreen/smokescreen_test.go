@@ -565,13 +565,13 @@ func TestProxyProtocols(t *testing.T) {
 		// DNS request along with its timing metric.
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		lookups, err := tmc.GetCount("resolver.attempts_total")
+		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
 		r.Equal(lookups, uint64(1))
-		ltime, err := tmc.GetCount("resolver.lookup_time")
+		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
 		r.Equal(ltime, uint64(1))
 
@@ -629,13 +629,13 @@ func TestProxyProtocols(t *testing.T) {
 		// DNS request along with its timing metric.
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		lookups, err := tmc.GetCount("resolver.attempts_total")
+		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
 		r.Equal(lookups, uint64(1))
-		ltime, err := tmc.GetCount("resolver.lookup_time")
+		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
 		r.Equal(ltime, uint64(1))
 
