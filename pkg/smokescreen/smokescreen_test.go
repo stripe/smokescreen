@@ -565,13 +565,13 @@ func TestProxyProtocols(t *testing.T) {
 		// DNS request along with its timing metric.
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		lookups, err := tmc.GetCount("resolver.attempts_total")
+		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
 		r.Equal(lookups, uint64(1))
-		ltime, err := tmc.GetCount("resolver.lookup_time")
+		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
 		r.Equal(ltime, uint64(1))
 
@@ -629,13 +629,13 @@ func TestProxyProtocols(t *testing.T) {
 		// DNS request along with its timing metric.
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		lookups, err := tmc.GetCount("resolver.attempts_total")
+		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
 		r.Equal(lookups, uint64(1))
-		ltime, err := tmc.GetCount("resolver.lookup_time")
+		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
 		r.Equal(ltime, uint64(1))
 
@@ -726,7 +726,7 @@ func TestProxyTimeouts(t *testing.T) {
 		// timeouts to Smokescreen; same reasons we test for EOF above.
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:true")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
 
@@ -762,10 +762,10 @@ func TestProxyTimeouts(t *testing.T) {
 
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "false"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		i, err = tmc.GetCount("cn.atpt.connect.err", map[string]string{"type": "timeout"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
 	})
@@ -837,10 +837,10 @@ func TestProxyConnectFailure(t *testing.T) {
 
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "false"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		i, err = tmc.GetCount("cn.atpt.connect.err", "type:refused")
+		i, err = tmc.GetCount("cn.atpt.connect.err", map[string]string{"type": "refused"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
 	})
@@ -903,7 +903,7 @@ func TestProxyHalfClosed(t *testing.T) {
 
 	tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 	r.True(ok)
-	i, err := tmc.GetCount("cn.atpt.total", "success:true")
+	i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
 	r.NoError(err)
 	r.Equal(i, uint64(1))
 
@@ -953,10 +953,10 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "false"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		i, err = tmc.GetCount("cn.atpt.connect.err", map[string]string{"type": "timeout"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
 	})
@@ -995,10 +995,10 @@ func TestCustomDialTimeout(t *testing.T) {
 
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
-		i, err := tmc.GetCount("cn.atpt.total", "success:false")
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "false"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
-		i, err = tmc.GetCount("cn.atpt.connect.err", "type:timeout")
+		i, err = tmc.GetCount("cn.atpt.connect.err", map[string]string{"type": "timeout"})
 		r.NoError(err)
 		r.Equal(i, uint64(1))
 

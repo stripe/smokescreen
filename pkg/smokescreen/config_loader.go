@@ -48,7 +48,7 @@ type yamlConfig struct {
 	Tls *yamlConfigTls
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 
-	UnsafeAllowPrivateRanges bool	`yaml:"unsafe_allow_private_ranges"`
+	UnsafeAllowPrivateRanges bool `yaml:"unsafe_allow_private_ranges"`
 }
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {

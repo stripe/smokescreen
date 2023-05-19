@@ -2,13 +2,9 @@ package metrics
 
 import (
 	"errors"
-	"fmt"
 	"net"
-	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/DataDog/datadog-go/statsd"
 )
 
 // metrics contains all of the metric names contained within the smokescreen package.
@@ -43,142 +39,17 @@ var metrics = []string{
 	"resolver.errors_total",
 }
 
-// MetricsClient is a thin wrapper around statsd.ClientInterface. It is used to allow
-// adding arbitrary tags to Smokescreen metrics.
-//
-// MetricsClient is not thread safe and should not be used concurrently.
-type MetricsClient struct {
-	metricsTags  map[string][]string
-	statsdClient statsd.ClientInterface
-	started      atomic.Value
-}
-
 type MetricsClientInterface interface {
-	AddMetricTags(string, []string) error
+	AddMetricTags(string, map[string]string) error
 	Incr(string, float64) error
-	IncrWithTags(string, []string, float64) error
+	IncrWithTags(string, map[string]string, float64) error
 	Gauge(string, float64, float64) error
 	Histogram(string, float64, float64) error
-	HistogramWithTags(string, float64, []string, float64) error
+	HistogramWithTags(string, float64, map[string]string, float64) error
 	Timing(string, time.Duration, float64) error
-	TimingWithTags(string, time.Duration, float64, []string) error
-	StatsdClient() statsd.ClientInterface
+	TimingWithTags(string, time.Duration, map[string]string, float64) error
 	SetStarted()
 }
-
-// NewMetricsClient creates a new MetricsClient with the provided statsd address and
-// namespace.
-func NewMetricsClient(addr, namespace string) (*MetricsClient, error) {
-	c, err := statsd.New(addr)
-	if err != nil {
-		return nil, err
-	}
-	c.Namespace = namespace
-
-	// Populate the client's map to hold metric tags
-	metricsTags := make(map[string][]string)
-	for _, m := range metrics {
-		metricsTags[m] = []string{}
-	}
-
-	return &MetricsClient{
-		metricsTags:  metricsTags,
-		statsdClient: c,
-	}, nil
-}
-
-// NewNoOpMetricsClient returns a MetricsClient with a no-op statsd client. This can
-// be used when there's no statsd service available to smokescreen.
-func NewNoOpMetricsClient() *MetricsClient {
-	// Populate the client's map to hold metric tags
-	metricsTags := make(map[string][]string)
-	for _, m := range metrics {
-		metricsTags[m] = []string{}
-	}
-
-	return &MetricsClient{
-		metricsTags:  metricsTags,
-		statsdClient: &statsd.NoOpClient{},
-	}
-}
-
-// AddMetricTags associates the provided tags slice with a given metric. The metric must be present
-// in the metrics slice.
-//
-// Once a metric has tags added via AddMetricTags, those tags will *always* be attached whenever
-// that metric is emitted.
-// For example, calling `AddMetricTags(foo, [bar])` will cause the `bar` tag to be added to
-// *every* metric `foo` that is emitted for the lifetime of the MetricsClient.
-//
-// This function is not thread safe, and adding persitent tags should only be done while initializing
-// the configuration and prior to running smokescreen.
-func (mc *MetricsClient) AddMetricTags(metric string, mTags []string) error {
-	if mc.started.Load() != nil {
-		return fmt.Errorf("cannot add metrics tags after starting smokescreen")
-	}
-	if tags, ok := mc.metricsTags[metric]; ok {
-		mc.metricsTags[metric] = append(tags, mTags...)
-		return nil
-	}
-	return fmt.Errorf("unknown metric: %s", metric)
-}
-
-// GetMetricTags returns the slice of metrics associated with a given metric.
-func (mc *MetricsClient) GetMetricTags(metric string) []string {
-	if tags, ok := mc.metricsTags[metric]; ok {
-		return tags
-	}
-	return nil
-}
-
-func (mc *MetricsClient) Incr(metric string, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Incr(metric, mTags, rate)
-}
-
-func (mc *MetricsClient) IncrWithTags(metric string, tags []string, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	tags = append(tags, mTags...)
-	return mc.statsdClient.Incr(metric, tags, rate)
-}
-
-func (mc *MetricsClient) Gauge(metric string, value float64, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Gauge(metric, value, mTags, rate)
-}
-
-func (mc *MetricsClient) Histogram(metric string, value float64, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Histogram(metric, value, mTags, rate)
-}
-
-func (mc *MetricsClient) HistogramWithTags(metric string, value float64, tags []string, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	tags = append(tags, mTags...)
-	return mc.statsdClient.Histogram(metric, value, tags, rate)
-}
-
-func (mc *MetricsClient) Timing(metric string, d time.Duration, rate float64) error {
-	mTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Timing(metric, d, mTags, rate)
-}
-
-func (mc *MetricsClient) TimingWithTags(metric string, d time.Duration, rate float64, tags []string) error {
-	mTags := mc.GetMetricTags(metric)
-	tags = append(tags, mTags...)
-	return mc.statsdClient.Timing(metric, d, tags, rate)
-}
-
-func (mc *MetricsClient) StatsdClient() statsd.ClientInterface {
-	return mc.statsdClient
-}
-
-func (mc *MetricsClient) SetStarted() {
-	mc.started.Store(true)
-}
-
-// MetricsClient implements MetricsClientInterface
-var _ MetricsClientInterface = &MetricsClient{}
 
 // reportConnError emits a detailed metric about a connection error, with a tag corresponding to
 // the failure type. If err is not a net.Error, does nothing.
@@ -188,17 +59,17 @@ func ReportConnError(mc MetricsClientInterface, err error) {
 		return
 	}
 
-	etag := "type:unknown"
+	errorTag := map[string]string{"type": "unknown"}
 	switch {
 	case e.Timeout():
-		etag = "type:timeout"
+		errorTag["type"] = "timeout"
 	case errors.Is(e, syscall.ECONNREFUSED):
-		etag = "type:refused"
+		errorTag["type"] = "refused"
 	case errors.Is(e, syscall.ECONNRESET):
-		etag = "type:reset"
+		errorTag["type"] = "reset"
 	case errors.Is(e, syscall.ECONNABORTED):
-		etag = "type:aborted"
+		errorTag["type"] = "aborted"
 	}
 
-	mc.IncrWithTags("cn.atpt.connect.err", []string{etag}, 1)
+	mc.IncrWithTags("cn.atpt.connect.err", errorTag, 1)
 }
