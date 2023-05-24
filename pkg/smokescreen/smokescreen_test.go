@@ -1070,7 +1070,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		return nil
 	}
 
-	t.Run("CustomRequestHandler works for HTTPS", func(t *testing.T) {
+	t.Run("PostDecisionRequestHandler works for HTTPS", func(t *testing.T) {
 		testCases := []struct {
 			header        http.Header
 			expectedError bool
@@ -1088,7 +1088,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
-		cfg.CustomRequestHandler = customRequestHandler
+		cfg.PostDecisionRequestHandler = customRequestHandler
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -1119,7 +1119,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("CustomRequestHandler works for HTTP", func(t *testing.T) {
+	t.Run("PostDecisionRequestHandler works for HTTP", func(t *testing.T) {
 		testCases := []struct {
 			header        string
 			expectedError bool
@@ -1137,7 +1137,7 @@ func TestCustomRequestHandler(t *testing.T) {
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
-		cfg.CustomRequestHandler = customRequestHandler
+		cfg.PostDecisionRequestHandler = customRequestHandler
 
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
