@@ -20,7 +20,7 @@ func TestMapKeys(t *testing.T) {
 		"thirdKey",
 	}
 
-	r.Equal(expectedKeys, mapKeys(inputMap))
+	r.ElementsMatch(expectedKeys, mapKeys(inputMap))
 }
 
 func TestMergeMaps(t *testing.T) {
