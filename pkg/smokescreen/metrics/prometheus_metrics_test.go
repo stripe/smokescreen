@@ -1,13 +1,12 @@
 package metrics
 
 import (
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestMapKeys(t *testing.T) {
-	a := assert.New(t)
+	r := require.New(t)
 
 	inputMap := map[string]string{
 		"firstKey":  "firstValue",
@@ -21,7 +20,7 @@ func TestMapKeys(t *testing.T) {
 		"thirdKey",
 	}
 
-	a.ElementsMatch(expectedKeys, mapKeys(inputMap))
+	r.ElementsMatch(expectedKeys, mapKeys(inputMap))
 }
 
 func TestMergeMaps(t *testing.T) {
