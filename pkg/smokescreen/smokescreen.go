@@ -477,16 +477,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
-
-		// Call the custom request handler if it exists
-		if config.CustomRequestHandler != nil {
-			err = config.CustomRequestHandler(req)
-			if err != nil {
-				pctx.Error = denyError{err}
-				return req, rejectResponse(pctx, pctx.Error)
-			}
-		}
-
 		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
@@ -497,6 +487,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 		if !sctx.decision.allow {
 			return req, rejectResponse(pctx, denyError{errors.New(sctx.decision.reason)})
+		}
+
+		// Call the custom request handler if it exists
+		if config.PostDecisionRequestHandler != nil {
+			err = config.PostDecisionRequestHandler(req)
+			if err != nil {
+				pctx.Error = denyError{err}
+				return req, rejectResponse(pctx, pctx.Error)
+			}
 		}
 
 		// Proceed with proxying the request
@@ -621,22 +620,21 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		pctx.Error = denyError{err}
 		return "", pctx.Error
 	}
-
-	// Call the custom request handler if it exists
-	if config.CustomRequestHandler != nil {
-		err = config.CustomRequestHandler(pctx.Req)
-		if err != nil {
-			pctx.Error = denyError{err}
-			return "", pctx.Error
-		}
-	}
-
 	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		return "", denyError{pctx.Error}
 	}
 	if !sctx.decision.allow {
 		return "", denyError{errors.New(sctx.decision.reason)}
+	}
+
+	// Call the custom request handler if it exists
+	if config.PostDecisionRequestHandler != nil {
+		err = config.PostDecisionRequestHandler(pctx.Req)
+		if err != nil {
+			pctx.Error = denyError{err}
+			return "", pctx.Error
+		}
 	}
 
 	return destination.String(), nil
