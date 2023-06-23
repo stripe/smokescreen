@@ -175,7 +175,9 @@ func TestClearsErrorHeader(t *testing.T) {
 	t.Run("Clears error header set by upstream", func(t *testing.T) {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-		cfg, err := testConfig("test-trusted-srv")
+		cfg, err := testConfig("test-local-srv")
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
 		proxySrv := proxyServer(cfg)
@@ -186,9 +188,17 @@ func TestClearsErrorHeader(t *testing.T) {
 		client, err := proxyClient(proxySrv.URL)
 		r.NoError(err)
 
+		// Create a test http.TestServer to serve a response with the error header set.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set(errorHeader, "foobar")
+			w.Header().Set("X-Smokescreen-Test", "yes")
+			w.WriteHeader(200)
+		}))
+		defer srv.Close()
+
 		// Talk "through" the proxy to our malicious upstream that sets the
 		// error header.
-		resp, err := client.Get("http://httpbin.org/response-headers?X-Smokescreen-Error=foobar&X-Smokescreen-Test=yes")
+		resp, err := client.Get(srv.URL)
 		r.NoError(err)
 
 		// Should succeed
