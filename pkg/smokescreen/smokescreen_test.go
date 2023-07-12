@@ -438,6 +438,10 @@ func TestInvalidHost(t *testing.T) {
 				// Plain HTTP
 				r.NoError(err)
 				r.Equal(http.StatusBadGateway, resp.StatusCode)
+
+				defer resp.Body.Close()
+				b, _ := ioutil.ReadAll(resp.Body)
+				r.Contains(string(b), "Failed to resolve remote hostname")
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
