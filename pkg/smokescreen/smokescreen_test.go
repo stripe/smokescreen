@@ -406,11 +406,10 @@ func TestHealthcheck(t *testing.T) {
 
 var invalidHostCases = []struct {
 	scheme    string
-	expectErr bool
 	proxyType string
 }{
-	{"http", false, "http"},
-	{"https", true, "connect"},
+	{"http", "http"},
+	{"https", "connect"},
 }
 
 func TestInvalidHost(t *testing.T) {
@@ -430,12 +429,19 @@ func TestInvalidHost(t *testing.T) {
 			client, err := proxyClient(proxySrv.URL)
 			r.NoError(err)
 
+			// This hostname does not exist and should never resolve
 			resp, err := client.Get(fmt.Sprintf("%s://notarealhost.test", testCase.scheme))
-			if testCase.expectErr {
-				r.Contains(err.Error(), "Request rejected by proxy")
+			if testCase.scheme == "https" {
+				r.Error(err)
+				r.Contains(err.Error(), "Bad gateway")
 			} else {
+				// Plain HTTP
 				r.NoError(err)
 				r.Equal(http.StatusBadGateway, resp.StatusCode)
+
+				defer resp.Body.Close()
+				b, _ := ioutil.ReadAll(resp.Body)
+				r.Contains(string(b), "Failed to resolve remote hostname")
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
