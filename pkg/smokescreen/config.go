@@ -82,6 +82,9 @@ type Config struct {
 	// Customer handler to allow clients to modify reject responses
 	RejectResponseHandler func(*http.Response)
 
+	// Customer handler to allow clients to modify accept responses
+	AcceptResponseHandler func(*http.Response)
+
 	// UnsafeAllowPrivateRanges inverts the default behavior, telling smokescreen to allow private IP
 	// ranges by default (exempting loopback and unicast ranges)
 	// This setting can be used to configure Smokescreen with a blocklist, rather than an allowlist
