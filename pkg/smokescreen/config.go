@@ -79,10 +79,10 @@ type Config struct {
 	// Custom Dial Timeout function to be called
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
 
-	// Customer handler to allow clients to modify reject responses
+	// Custom handler to allow clients to modify reject responses
 	RejectResponseHandler func(*http.Response)
 
-	// Customer handler to allow clients to modify accept responses
+	// Custom handler to allow clients to modify accept responses
 	AcceptResponseHandler func(*http.Response)
 
 	// UnsafeAllowPrivateRanges inverts the default behavior, telling smokescreen to allow private IP
