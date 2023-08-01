@@ -560,6 +560,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		return resp
 	})
 
+	// This function will be called on the response to a successful https CONNECT request.
+	// The goproxy OnResponse() function above is only called for non-https responses.
 	if config.AcceptResponseHandler != nil {
 		proxy.ConnectRespHandler = config.AcceptResponseHandler
 	}
