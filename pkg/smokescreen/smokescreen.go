@@ -546,7 +546,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				resp.Header.Del(errorHeader)
 			}
 			if sctx.cfg.AcceptResponseHandler != nil {
-				sctx.cfg.AcceptResponseHandler(resp)
+				sctx.cfg.AcceptResponseHandler(pctx, resp)
 			}
 		}
 
@@ -559,6 +559,11 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		logProxy(config, pctx)
 		return resp
 	})
+
+	if config.AcceptResponseHandler != nil {
+		proxy.ConnectRespHandler = config.AcceptResponseHandler
+	}
+
 	return proxy
 }
 
