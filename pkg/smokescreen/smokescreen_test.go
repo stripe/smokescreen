@@ -23,6 +23,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
@@ -1073,8 +1074,9 @@ func TestAcceptResponseHandler(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 
 		// set a custom AcceptResponseHandler that will set a header on every reject response
-		cfg.AcceptResponseHandler = func(resp *http.Response) {
+		cfg.AcceptResponseHandler = func(_ *goproxy.ProxyCtx, resp *http.Response) error {
 			resp.Header.Set(testHeader, "This header is added by the AcceptResponseHandler")
+			return nil
 		}
 		r.NoError(err)
 
