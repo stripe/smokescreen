@@ -19,7 +19,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/stripe/goproxy"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -84,7 +83,7 @@ type Config struct {
 	RejectResponseHandler func(*http.Response)
 
 	// Custom handler to allow clients to modify successful CONNECT responses
-	AcceptResponseHandler func(*goproxy.ProxyCtx, *http.Response) error
+	AcceptResponseHandler func(*smokescreenContext, *http.Response) error
 
 	// UnsafeAllowPrivateRanges inverts the default behavior, telling smokescreen to allow private IP
 	// ranges by default (exempting loopback and unicast ranges)

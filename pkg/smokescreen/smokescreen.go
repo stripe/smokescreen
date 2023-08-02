@@ -546,7 +546,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				resp.Header.Del(errorHeader)
 			}
 			if sctx.cfg.AcceptResponseHandler != nil {
-				sctx.cfg.AcceptResponseHandler(pctx, resp)
+				sctx.cfg.AcceptResponseHandler(sctx, resp)
 			}
 		}
 
@@ -563,7 +563,13 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// This function will be called on the response to a successful https CONNECT request.
 	// The goproxy OnResponse() function above is only called for non-https responses.
 	if config.AcceptResponseHandler != nil {
-		proxy.ConnectRespHandler = config.AcceptResponseHandler
+		proxy.ConnectRespHandler = func(pctx *goproxy.ProxyCtx, resp *http.Response) error {
+			sctx, ok := pctx.UserData.(*smokescreenContext)
+			if !ok {
+				return fmt.Errorf("goproxy ProxyContext missing required UserData *smokescreenContext")
+			}
+			return config.AcceptResponseHandler(sctx, resp)
+		}
 	}
 
 	return proxy
