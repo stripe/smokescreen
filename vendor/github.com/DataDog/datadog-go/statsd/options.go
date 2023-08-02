@@ -1,6 +1,7 @@
 package statsd
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -32,7 +33,9 @@ var (
 	// DefaultChannelModeBufferSize is the default size of the channel holding incoming metrics
 	DefaultChannelModeBufferSize = 4096
 	// DefaultAggregationFlushInterval is the default interval for the aggregator to flush metrics.
-	DefaultAggregationFlushInterval = 3 * time.Second
+	// This should divide the Agent reporting period (default=10s) evenly to reduce "aliasing" that
+	// can cause values to appear irregular.
+	DefaultAggregationFlushInterval = 2 * time.Second
 	// DefaultAggregation
 	DefaultAggregation = false
 	// DefaultExtendedAggregation
@@ -199,6 +202,9 @@ func WithBufferFlushInterval(bufferFlushInterval time.Duration) Option {
 // WithBufferShardCount sets the BufferShardCount option.
 func WithBufferShardCount(bufferShardCount int) Option {
 	return func(o *Options) error {
+		if bufferShardCount < 1 {
+			return fmt.Errorf("BufferShardCount must be a positive integer")
+		}
 		o.BufferShardCount = bufferShardCount
 		return nil
 	}

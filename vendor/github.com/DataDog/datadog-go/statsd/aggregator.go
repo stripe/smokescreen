@@ -11,58 +11,8 @@ type (
 	countsMap         map[string]*countMetric
 	gaugesMap         map[string]*gaugeMetric
 	setsMap           map[string]*setMetric
-	bufferedMetricMap map[string]*histogramMetric
+	bufferedMetricMap map[string]*bufferedMetric
 )
-
-// bufferedMetricContexts represent the contexts for Histograms, Distributions
-// and Timing. Since those 3 metric types behave the same way and are sampled
-// with the same type they're represented by the same class.
-type bufferedMetricContexts struct {
-	nbContext int32
-	mutex     sync.RWMutex
-	values    bufferedMetricMap
-	newMetric func(string, float64, string) *bufferedMetric
-}
-
-func newBufferedContexts(newMetric func(string, float64, string) *bufferedMetric) bufferedMetricContexts {
-	return bufferedMetricContexts{
-		values:    bufferedMetricMap{},
-		newMetric: newMetric,
-	}
-}
-
-func (bc *bufferedMetricContexts) flush(metrics []metric) []metric {
-	bc.mutex.Lock()
-	values := bc.values
-	bc.values = bufferedMetricMap{}
-	bc.mutex.Unlock()
-
-	for _, d := range values {
-		metrics = append(metrics, d.flushUnsafe())
-	}
-	atomic.AddInt32(&bc.nbContext, int32(len(values)))
-	return metrics
-}
-
-func (bc *bufferedMetricContexts) sample(name string, value float64, tags []string) error {
-	context, stringTags := getContextAndTags(name, tags)
-	bc.mutex.RLock()
-	if v, found := bc.values[context]; found {
-		v.sample(value)
-		bc.mutex.RUnlock()
-		return nil
-	}
-	bc.mutex.RUnlock()
-
-	bc.mutex.Lock()
-	bc.values[context] = bc.newMetric(name, value, stringTags)
-	bc.mutex.Unlock()
-	return nil
-}
-
-func (bc *bufferedMetricContexts) resetAndGetNbContext() int32 {
-	return atomic.SwapInt32(&bc.nbContext, 0)
-}
 
 type aggregator struct {
 	nbContextGauge int32
@@ -81,9 +31,16 @@ type aggregator struct {
 	timings       bufferedMetricContexts
 
 	closed chan struct{}
-	exited chan struct{}
 
 	client *Client
+
+	// aggregator implements ChannelMode mechanism to receive histograms,
+	// distributions and timings. Since they need sampling they need to
+	// lock for random. When using both ChannelMode and ExtendedAggregation
+	// we don't want goroutine to fight over the lock.
+	inputMetrics    chan metric
+	stopChannelMode chan struct{}
+	wg              sync.WaitGroup
 }
 
 type aggregatorMetrics struct {
@@ -98,15 +55,15 @@ type aggregatorMetrics struct {
 
 func newAggregator(c *Client) *aggregator {
 	return &aggregator{
-		client:        c,
-		counts:        countsMap{},
-		gauges:        gaugesMap{},
-		sets:          setsMap{},
-		histograms:    newBufferedContexts(newHistogramMetric),
-		distributions: newBufferedContexts(newDistributionMetric),
-		timings:       newBufferedContexts(newTimingMetric),
-		closed:        make(chan struct{}),
-		exited:        make(chan struct{}),
+		client:          c,
+		counts:          countsMap{},
+		gauges:          gaugesMap{},
+		sets:            setsMap{},
+		histograms:      newBufferedContexts(newHistogramMetric),
+		distributions:   newBufferedContexts(newDistributionMetric),
+		timings:         newBufferedContexts(newTimingMetric),
+		closed:          make(chan struct{}),
+		stopChannelMode: make(chan struct{}),
 	}
 }
 
@@ -117,25 +74,54 @@ func (a *aggregator) start(flushInterval time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				a.sendMetrics()
+				a.flush()
 			case <-a.closed:
-				close(a.exited)
 				return
 			}
 		}
 	}()
 }
 
-func (a *aggregator) sendMetrics() {
-	for _, m := range a.flushMetrics() {
-		a.client.send(m)
+func (a *aggregator) startReceivingMetric(bufferSize int, nbWorkers int) {
+	a.inputMetrics = make(chan metric, bufferSize)
+	for i := 0; i < nbWorkers; i++ {
+		a.wg.Add(1)
+		go a.pullMetric()
 	}
 }
 
+func (a *aggregator) stopReceivingMetric() {
+	close(a.stopChannelMode)
+	a.wg.Wait()
+}
+
 func (a *aggregator) stop() {
-	close(a.closed)
-	<-a.exited
-	a.sendMetrics()
+	a.closed <- struct{}{}
+}
+
+func (a *aggregator) pullMetric() {
+	for {
+		select {
+		case m := <-a.inputMetrics:
+			switch m.metricType {
+			case histogram:
+				a.histogram(m.name, m.fvalue, m.tags, m.rate)
+			case distribution:
+				a.distribution(m.name, m.fvalue, m.tags, m.rate)
+			case timing:
+				a.timing(m.name, m.fvalue, m.tags, m.rate)
+			}
+		case <-a.stopChannelMode:
+			a.wg.Done()
+			return
+		}
+	}
+}
+
+func (a *aggregator) flush() {
+	for _, m := range a.flushMetrics() {
+		a.client.sendBlocking(m)
+	}
 }
 
 func (a *aggregator) flushTelemetryMetrics() *aggregatorMetrics {
@@ -219,6 +205,13 @@ func (a *aggregator) count(name string, value int64, tags []string) error {
 	a.countsM.RUnlock()
 
 	a.countsM.Lock()
+	// Check if another goroutines hasn't created the value betwen the RUnlock and 'Lock'
+	if count, found := a.counts[context]; found {
+		count.sample(value)
+		a.countsM.Unlock()
+		return nil
+	}
+
 	a.counts[context] = newCountMetric(name, value, tags)
 	a.countsM.Unlock()
 	return nil
@@ -237,6 +230,12 @@ func (a *aggregator) gauge(name string, value float64, tags []string) error {
 	gauge := newGaugeMetric(name, value, tags)
 
 	a.gaugesM.Lock()
+	// Check if another goroutines hasn't created the value betwen the 'RUnlock' and 'Lock'
+	if gauge, found := a.gauges[context]; found {
+		gauge.sample(value)
+		a.gaugesM.Unlock()
+		return nil
+	}
 	a.gauges[context] = gauge
 	a.gaugesM.Unlock()
 	return nil
@@ -253,19 +252,32 @@ func (a *aggregator) set(name string, value string, tags []string) error {
 	a.setsM.RUnlock()
 
 	a.setsM.Lock()
+	// Check if another goroutines hasn't created the value betwen the 'RUnlock' and 'Lock'
+	if set, found := a.sets[context]; found {
+		set.sample(value)
+		a.setsM.Unlock()
+		return nil
+	}
 	a.sets[context] = newSetMetric(name, value, tags)
 	a.setsM.Unlock()
 	return nil
 }
 
-func (a *aggregator) histogram(name string, value float64, tags []string) error {
-	return a.histograms.sample(name, value, tags)
+// Only histograms, distributions and timings are sampled with a rate since we
+// only pack them in on message instead of aggregating them. Discarding the
+// sample rate will have impacts on the CPU and memory usage of the Agent.
+
+// type alias for Client.sendToAggregator
+type bufferedMetricSampleFunc func(name string, value float64, tags []string, rate float64) error
+
+func (a *aggregator) histogram(name string, value float64, tags []string, rate float64) error {
+	return a.histograms.sample(name, value, tags, rate)
 }
 
-func (a *aggregator) distribution(name string, value float64, tags []string) error {
-	return a.distributions.sample(name, value, tags)
+func (a *aggregator) distribution(name string, value float64, tags []string, rate float64) error {
+	return a.distributions.sample(name, value, tags, rate)
 }
 
-func (a *aggregator) timing(name string, value float64, tags []string) error {
-	return a.timings.sample(name, value, tags)
+func (a *aggregator) timing(name string, value float64, tags []string, rate float64) error {
+	return a.timings.sample(name, value, tags, rate)
 }
