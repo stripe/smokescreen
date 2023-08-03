@@ -12,7 +12,7 @@ require (
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.0
-	github.com/stripe/goproxy v0.0.0-20220308202309-3f1dfba6d1a4
+	github.com/stripe/goproxy v0.0.0-20230801191332-fabc3ecb7251
 	golang.org/x/net v0.7.0
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
