@@ -73,7 +73,7 @@ type ACLDecision struct {
 type SmokescreenContext struct {
 	cfg           *Config
 	start         time.Time
-	decision      *ACLDecision
+	Decision      *ACLDecision
 	proxyType     string
 	logger        *logrus.Entry
 	requestedHost string
