@@ -250,7 +250,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if !ok {
 		return nil, fmt.Errorf("dialContext missing required *SmokescreenContext")
 	}
-	d := sctx.decision
+	d := sctx.Decision
 
 	// If an address hasn't been resolved, does not match the original outboundHost,
 	// or is not tcp we must re-resolve it before establishing the connection.
@@ -482,7 +482,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 
 		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
-		sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
+		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
@@ -490,8 +490,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		if pctx.Error != nil {
 			return req, rejectResponse(pctx, pctx.Error)
 		}
-		if !sctx.decision.allow {
-			return req, rejectResponse(pctx, denyError{errors.New(sctx.decision.reason)})
+		if !sctx.Decision.allow {
+			return req, rejectResponse(pctx, denyError{errors.New(sctx.Decision.reason)})
 		}
 
 		// Call the custom request handler if it exists
@@ -541,7 +541,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy.OnResponse().DoFunc(func(resp *http.Response, pctx *goproxy.ProxyCtx) *http.Response {
 		sctx := pctx.UserData.(*SmokescreenContext)
 
-		if resp != nil && pctx.Error == nil && sctx.decision.allow {
+		if resp != nil && pctx.Error == nil && sctx.Decision.allow {
 			if resp.Header.Get(errorHeader) != "" {
 				resp.Header.Del(errorHeader)
 			}
@@ -589,8 +589,8 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 		}
 	}
 
-	decision := sctx.decision
-	if sctx.decision != nil {
+	decision := sctx.Decision
+	if sctx.Decision != nil {
 		fields[LogFieldRole] = decision.role
 		fields[LogFieldProject] = decision.project
 	}
@@ -609,7 +609,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 		fields[LogFieldContentLength] = pctx.Resp.ContentLength
 	}
 
-	if sctx.decision != nil {
+	if sctx.Decision != nil {
 		fields[LogFieldDecisionReason] = decision.reason
 		fields[LogFieldEnforceWouldDeny] = decision.enforceWouldDeny
 		fields[LogFieldAllow] = decision.allow
@@ -644,13 +644,13 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 
 	// checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
 	// or if there is a DNS resolution failure.
-	sctx.decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
+	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		// DNS resolution failure
 		return "", pctx.Error
 	}
-	if !sctx.decision.allow {
-		return "", denyError{errors.New(sctx.decision.reason)}
+	if !sctx.Decision.allow {
+		return "", denyError{errors.New(sctx.Decision.reason)}
 	}
 
 	// Call the custom request handler if it exists
