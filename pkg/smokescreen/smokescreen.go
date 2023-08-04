@@ -63,7 +63,7 @@ const (
 
 type ipType int
 
-type aclDecision struct {
+type AclDecision struct {
 	reason, role, project, outboundHost string
 	resolvedAddr                        *net.TCPAddr
 	allow                               bool
@@ -73,7 +73,7 @@ type aclDecision struct {
 type SmokescreenContext struct {
 	cfg           *Config
 	start         time.Time
-	decision      *aclDecision
+	decision      *AclDecision
 	proxyType     string
 	logger        *logrus.Entry
 	requestedHost string
@@ -881,7 +881,7 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destination hostport.HostPort) (*aclDecision, time.Duration, error) {
+func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destination hostport.HostPort) (*AclDecision, time.Duration, error) {
 	decision := checkACLsForRequest(config, req, destination)
 
 	var lookupTime time.Duration
@@ -905,8 +905,8 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destinatio
 	return decision, lookupTime, nil
 }
 
-func checkACLsForRequest(config *Config, req *http.Request, destination hostport.HostPort) *aclDecision {
-	decision := &aclDecision{
+func checkACLsForRequest(config *Config, req *http.Request, destination hostport.HostPort) *AclDecision {
+	decision := &AclDecision{
 		outboundHost: destination.String(),
 	}
 
@@ -932,9 +932,9 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		return decision
 	}
 
-	aclDecision, err := config.EgressACL.Decide(role, destination.Host)
-	decision.project = aclDecision.Project
-	decision.reason = aclDecision.Reason
+	AclDecision, err := config.EgressACL.Decide(role, destination.Host)
+	decision.project = AclDecision.Project
+	decision.reason = AclDecision.Reason
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -947,11 +947,11 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 
 	tags := map[string]string{
 		"role":     decision.role,
-		"def_rule": fmt.Sprintf("%t", aclDecision.Default),
-		"project":  aclDecision.Project,
+		"def_rule": fmt.Sprintf("%t", AclDecision.Default),
+		"project":  AclDecision.Project,
 	}
 
-	switch aclDecision.Result {
+	switch AclDecision.Result {
 	case acl.Deny:
 		decision.enforceWouldDeny = true
 		config.MetricsClient.IncrWithTags("acl.deny", tags, 1)
@@ -970,7 +970,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		config.Log.WithFields(logrus.Fields{
 			"role":        role,
 			"destination": destination.Host,
-			"action":      aclDecision.Result.String(),
+			"action":      AclDecision.Result.String(),
 		}).Warn("Unknown ACL action")
 		decision.reason = "Internal error"
 		config.MetricsClient.IncrWithTags("acl.unknown_error", tags, 1)

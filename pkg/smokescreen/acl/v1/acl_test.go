@@ -171,7 +171,7 @@ var testCases = map[string]struct {
 	},
 }
 
-func TestACLDecision(t *testing.T) {
+func TestAclDecision(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			a := assert.New(t)
