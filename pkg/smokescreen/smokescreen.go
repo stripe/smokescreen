@@ -65,7 +65,7 @@ type ipType int
 
 type AclDecision struct {
 	reason, role, project, outboundHost string
-	resolvedAddr                        *net.TCPAddr
+	ResolvedAddr                        *net.TCPAddr
 	allow                               bool
 	enforceWouldDeny                    bool
 }
@@ -254,9 +254,9 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	// If an address hasn't been resolved, does not match the original outboundHost,
 	// or is not tcp we must re-resolve it before establishing the connection.
-	if d.resolvedAddr == nil || d.outboundHost != addr || network != "tcp" {
+	if d.ResolvedAddr == nil || d.outboundHost != addr || network != "tcp" {
 		var err error
-		d.resolvedAddr, d.reason, err = safeResolve(sctx.cfg, network, addr)
+		d.ResolvedAddr, d.reason, err = safeResolve(sctx.cfg, network, addr)
 		if err != nil {
 			if _, ok := err.(denyError); ok {
 				sctx.cfg.Log.WithFields(
@@ -279,9 +279,9 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	start := time.Now()
 	if sctx.cfg.ProxyDialTimeout == nil {
-		conn, err = net.DialTimeout(network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+		conn, err = net.DialTimeout(network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	} else {
-		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.resolvedAddr.String(), sctx.cfg.ConnectTimeout)
+		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	}
 	connTime := time.Since(start)
 
@@ -898,7 +898,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destinatio
 			decision.allow = false
 			decision.enforceWouldDeny = true
 		} else {
-			decision.resolvedAddr = resolved
+			decision.ResolvedAddr = resolved
 		}
 	}
 
