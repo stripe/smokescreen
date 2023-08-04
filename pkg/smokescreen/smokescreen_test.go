@@ -1073,7 +1073,7 @@ func TestAcceptResponseHandler(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 
 		// set a custom AcceptResponseHandler that will set a header on every reject response
-		cfg.AcceptResponseHandler = func(_ *smokescreenContext, resp *http.Response) error {
+		cfg.AcceptResponseHandler = func(_ *SmokescreenContext, resp *http.Response) error {
 			resp.Header.Set(testHeader, "This header is added by the AcceptResponseHandler")
 			return nil
 		}

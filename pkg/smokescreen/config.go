@@ -83,7 +83,7 @@ type Config struct {
 	RejectResponseHandler func(*http.Response)
 
 	// Custom handler to allow clients to modify successful CONNECT responses
-	AcceptResponseHandler func(*smokescreenContext, *http.Response) error
+	AcceptResponseHandler func(*SmokescreenContext, *http.Response) error
 
 	// UnsafeAllowPrivateRanges inverts the default behavior, telling smokescreen to allow private IP
 	// ranges by default (exempting loopback and unicast ranges)
