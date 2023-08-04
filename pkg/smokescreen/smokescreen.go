@@ -70,7 +70,7 @@ type aclDecision struct {
 	enforceWouldDeny                    bool
 }
 
-type smokescreenContext struct {
+type SmokescreenContext struct {
 	cfg           *Config
 	start         time.Time
 	decision      *aclDecision
@@ -246,9 +246,9 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		return nil, fmt.Errorf("dialContext missing required *goproxy.ProxyCtx")
 	}
 
-	sctx, ok := pctx.UserData.(*smokescreenContext)
+	sctx, ok := pctx.UserData.(*SmokescreenContext)
 	if !ok {
-		return nil, fmt.Errorf("dialContext missing required *smokescreenContext")
+		return nil, fmt.Errorf("dialContext missing required *SmokescreenContext")
 	}
 	d := sctx.decision
 
@@ -332,7 +332,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 // HTTPErrorHandler allows returning a custom error response when smokescreen
 // fails to connect to the proxy target.
 func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
-	sctx := pctx.UserData.(*smokescreenContext)
+	sctx := pctx.UserData.(*SmokescreenContext)
 	resp := rejectResponse(pctx, err)
 
 	if err := resp.Write(w); err != nil {
@@ -345,7 +345,7 @@ func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
 }
 
 func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
-	sctx := pctx.UserData.(*smokescreenContext)
+	sctx := pctx.UserData.(*SmokescreenContext)
 
 	var msg, status string
 	var code int
@@ -411,7 +411,7 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 	}
 }
 
-func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenContext {
+func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenContext {
 	start := time.Now()
 
 	logger := cfg.Log.WithFields(logrus.Fields{
@@ -423,7 +423,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *smokescreenCo
 		LogFieldTraceID:       req.Header.Get(traceHeader),
 	})
 
-	return &smokescreenContext{
+	return &SmokescreenContext{
 		cfg:           cfg,
 		logger:        logger,
 		proxyType:     proxyType,
@@ -462,7 +462,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// proxy requests we are able to specify the request during the call to OnResponse().
 		sctx := newContext(config, httpProxy, req)
 
-		// Attach smokescreenContext to goproxy.ProxyCtx
+		// Attach SmokescreenContext to goproxy.ProxyCtx
 		pctx.UserData = sctx
 
 		// Delete Smokescreen specific headers before goproxy forwards the request
@@ -539,7 +539,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// function will be called again with the previously returned response, which will
 	// simply trigger the logHTTP function and return.
 	proxy.OnResponse().DoFunc(func(resp *http.Response, pctx *goproxy.ProxyCtx) *http.Response {
-		sctx := pctx.UserData.(*smokescreenContext)
+		sctx := pctx.UserData.(*SmokescreenContext)
 
 		if resp != nil && pctx.Error == nil && sctx.decision.allow {
 			if resp.Header.Get(errorHeader) != "" {
@@ -564,9 +564,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// The goproxy OnResponse() function above is only called for non-https responses.
 	if config.AcceptResponseHandler != nil {
 		proxy.ConnectRespHandler = func(pctx *goproxy.ProxyCtx, resp *http.Response) error {
-			sctx, ok := pctx.UserData.(*smokescreenContext)
+			sctx, ok := pctx.UserData.(*SmokescreenContext)
 			if !ok {
-				return fmt.Errorf("goproxy ProxyContext missing required UserData *smokescreenContext")
+				return fmt.Errorf("goproxy ProxyContext missing required UserData *SmokescreenContext")
 			}
 			return config.AcceptResponseHandler(sctx, resp)
 		}
@@ -576,7 +576,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 }
 
 func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
-	sctx := pctx.UserData.(*smokescreenContext)
+	sctx := pctx.UserData.(*SmokescreenContext)
 
 	fields := logrus.Fields{}
 
@@ -633,7 +633,7 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 }
 
 func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
-	sctx := pctx.UserData.(*smokescreenContext)
+	sctx := pctx.UserData.(*SmokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
 	destination, err := hostport.New(pctx.Req.Host, false)
