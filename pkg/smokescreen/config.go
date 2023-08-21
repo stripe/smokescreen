@@ -335,8 +335,8 @@ func (config *Config) SetupStatsd(addr string) error {
 	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
-func (config *Config) SetupPrometheus(endpoint string, port string) error {
-	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port)
+func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr string) error {
+	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port, listenAddr)
 	if err != nil {
 		return err
 	}

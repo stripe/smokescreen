@@ -24,9 +24,9 @@ type PrometheusMetricsClient struct {
 	timings    map[string]prometheus.HistogramVec
 }
 
-func NewPrometheusMetricsClient(endpoint string, port string) (*PrometheusMetricsClient, error) {
+func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string) (*PrometheusMetricsClient, error) {
 	http.Handle(endpoint, promhttp.Handler())
-	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
+	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), nil)
 
 	metricsTags := make(map[string]map[string]string)
 	for _, m := range metrics {
