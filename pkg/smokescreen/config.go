@@ -73,6 +73,10 @@ type Config struct {
 	TransportMaxIdleConns        int
 	TransportMaxIdleConnsPerHost int
 
+	// There are the http and https address for the transport proxy
+	TransportHttpProxyAddr  string
+	TransportHttpsProxyAddr string
+
 	// Used for logging connection time
 	TimeConnect bool
 

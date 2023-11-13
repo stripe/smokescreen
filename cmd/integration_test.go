@@ -279,7 +279,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	for _, useTLS := range []bool{true, false} {
 		// Smokescreen instances
-		_, proxyServer, err := startSmokescreen(t, useTLS, &logHook)
+		_, proxyServer, err := startSmokescreen(t, useTLS, &logHook, "")
 		require.NoError(t, err)
 		defer proxyServer.Close()
 		proxyServers[useTLS] = proxyServer
@@ -449,13 +449,13 @@ func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.
 
 // This test must be run with a separate test command as the environment variables
 // required can race with the test above.
-func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
+func TestInvalidUpstreamProxyConfiguratedFromEnv(t *testing.T) {
 	var logHook logrustest.Hook
 	servers := map[bool]*httptest.Server{}
 
 	// Create TLS and non-TLS instances of Smokescreen
 	for _, useTLS := range []bool{true, false} {
-		_, server, err := startSmokescreen(t, useTLS, &logHook)
+		_, server, err := startSmokescreen(t, useTLS, &logHook, "")
 		require.NoError(t, err)
 		defer server.Close()
 		servers[useTLS] = server
@@ -500,6 +500,58 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 	}
 }
 
+func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
+	var logHook logrustest.Hook
+	servers := map[bool]*httptest.Server{}
+
+	// Create TLS and non-TLS instances of Smokescreen
+	for _, useTLS := range []bool{true, false} {
+		var httpProxyAddr string
+		if useTLS {
+			httpProxyAddr = "https://notaproxy.prxy.svc:443"
+		} else {
+			httpProxyAddr = "http://notaproxy.prxy.svc:80"
+		}
+		_, server, err := startSmokescreen(t, useTLS, &logHook, httpProxyAddr)
+		require.NoError(t, err)
+		defer server.Close()
+		servers[useTLS] = server
+	}
+
+	// Passing an illegal upstream proxy value is not designed to be an especially well
+	// handled error so it would fail many of the checks in our other tests. We really
+	// only care to ensure that these requests never succeed.
+	for _, overConnect := range []bool{true, false} {
+		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
+			var proxyTarget string
+			var upstreamProxy string
+
+			// These proxy targets don't actually matter as the requests won't be sent.
+			// because the resolution of the upstream proxy will fail.
+			if overConnect {
+				upstreamProxy = "https://notaproxy.prxy.svc:443"
+				proxyTarget = "https://api.stripe.com:443"
+			} else {
+				upstreamProxy = "http://notaproxy.prxy.svc:80"
+				proxyTarget = "http://checkip.amazonaws.com:80"
+			}
+
+			testCase := &TestCase{
+				OverConnect:   overConnect,
+				OverTLS:       overConnect,
+				ProxyURL:      servers[overConnect].URL,
+				TargetURL:     proxyTarget,
+				UpstreamProxy: upstreamProxy,
+				RoleName:      generateRoleForPolicy(acl.Open),
+				ExpectStatus:  http.StatusBadGateway,
+			}
+			resp, err := executeRequestForTest(t, testCase, &logHook)
+			validateProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
+
+		})
+	}
+}
+
 func TestClientHalfCloseConnection(t *testing.T) {
 	a := assert.New(t)
 
@@ -510,7 +562,7 @@ func TestClientHalfCloseConnection(t *testing.T) {
 
 	var logHook logrustest.Hook
 
-	conf, server, err := startSmokescreen(t, false, &logHook)
+	conf, server, err := startSmokescreen(t, false, &logHook, "")
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -577,7 +629,7 @@ func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	return nil
 }
 
-func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*smokescreen.Config, *httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyAddr string) (*smokescreen.Config, *httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
@@ -594,6 +646,11 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook) (*smokescr
 			"--tls-client-ca-file=testdata/pki/ca.pem",
 			"--tls-crl-file=testdata/pki/crl.pem",
 		)
+	}
+
+	if httpProxyAddr != ""{
+		args = append(args, "--transport-http-proxy-addr="+httpProxyAddr)
+		args = append(args, "--transport-https-proxy-addr="+httpProxyAddr)
 	}
 
 	conf, err := NewConfiguration(args, nil)

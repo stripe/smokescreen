@@ -23,6 +23,7 @@ jobs:
         go test -race -v -timeout 2m -failfast -covermode atomic -coverprofile=.covprofile ./... -tags=nointegration
         # Run integration tests hermetically to avoid nondeterministic races on environment variables
         go test -race -v -timeout 2m -failfast ./cmd/... -run TestSmokescreenIntegration
+        go test -race -v -timeout 2m -failfast ./cmd/... -run TestInvalidUpstreamProxyConfiguratedFromEnv
         go test -race -v -timeout 2m -failfast ./cmd/... -run TestInvalidUpstreamProxyConfiguration
         go test -race -v -timeout 2m -failfast ./cmd/... -run TestClientHalfCloseConnection
     - name: Install goveralls
