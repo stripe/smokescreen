@@ -218,6 +218,8 @@ github.com/stretchr/testify v1.8.0 h1:pSgiaMZlXftHpm5L7V1+rVB+AZJydKsMxsQBIJw4PK
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stripe/goproxy v0.0.0-20230801191332-fabc3ecb7251 h1:wR1exp7OglR0ctk8yWPVp1oTOuyaLUlJv3/Wlbvbw64=
 github.com/stripe/goproxy v0.0.0-20230801191332-fabc3ecb7251/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
+github.com/stripe/goproxy v0.0.0-20231113215313-dbbdf2f6d709 h1:b0AttHAJ5f9rIK2frq9Q4WEeeBNQccr1j+cjQCmOl6s=
+github.com/stripe/goproxy v0.0.0-20231113215313-dbbdf2f6d709/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
 github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=

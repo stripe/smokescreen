@@ -69,7 +69,7 @@ github.com/sirupsen/logrus/hooks/test
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/stripe/goproxy v0.0.0-20230801191332-fabc3ecb7251
+# github.com/stripe/goproxy v0.0.0-20231113215313-dbbdf2f6d709
 ## explicit; go 1.13
 github.com/stripe/goproxy
 # golang.org/x/mod v0.8.0
