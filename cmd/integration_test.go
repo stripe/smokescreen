@@ -649,8 +649,8 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	}
 
 	if httpProxyAddr != ""{
-		args = append(args, "--transport-http-proxy-addr="+httpProxyAddr)
-		args = append(args, "--transport-https-proxy-addr="+httpProxyAddr)
+		args = append(args, fmt.Sprintf("--transport-http-proxy-addr=%s", httpProxyAddr))
+		args = append(args, fmt.Sprintf("--transport-https-proxy-addr=%s", httpProxyAddr))
 	}
 
 	conf, err := NewConfiguration(args, nil)
