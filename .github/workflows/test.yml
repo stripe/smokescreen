@@ -1,5 +1,9 @@
 on: [push, pull_request]
 name: Test
+# Workaround for coveralls error "Can't add a job to a build that is already closed"
+# See https://github.com/lemurheavy/coveralls-public/issues/1716
+env:
+  COVERALLS_SERVICE_NUMBER: ${{ github.run_id }}-${{ github.run_attempt }}
 jobs:
   test:
     strategy:
