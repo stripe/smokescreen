@@ -147,14 +147,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Allow private ip ranges by default",
 		},
 		cli.StringFlag{
-			Name:  "transport-http-proxy-addr",
+			Name:  "upstream-http-proxy-addr",
 			Value: "",
-			Usage: "Set the smokescreen's HTTP transport proxy address",
+			Usage: "Set Smokescreen's upstream HTTP proxy address",
 		},
 		cli.StringFlag{
-			Name:  "transport-https-proxy-addr",
+			Name:  "upstream-https-proxy-addr",
 			Value: "",
-			Usage: "Set the smokescreen's HTTPS transport proxy address",
+			Usage: "Set Smokescreen's upstream HTTPS proxy address",
 		},
 	}
 
@@ -297,12 +297,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
-		if c.IsSet("transport-http-proxy-addr") {
-			conf.TransportHttpProxyAddr = c.String("transport-http-proxy-addr")
+		if c.IsSet("upstream-http-proxy-addr") {
+			conf.UpstreamHttpProxyAddr = c.String("upstream-http-proxy-addr")
 		}
 
-		if c.IsSet("transport-https-proxy-addr") {
-			conf.TransportHttpsProxyAddr = c.String("transport-https-proxy-addr")
+		if c.IsSet("upstream-https-proxy-addr") {
+			conf.UpstreamHttpsProxyAddr = c.String("upstream-https-proxy-addr")
 		}
 
 		// Setup the connection tracker if there is not yet one in the config
