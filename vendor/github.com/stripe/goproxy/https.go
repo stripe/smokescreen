@@ -33,11 +33,12 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
+	OkConnect                     = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	MitmConnect                   = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	HTTPMitmConnect               = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	RejectConnect                 = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	httpsRegexp                   = regexp.MustCompile(`^https:\/\/`)
+	PerRequestHTTPSProxyHeaderKey = "X-Https-Proxy"
 )
 
 type ConnectAction struct {
@@ -117,8 +118,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
+		var httpsProxyURL string
+		if r.Header[PerRequestHTTPSProxyHeaderKey] != nil && r.Header[PerRequestHTTPSProxyHeaderKey][0] != "" {
+			httpsProxyURL = r.Header[PerRequestHTTPSProxyHeaderKey][0]
+		} else {
+			httpsProxyURL = proxy.HttpsProxyAddr
+		}
 
-		httpsProxy, err := httpsProxyAddr(r.URL, proxy.HttpsProxyAddr)
+		httpsProxy, err := httpsProxyAddr(r.URL, httpsProxyURL)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
@@ -565,7 +572,7 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	return c, nil
 }
 
-// httpsProxyAddr function uses the address in httpsProxy parameter. 
+// httpsProxyAddr function uses the address in httpsProxy parameter.
 // When the httpProxyAddr parameter is empty, uses the HTTPS_PROXY, https_proxy from environment variables.
 // httpsProxyAddr function allows goproxy to respect no_proxy env vars
 // https://github.com/stripe/goproxy/pull/5
