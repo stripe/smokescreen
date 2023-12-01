@@ -117,10 +117,13 @@ func main() {
 	smokescreen.StartWithConfig(conf, nil)
 }
 ```
+### IP Filtering
 
-### ACLs
+To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config. 
 
-An ACL can be described in a YAML formatted file. The ACL, at its top-level, contains a list of services as well as a default behavior.
+### Hostname ACLs
+
+An Hostname ACL can be described in a YAML formatted file. The ACL, at its top-level, contains a list of services as well as a default behavior.
 
 Three policies are supported:
 
@@ -130,7 +133,10 @@ Three policies are supported:
 | Report  | Allows all traffic for this service and warns if client accesses a remote host which is not in the list        |
 | Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
 
+> :warning: **The ACL is only applied to hostnames *as they appear in the request*!** If you want to allow or deny traffic based on the destination IP address *after DNS resolution*, you should be using the config options instead (see the `IP Filtering` section above).
+
 A host can be specified with or without a globbing prefix. The host (without the globbing prefix) must be in Punycode to prevent ambiguity.
+
 
 | host                | valid   |
 | ------------------- | ------- |
@@ -144,9 +150,9 @@ A host can be specified with or without a globbing prefix. The host (without the
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
 
-#### Global Allow/Deny Lists
+#### Global Hostname Allow/Deny Lists
 
-Optionally, you may specify a global allow list and a global deny list in your ACL config.
+Optionally, you may specify a global allow list and a global deny list for hostnames in your ACL config.
 
 These lists override the policy, but do not override the `allowed_domains` list for each role.
 
@@ -155,7 +161,7 @@ For example, specifying `example.com` in your global_allow_list will allow traff
 Similarly, specifying `malicious.com` in your global_deny_list will deny traffic for that domain on a role, even if that role is set to `report` or `open`.
 However, if the host specifies `malicious.com` in its `allowed_domains`, traffic to `malicious.com` will be allowed on that role, regardless of policy.
 
-> :warning: **The global_deny_list will only block specific *domains*, not entire *destinations*.** For example, if `malicious.com` is in the global_deny_list but the IP address that it resolves to is not, roles with an `open` policy will still be able to access the destination by using its IP address directly. For this reason, **we recommend using allowlists instead of denylists, whenever it is possible to do so.**
+> :warning: **The global_deny_list will only block specific *hostnames*, not entire *destinations*.** For example, if `malicious.com` is in the global_deny_list but the IP address that it resolves to is not, roles with an `open` policy will still be able to access the destination by using its IP address directly. For this reason, **we recommend using allowlists instead of denylists, whenever it is possible to do so.**
 
 If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
 
