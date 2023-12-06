@@ -186,7 +186,7 @@ func TestACLDecision(t *testing.T) {
 			a.NoError(err)
 			a.Equal(testCase.expectProject, proj)
 
-			d, err := acl.Decide(testCase.service, testCase.host)
+			d, err := acl.Decide(testCase.service, testCase.host, "")
 			a.NoError(err)
 			a.Equal(testCase.expectDecision, d.Result)
 			a.Equal(testCase.expectDecisionReason, d.Reason)
@@ -207,7 +207,7 @@ func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a.Equal("no rule for service: unk", err.Error())
 	a.Empty(proj)
 
-	d, err := acl.Decide("unk", "example.com")
+	d, err := acl.Decide("unk", "example.com", "")
 	a.Equal(Deny, d.Result)
 	a.False(d.Default)
 	a.Nil(err)
