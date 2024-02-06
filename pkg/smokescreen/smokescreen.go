@@ -508,6 +508,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	})
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
+	// TODO: this is the function that wshould be modified to accomodate the new config
 	proxy.OnRequest().HandleConnectFunc(func(_ string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		pctx.UserData = newContext(config, connectProxy, pctx.Req)
 		pctx.HTTPErrorHandler = HTTPErrorHandler
@@ -644,6 +645,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 
 	// checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
 	// or if there is a DNS resolution failure.
+	// TODO: add support here for checkIfRequestShouldBeProxied to return an error if the X-Https-Proxy address is set and disallowed
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		// DNS resolution failure

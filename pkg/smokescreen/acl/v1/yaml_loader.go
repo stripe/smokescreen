@@ -17,6 +17,7 @@ func NewYAMLLoader(path string) *YAMLLoader {
 	return &YAMLLoader{path}
 }
 
+// TODO: modify these to accomodate the new config??
 type YAMLConfig struct {
 	Services        []YAMLRule `yaml:"services"`
 	Default         *YAMLRule  `yaml:"default"`
@@ -26,10 +27,11 @@ type YAMLConfig struct {
 }
 
 type YAMLRule struct {
-	Name         string   `yaml:"name"`
-	Project      string   `yaml:"project"` // owner
-	Action       string   `yaml:"action"`
-	AllowedHosts []string `yaml:"allowed_domains"`
+	Name                      string   `yaml:"name"`
+	Project                   string   `yaml:"project"` // owner
+	Action                    string   `yaml:"action"`
+	AllowedHosts              []string `yaml:"allowed_domains"`
+	AllowedExternalProxyHosts []string `yaml:"allowed_external_proxies"`
 }
 
 func (yc *YAMLConfig) ValidateConfig() error {
