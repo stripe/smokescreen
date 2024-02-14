@@ -1241,7 +1241,6 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))
 		})
-		// a := assert.New(t)
 		r := require.New(t)
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
