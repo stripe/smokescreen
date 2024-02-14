@@ -1275,7 +1275,6 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))
 		})
-		// a := assert.New(t)
 		r := require.New(t)
 		l, err := net.Listen("tcp", "localhost:0")
 		r.NoError(err)
@@ -1286,9 +1285,9 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
-		// TODO: figure out how to change the rules at runtime here
 		proxy := proxyServer(cfg)
 		logHook := proxyLogHook(cfg)
+
 		// The External proxy is a HTTPS proxy that will be used to connect to the remote server
 		externalProxy := httptest.NewUnstartedServer(BuildProxy(cfg))
 		externalProxy.StartTLS()
@@ -1304,7 +1303,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
-		// r.Equal("connect proxy host not allowed in rule", entry.Data["decision_reason"])
+		r.Equal("host matched allowed domain in rule", entry.Data["decision_reason"])
 		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["role"])
 		r.Equal(true, entry.Data["allow"])
 	})
