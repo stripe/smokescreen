@@ -639,11 +639,9 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		return "", pctx.Error
 	}
 
-	/*
-		checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
-		or if there is a DNS resolution failure, or if the subsequent proxy host (specified by the
-		X-Https-Upstream-Proxy header in the CONNECT request to _this_ proxy) is disallowed.
-	*/
+	// checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
+	// or if there is a DNS resolution failure, or if the subsequent proxy host (specified by the
+	// X-Https-Upstream-Proxy header in the CONNECT request to _this_ proxy) is disallowed.
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		// DNS resolution failure
@@ -937,10 +935,8 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	// flow as in: client -(TLS)-> smokescreen -(TLS)-> external proxy -(TLS)-> destination.
 	// Without this header, there's no way for the client to specify a subsequent proxy.
 	var connectProxyHost string
-	if len(req.Header["X-Upstream-Https-Proxy"]) > 0 {
-		connectProxyHost = req.Header["X-Upstream-Https-Proxy"][0]
-	} else {
-		connectProxyHost = ""
+	if connectProxyHostSlice := req.Header.Get("X-Upstream-Https-Proxy"); len(connectProxyHostSlice) > 0 {
+		connectProxyHost = string(connectProxyHostSlice[0])
 	}
 
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
