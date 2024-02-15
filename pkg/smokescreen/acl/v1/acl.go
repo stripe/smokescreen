@@ -40,6 +40,7 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 	if err != nil {
 		return nil, err
 	}
+
 	err = acl.DisablePolicies(disabledActions)
 	if err != nil {
 		return nil, err

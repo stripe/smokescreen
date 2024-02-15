@@ -934,10 +934,9 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	// a _subsequent_ proxy to use for the CONNECT request. This is used to allow traffic
 	// flow as in: client -(TLS)-> smokescreen -(TLS)-> external proxy -(TLS)-> destination.
 	// Without this header, there's no way for the client to specify a subsequent proxy.
-	var connectProxyHost string
-	if connectProxyHostSlice := req.Header.Get("X-Upstream-Https-Proxy"); len(connectProxyHostSlice) > 0 {
-		connectProxyHost = string(connectProxyHostSlice[0])
-	}
+	// Also note - Get returns the first value for a given header, or the empty string,
+	// which is the behavior we want here.
+	connectProxyHost := req.Header.Get("X-Upstream-Https-Proxy")
 
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
 	decision.project = ACLDecision.Project
