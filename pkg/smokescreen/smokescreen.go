@@ -303,8 +303,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
 
 	if conn != nil {
-		fields := logrus.Fields{}
-
 		if addr := conn.LocalAddr(); addr != nil {
 			fields[LogFieldOutLocalAddr] = addr.String()
 		}
@@ -312,7 +310,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		if addr := conn.RemoteAddr(); addr != nil {
 			fields[LogFieldOutRemoteAddr] = addr.String()
 		}
-
 	}
 	sctx.logger = sctx.logger.WithFields(fields)
 
