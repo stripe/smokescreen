@@ -26,11 +26,10 @@ type YAMLConfig struct {
 }
 
 type YAMLRule struct {
-	Name                      string   `yaml:"name"`
-	Project                   string   `yaml:"project"` // owner
-	Action                    string   `yaml:"action"`
-	AllowedHosts              []string `yaml:"allowed_domains"`
-	AllowedExternalProxyHosts []string `yaml:"allowed_external_proxies"`
+	Name         string   `yaml:"name"`
+	Project      string   `yaml:"project"` // owner
+	Action       string   `yaml:"action"`
+	AllowedHosts []string `yaml:"allowed_domains"`
 }
 
 func (yc *YAMLConfig) ValidateConfig() error {
@@ -79,10 +78,9 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 		}
 
 		r := Rule{
-			Project:            v.Project,
-			Policy:             p,
-			DomainGlobs:        v.AllowedHosts,
-			ExternalProxyGlobs: v.AllowedExternalProxyHosts,
+			Project:     v.Project,
+			Policy:      p,
+			DomainGlobs: v.AllowedHosts,
 		}
 
 		err = acl.Add(v.Name, r)

@@ -9,7 +9,7 @@ import (
 )
 
 type Decider interface {
-	Decide(service, host, connectProxyHost string) (Decision, error)
+	Decide(service, host string) (Decision, error)
 }
 
 type ACL struct {
@@ -22,10 +22,9 @@ type ACL struct {
 }
 
 type Rule struct {
-	Project            string
-	Policy             EnforcementPolicy
-	DomainGlobs        []string
-	ExternalProxyGlobs []string
+	Project     string
+	Policy      EnforcementPolicy
+	DomainGlobs []string
 }
 
 type Decision struct {
@@ -81,12 +80,11 @@ func (acl *ACL) Add(svc string, r Rule) error {
 }
 
 // Decide takes uses the rule configured for the given service to determine if
-//  1. The CONNECT proxy host is in the rule's allowed domain
-//  2. The host is in the rule's allowed domain
-//  3. The host has been globally denied
-//  4. The host has been globally allowed
-//  5. There is a default rule for the ACL
-func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error) {
+//   1. The host is in the rule's allowed domain
+//   2. The host has been globally denied
+//   3. The host has been globally allowed
+//   4. There is a default rule for the ACL
+func (acl *ACL) Decide(service, host string) (Decision, error) {
 	var d Decision
 
 	rule := acl.Rule(service)
@@ -98,25 +96,6 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 
 	d.Project = rule.Project
 	d.Default = rule == acl.DefaultRule
-
-	if connectProxyHost != "" {
-		shouldDeny := true
-		for _, dg := range rule.ExternalProxyGlobs {
-			if HostMatchesGlob(connectProxyHost, dg) {
-				shouldDeny = false
-				break
-			}
-		}
-
-		// We can only break out early and return if we know that we should deny;
-		// at this point the host hasn't been allowed by the rule, so we need to
-		// continue to check it below (unless we know we should deny it already)
-		if shouldDeny {
-			d.Result = Deny
-			d.Reason = "connect proxy host not allowed in rule"
-			return d, nil
-		}
-	}
 
 	// if the host matches any of the rule's allowed domains, allow
 	for _, dg := range rule.DomainGlobs {
