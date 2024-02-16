@@ -1236,79 +1236,77 @@ func TestCustomRequestHandler(t *testing.T) {
 	})
 }
 
-// func TestCONNECTProxyACLsDeny(t *testing.T) {
-// 	//t.Run("Blocks a non-approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
-// 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Write([]byte("OK"))
-// 	})
-// 	r := require.New(t)
-// 	l, err := net.Listen("tcp", "localhost:0")
-// 	r.NoError(err)
-// 	cfg, err := testConfig("test-external-connect-proxy-blocked-srv")
-// 	r.NoError(err)
-// 	cfg.Listener = l
+func TestCONNECTProxyACLs(t *testing.T) {
+	t.Run("Blocks a non-approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		r := require.New(t)
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg, err := testConfig("test-external-connect-proxy-blocked-srv")
+		r.NoError(err)
+		cfg.Listener = l
 
-// 	err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
-// 	r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
 
-// 	internalToStripeProxy := proxyServer(cfg)
-// 	logHook := proxyLogHook(cfg)
-// 	remote := httptest.NewTLSServer(h)
+		internalToStripeProxy := proxyServer(cfg)
+		logHook := proxyLogHook(cfg)
+		remote := httptest.NewTLSServer(h)
 
-// 	client, err := proxyClientWithConnectHeaders(internalToStripeProxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"https://google.com"}})
-// 	r.NoError(err)
+		client, err := proxyClientWithConnectHeaders(internalToStripeProxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"https://google.com"}})
+		r.NoError(err)
 
-// 	req, err := http.NewRequest("GET", remote.URL, nil)
-// 	r.NoError(err)
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
 
-// 	client.Do(req)
+		client.Do(req)
 
-// 	entry := findCanonicalProxyDecision(logHook.AllEntries())
-// 	r.NotNil(entry)
-// 	r.Equal("connect proxy host not allowed in rule", entry.Data["decision_reason"])
-// 	r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["role"])
-// 	r.Equal(false, entry.Data["allow"])
-// 	//})
-// }
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+		r.Equal("connect proxy host not allowed in rule", entry.Data["decision_reason"])
+		r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["role"])
+		r.Equal(false, entry.Data["allow"])
+	})
 
-// func TestCONNECTProxyACLsAllow(t *testing.T) {
-// 	//t.Run("Allows an approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
-// 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Write([]byte("OK"))
-// 	})
-// 	r := require.New(t)
-// 	l, err := net.Listen("tcp", "localhost:0")
-// 	r.NoError(err)
-// 	cfg, err := testConfig("test-external-connect-proxy-allowed-srv")
-// 	r.NoError(err)
-// 	cfg.Listener = l
+	t.Run("Allows an approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		r := require.New(t)
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg, err := testConfig("test-external-connect-proxy-allowed-srv")
+		r.NoError(err)
+		cfg.Listener = l
 
-// 	err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
-// 	r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
 
-// 	proxy := proxyServer(cfg)
-// 	logHook := proxyLogHook(cfg)
+		proxy := proxyServer(cfg)
+		logHook := proxyLogHook(cfg)
 
-// 	// The External proxy is a HTTPS proxy that will be used to connect to the remote server
-// 	externalProxy := httptest.NewUnstartedServer(BuildProxy(cfg))
-// 	externalProxy.StartTLS()
+		// The External proxy is a HTTPS proxy that will be used to connect to the remote server
+		externalProxy := httptest.NewUnstartedServer(BuildProxy(cfg))
+		externalProxy.StartTLS()
 
-// 	remote := httptest.NewTLSServer(h)
-// 	client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"localhost"}})
-// 	r.NoError(err)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"localhost"}})
+		r.NoError(err)
 
-// 	req, err := http.NewRequest("GET", remote.URL, nil)
-// 	r.NoError(err)
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
 
-// 	client.Do(req)
+		client.Do(req)
 
-//		entry := findCanonicalProxyDecision(logHook.AllEntries())
-//		r.NotNil(entry)
-//		r.Equal("host matched allowed domain in rule", entry.Data["decision_reason"])
-//		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["role"])
-//		r.Equal(true, entry.Data["allow"])
-//		//})
-//	}
+		entry := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(entry)
+		r.Equal("host matched allowed domain in rule", entry.Data["decision_reason"])
+		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["role"])
+		r.Equal(true, entry.Data["allow"])
+	})
+}
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
 		if entry.Message == CanonicalProxyDecision {
