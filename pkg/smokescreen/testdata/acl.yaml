@@ -15,6 +15,24 @@ services:
   - name: test-open-srv
     project: security
     action: open
+  - name: test-external-connect-proxy-blocked-srv
+    project: security
+    action: enforce
+    allowed_domains:
+      - 127.0.0.1
+    allowed_external_proxies:
+      - myproxy.com
+      - otherproxy.org
+  - name: test-external-connect-proxy-allowed-srv
+    project: security
+    action: enforce
+    allowed_domains:
+      - 127.0.0.1
+    allowed_external_proxies:
+      - localhost 
+      - myproxy.com
+      - myproxy2.com
+      - thisisaproxy.com
 
 global_deny_list:
   - stripe.com
