@@ -30,6 +30,8 @@ services:
       - 127.0.0.1
     allowed_external_proxies:
       - localhost 
+      - myproxy.com
+      - myproxy2.com
       - thisisaproxy.com
 
 global_deny_list:
