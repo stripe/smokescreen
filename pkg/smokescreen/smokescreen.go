@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -936,7 +937,19 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	// Without this header, there's no way for the client to specify a subsequent proxy.
 	// Also note - Get returns the first value for a given header, or the empty string,
 	// which is the behavior we want here.
-	connectProxyHost := req.Header.Get("X-Upstream-Https-Proxy")
+	connectProxyUrl, err := url.Parse(req.Header.Get("X-Upstream-Https-Proxy"))
+
+	if err != nil {
+		config.Log.WithFields(logrus.Fields{
+			"error": err,
+			"role":  role,
+		}).Warn("Unable to parse X-Upstream-Https-Proxy header.")
+
+		config.MetricsClient.Incr("acl.decide_error", 1)
+		return decision
+	}
+
+	connectProxyHost := connectProxyUrl.Hostname()
 
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
 	decision.project = ACLDecision.Project

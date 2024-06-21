@@ -1292,7 +1292,12 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		externalProxy.StartTLS()
 
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"myproxy.com"}})
+		client, err := proxyClientWithConnectHeaders(
+			proxy.URL,
+			http.Header{
+				"X-Upstream-Https-Proxy": []string{"https://param1_username-param2-param3:password@myproxy.com:12345"},
+			},
+		)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
