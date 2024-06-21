@@ -941,9 +941,12 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
-			"error": err,
-			"role":  role,
-		}).Warn("Unable to parse X-Upstream-Https-Proxy header.")
+			"error":               err,
+			"role":                role,
+			"upstream_proxy_name": req.Header.Get("X-Upstream-Https-Proxy"),
+			"destination_host":    destination.Host,
+			"kind":                "parse_failure",
+		}).Error("Unable to parse X-Upstream-Https-Proxy header.")
 
 		config.MetricsClient.Incr("acl.upstream_proxy_error", 1)
 		return decision
