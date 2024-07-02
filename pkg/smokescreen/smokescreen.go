@@ -348,10 +348,6 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	var msg, status string
 	var code int
 
-	fmt.Println("**********")
-	fmt.Println(pctx.Resp)
-	fmt.Println(err)
-	fmt.Println("**********")
 	if e, ok := err.(net.Error); ok {
 		// net.Dial timeout
 		if e.Timeout() {
@@ -524,8 +520,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
-		fmt.Println("-----MADE IT HERE--------------")
-
 		return goproxy.OkConnect, destination
 	})
 
@@ -553,9 +547,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				sctx.cfg.AcceptResponseHandler(sctx, resp)
 			}
 		}
-		fmt.Println("-----------------------------")
-		fmt.Println(pctx.Error)
-		fmt.Println("-----------------------------")
 
 		if resp == nil && pctx.Error != nil {
 			return rejectResponse(pctx, pctx.Error)
@@ -951,13 +942,6 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	if connectProxyHost != "" {
 		connectProxyUrl, err := url.Parse(connectProxyHost)
 
-		config.Log.WithFields(logrus.Fields{
-			"headers":             req.Header,
-			"upstream_proxy_name": req.Header.Get("X-Upstream-Https-Proxy"),
-			"destination_host":    destination.Host,
-			"proxy_host":          connectProxyUrl.Hostname(),
-		}).Info("Info about the headers and destination host.")
-
 		if err != nil {
 			config.Log.WithFields(logrus.Fields{
 				"error":               err,
@@ -973,9 +957,6 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 
 		connectProxyHost = connectProxyUrl.Hostname()
 	}
-
-	// TODO: add proxy auth params fi if the decision is to allow the request
-	// this will likely mean modifying the config struct
 
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
 	decision.project = ACLDecision.Project
