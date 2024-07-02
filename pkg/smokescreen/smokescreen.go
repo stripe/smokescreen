@@ -348,6 +348,10 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	var msg, status string
 	var code int
 
+	fmt.Println("**********")
+	fmt.Println(pctx.Resp)
+	fmt.Println(err)
+	fmt.Println("**********")
 	if e, ok := err.(net.Error); ok {
 		// net.Dial timeout
 		if e.Timeout() {
@@ -520,6 +524,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
+		fmt.Println("-----MADE IT HERE--------------")
+
 		return goproxy.OkConnect, destination
 	})
 
@@ -547,6 +553,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 				sctx.cfg.AcceptResponseHandler(sctx, resp)
 			}
 		}
+		fmt.Println("-----------------------------")
+		fmt.Println(pctx.Error)
+		fmt.Println("-----------------------------")
 
 		if resp == nil && pctx.Error != nil {
 			return rejectResponse(pctx, pctx.Error)
@@ -937,22 +946,36 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	// Without this header, there's no way for the client to specify a subsequent proxy.
 	// Also note - Get returns the first value for a given header, or the empty string,
 	// which is the behavior we want here.
-	connectProxyUrl, err := url.Parse(req.Header.Get("X-Upstream-Https-Proxy"))
+	connectProxyHost := req.Header.Get("X-Upstream-Https-Proxy")
 
-	if err != nil {
+	if connectProxyHost != "" {
+		connectProxyUrl, err := url.Parse(connectProxyHost)
+
 		config.Log.WithFields(logrus.Fields{
-			"error":               err,
-			"role":                role,
+			"headers":             req.Header,
 			"upstream_proxy_name": req.Header.Get("X-Upstream-Https-Proxy"),
 			"destination_host":    destination.Host,
-			"kind":                "parse_failure",
-		}).Error("Unable to parse X-Upstream-Https-Proxy header.")
+			"proxy_host":          connectProxyUrl.Hostname(),
+		}).Info("Info about the headers and destination host.")
 
-		config.MetricsClient.Incr("acl.upstream_proxy_error", 1)
-		return decision
+		if err != nil {
+			config.Log.WithFields(logrus.Fields{
+				"error":               err,
+				"role":                role,
+				"upstream_proxy_name": req.Header.Get("X-Upstream-Https-Proxy"),
+				"destination_host":    destination.Host,
+				"kind":                "parse_failure",
+			}).Error("Unable to parse X-Upstream-Https-Proxy header.")
+
+			config.MetricsClient.Incr("acl.upstream_proxy_error", 1)
+			return decision
+		}
+
+		connectProxyHost = connectProxyUrl.Hostname()
 	}
 
-	connectProxyHost := connectProxyUrl.Hostname()
+	// TODO: add proxy auth params fi if the decision is to allow the request
+	// this will likely mean modifying the config struct
 
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
 	decision.project = ACLDecision.Project

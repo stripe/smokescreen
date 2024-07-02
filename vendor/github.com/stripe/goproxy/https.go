@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -133,7 +134,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if httpsProxy == "" {
 			targetSiteCon, err = proxy.connectDialContext(ctx, "tcp", host)
 		} else {
-			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxy, host)
+			// parsedProxyURL, _ := url.Parse(httpsProxyURL)
+			// runtime.Breakpoint()
+			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxyURL, host)
 		}
 		if err != nil {
 			httpError(proxyClient, ctx, err)
@@ -460,6 +463,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
+				fmt.Println("1//////////")
+				fmt.Println(resp.StatusCode)
+				fmt.Println("//////////")
 				resp, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
@@ -501,6 +507,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
+				fmt.Println("2//////////")
+				fmt.Println(resp.StatusCode)
+				fmt.Println("//////////")
 				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
@@ -543,11 +552,15 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		c = tls.Client(c, proxy.Tr.TLSClientConfig)
 	}
 
+	// possibly need to add the proxy auth header here
+	hdr := make(http.Header)
+	auth := proxyURL.User.String()
+	hdr.Add("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
 		Host:   host,
-		Header: make(http.Header),
+		Header: hdr,
 	}
 	connectReq.Write(c)
 	// Read response.
@@ -561,6 +574,10 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
+		fmt.Println("3//////////")
+		fmt.Println(resp.StatusCode)
+		fmt.Println(resp.Header)
+		fmt.Println("//////////")
 		body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 		if err != nil {
 			return nil, err
@@ -593,6 +610,7 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	reqSchemeURL.Scheme = "https"
 
 	proxyURL, err := cfg.ProxyFunc()(reqSchemeURL)
+	// runtime.Breakpoint()
 	if err != nil {
 		return "", err
 	}

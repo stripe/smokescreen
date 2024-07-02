@@ -101,7 +101,9 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 
 	if connectProxyHost != "" {
 		shouldDeny := true
+		acl.Logger.Log(logrus.InfoLevel, rule.ExternalProxyGlobs, ": ", connectProxyHost)
 		for _, dg := range rule.ExternalProxyGlobs {
+			acl.Logger.Log(logrus.InfoLevel, dg, " _____ ", connectProxyHost)
 			if HostMatchesGlob(connectProxyHost, dg) {
 				shouldDeny = false
 				break
@@ -113,7 +115,7 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 		// continue to check it below (unless we know we should deny it already)
 		if shouldDeny {
 			d.Result = Deny
-			d.Reason = "connect proxy host not allowed in rule"
+			d.Reason = "connect pBAJKLSroxy host not allowed in rule"
 			return d, nil
 		}
 	}

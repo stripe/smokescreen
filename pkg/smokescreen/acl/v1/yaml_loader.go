@@ -98,9 +98,10 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 		}
 
 		acl.DefaultRule = &Rule{
-			Project:     cfg.Default.Project,
-			Policy:      p,
-			DomainGlobs: cfg.Default.AllowedHosts,
+			Project:            cfg.Default.Project,
+			Policy:             p,
+			DomainGlobs:        cfg.Default.AllowedHosts,
+			ExternalProxyGlobs: cfg.Default.AllowedExternalProxyHosts,
 		}
 	}
 
