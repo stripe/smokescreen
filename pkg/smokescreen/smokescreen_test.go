@@ -1270,6 +1270,34 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		r.Equal(false, entry.Data["allow"])
 	})
 
+	t.Run("Blocks if proxy can't be parsed when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		r := require.New(t)
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg, err := testConfig("test-external-connect-proxy-blocked-srv")
+		r.NoError(err)
+		cfg.Listener = l
+
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		internalToStripeProxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+
+		client, err := proxyClientWithConnectHeaders(internalToStripeProxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"google.com"}})
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		_, err = client.Do(req)
+		r.Error(err)
+		r.Contains(err.Error(), "Request rejected by proxy")
+	})
+
 	t.Run("Allows an approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))
@@ -1334,7 +1362,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		externalProxy.StartTLS()
 
 		remote := httptest.NewTLSServer(h)
-		first_client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"myproxy.com"}})
+		first_client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"https://myproxy.com"}})
 		r.NoError(err)
 
 		first_req, err := http.NewRequest("GET", remote.URL, nil)
@@ -1342,7 +1370,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 
 		first_client.Do(first_req)
 
-		second_client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"myproxy2.com"}})
+		second_client, err := proxyClientWithConnectHeaders(proxy.URL, http.Header{"X-Upstream-Https-Proxy": []string{"https://myproxy2.com"}})
 		r.NoError(err)
 
 		second_req, err := http.NewRequest("GET", remote.URL, nil)

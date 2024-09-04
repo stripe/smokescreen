@@ -941,6 +941,9 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 
 	if connectProxyHost != "" {
 		connectProxyUrl, err := url.Parse(connectProxyHost)
+		if err == nil && connectProxyUrl.Hostname() == "" {
+			err = errors.New("proxy header contains invalid URL. The correct format is https://[username:password@]my.proxy.srv:12345")
+		}
 
 		if err != nil {
 			config.Log.WithFields(logrus.Fields{
