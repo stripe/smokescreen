@@ -25,14 +25,27 @@ type Rule struct {
 	Project            string
 	Policy             EnforcementPolicy
 	DomainGlobs        []string
+	DomainMitmGlobs    []MitmDomain
 	ExternalProxyGlobs []string
 }
 
+type MitmDomain struct {
+	MitmConfig
+	Domain string
+}
+
+type MitmConfig struct {
+	AddHeaders                  map[string]string
+	DetailedHttpLogs            bool
+	DetailedHttpLogsFullHeaders []string
+}
+
 type Decision struct {
-	Reason  string
-	Default bool
-	Result  DecisionResult
-	Project string
+	Reason     string
+	Default    bool
+	Result     DecisionResult
+	Project    string
+	MitmConfig *MitmConfig
 }
 
 func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, error) {
@@ -68,7 +81,7 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
-	err = acl.ValidateDomainGlobs(svc, r.DomainGlobs)
+	err = acl.ValidateRuleDomainsGlobs(svc, r)
 	if err != nil {
 		return err
 	}
@@ -122,6 +135,15 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 	for _, dg := range rule.DomainGlobs {
 		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
+			return d, nil
+		}
+	}
+
+	// if the host matches any of the rule's allowed domains with MITM config, allow
+	for _, dg := range rule.DomainMitmGlobs {
+		if HostMatchesGlob(host, dg.Domain) {
+			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
+			d.MitmConfig = (*MitmConfig)(&dg.MitmConfig)
 			return d, nil
 		}
 	}
@@ -180,7 +202,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
-		err := acl.ValidateDomainGlobs(svc, r.DomainGlobs)
+		err := acl.ValidateRuleDomainsGlobs(svc, r)
 		if err != nil {
 			return err
 		}
@@ -188,6 +210,22 @@ func (acl *ACL) Validate() error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (acl *ACL) ValidateRuleDomainsGlobs(svc string, r Rule) error {
+	err := acl.ValidateDomainGlobs(svc, r.DomainGlobs)
+	if err != nil {
+		return err
+	}
+	mitmDomainGlobs := make([]string, len(r.DomainMitmGlobs))
+	for i, d := range r.DomainMitmGlobs {
+		mitmDomainGlobs[i] = d.Domain
+	}
+	err = acl.ValidateDomainGlobs(svc, mitmDomainGlobs)
+	if err != nil {
+		return err
 	}
 	return nil
 }

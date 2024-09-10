@@ -26,11 +26,19 @@ type YAMLConfig struct {
 }
 
 type YAMLRule struct {
-	Name                      string   `yaml:"name"`
-	Project                   string   `yaml:"project"` // owner
-	Action                    string   `yaml:"action"`
-	AllowedHosts              []string `yaml:"allowed_domains"`
-	AllowedExternalProxyHosts []string `yaml:"allowed_external_proxies"`
+	Name                      string         `yaml:"name"`
+	Project                   string         `yaml:"project"` // owner
+	Action                    string         `yaml:"action"`
+	AllowedHosts              []string       `yaml:"allowed_domains"`
+	AllowedHostsMitm          []YAMLMitmRule `yaml:"allowed_domains_mitm"`
+	AllowedExternalProxyHosts []string       `yaml:"allowed_external_proxies"`
+}
+
+type YAMLMitmRule struct {
+	Domain                      string            `yaml:"domain"`
+	AddHeaders                  map[string]string `yaml:"add_headers"`
+	DetailedHttpLogs            bool              `yaml:"detailed_http_logs"`
+	DetailedHttpLogsFullHeaders []string          `yaml:"detailed_http_logs_full_headers"`
 }
 
 func (yc *YAMLConfig) ValidateConfig() error {
@@ -78,10 +86,25 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 			return nil, err
 		}
 
+		var allowedHostsMitm []MitmDomain
+
+		for _, w := range v.AllowedHostsMitm {
+			mitmDomain := MitmDomain{
+				MitmConfig: MitmConfig{
+					AddHeaders:                  w.AddHeaders,
+					DetailedHttpLogs:            w.DetailedHttpLogs,
+					DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
+				},
+				Domain: w.Domain,
+			}
+			allowedHostsMitm = append(allowedHostsMitm, mitmDomain)
+		}
+
 		r := Rule{
 			Project:            v.Project,
 			Policy:             p,
 			DomainGlobs:        v.AllowedHosts,
+			DomainMitmGlobs:    allowedHostsMitm,
 			ExternalProxyGlobs: v.AllowedExternalProxyHosts,
 		}
 
@@ -97,10 +120,25 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 			return nil, err
 		}
 
+		var allowedHostsMitm []MitmDomain
+
+		for _, w := range cfg.Default.AllowedHostsMitm {
+			mitmDomain := MitmDomain{
+				MitmConfig: MitmConfig{
+					AddHeaders:                  w.AddHeaders,
+					DetailedHttpLogs:            w.DetailedHttpLogs,
+					DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
+				},
+				Domain: w.Domain,
+			}
+			allowedHostsMitm = append(allowedHostsMitm, mitmDomain)
+		}
+
 		acl.DefaultRule = &Rule{
 			Project:            cfg.Default.Project,
 			Policy:             p,
 			DomainGlobs:        cfg.Default.AllowedHosts,
+			DomainMitmGlobs:    allowedHostsMitm,
 			ExternalProxyGlobs: cfg.Default.AllowedExternalProxyHosts,
 		}
 	}

@@ -6,6 +6,7 @@ package smokescreen
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
@@ -1387,6 +1390,108 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		r.Equal("host matched allowed domain in rule", second_entry.Data["decision_reason"])
 	})
 }
+
+func TestMitm(t *testing.T) {
+	t.Run("CONNECT proxy", func(t *testing.T) {
+		a := assert.New(t)
+		r := require.New(t)
+
+		cfg, err := testConfig("test-mitm")
+		r.NoError(err)
+		// We use the default test certificates from Goproxy
+		mitmCa, err := tls.X509KeyPair(goproxy.CA_CERT, goproxy.CA_KEY)
+		r.NoError(err)
+		mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0])
+		r.NoError(err)
+		cfg.MitmCa = &mitmCa
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		clientCh := make(chan bool)
+		serverCh := make(chan bool)
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCh <- true
+			<-serverCh
+			// This handlers returns a body with a string containing all the request headers it received.
+			var sb strings.Builder
+			for name, values := range r.Header {
+				for _, value := range values {
+					sb.WriteString(name)
+					sb.WriteString(": ")
+					sb.WriteString(value)
+					sb.WriteString(";")
+				}
+			}
+			io.WriteString(w, sb.String())
+			w.Write([]byte(sb.String()))
+		})
+
+		logHook := proxyLogHook(cfg)
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := proxyServer(cfg)
+		remote := httptest.NewTLSServer(h)
+		client, err := proxyClient(proxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		go func() {
+			resp, err := client.Do(req)
+			r.NoError(err)
+			body, err := ioutil.ReadAll(resp.Body)
+			r.NoError(err)
+			resp.Body.Close()
+			// We check the response body to see if the Mitm-Header-Inject header was injected by the Mitm handler
+			a.Contains(string(body), "Accept-Language: el")
+			clientCh <- true
+		}()
+
+		<-serverCh
+		count := 0
+		cfg.ConnTracker.Range(func(k, v interface{}) bool {
+			count++
+			return true
+		})
+		a.Equal(1, count, "connTracker should contain one tracked connection")
+
+		serverCh <- true
+		<-clientCh
+
+		// Metrics should show one successful connection and a corresponding successful
+		// DNS request along with its timing metric.
+		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
+		r.True(ok)
+		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
+		r.NoError(err)
+		r.Equal(i, uint64(1))
+		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
+		r.NoError(err)
+		r.Equal(lookups, uint64(1))
+		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
+		r.NoError(err)
+		r.Equal(ltime, uint64(1))
+
+		proxyDecision := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(proxyDecision)
+		r.Contains(proxyDecision.Data, "proxy_type")
+		r.Equal("connect", proxyDecision.Data["proxy_type"])
+		// check proxyclose log entry has information about the request headers
+		proxyClose := findCanonicalProxyClose(logHook.AllEntries())
+		r.NotNil(proxyClose)
+		r.Equal("GET", proxyClose.Data["mitm_req_method"])
+		r.Contains(proxyClose.Data["mitm_req_url"], "https://127.0.0.1")
+		mitmReqHeaders, ok := proxyClose.Data["mitm_req_headers"].(http.Header)
+		r.True(ok)
+		r.Equal("[REDACTED]", mitmReqHeaders.Get("Accept-Language"))
+		r.Equal("Go-http-client/1.1", mitmReqHeaders.Get("User-Agent"))
+	})
+}
+
 func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	for _, entry := range logs {
 		if entry.Message == CanonicalProxyDecision {

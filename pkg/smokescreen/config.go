@@ -73,7 +73,7 @@ type Config struct {
 	TransportMaxIdleConns        int
 	TransportMaxIdleConnsPerHost int
 
-	// These are the http and https address for the upstream proxy 
+	// These are the http and https address for the upstream proxy
 	UpstreamHttpProxyAddr  string
 	UpstreamHttpsProxyAddr string
 
@@ -99,6 +99,8 @@ type Config struct {
 	// If smokescreen denies a request, this handler is not called.
 	// If the handler returns an error, smokescreen will deny the request.
 	PostDecisionRequestHandler func(*http.Request) error
+	// MitmCa is used to provide a custom CA for MITM
+	MitmCa *tls.Certificate
 }
 
 type missingRoleError struct {
