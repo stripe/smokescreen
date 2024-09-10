@@ -358,3 +358,29 @@ func TestHostMatchesGlob(t *testing.T) {
 		})
 	}
 }
+
+func TestMitmComfig(t *testing.T) {
+	a := assert.New(t)
+
+	yl := NewYAMLLoader(path.Join("testdata", "mitm_config.yaml"))
+	acl, err := New(logrus.New(), yl, []string{})
+
+	a.NoError(err)
+	a.NotNil(acl)
+
+	mitmService := "enforce-dummy-mitm-srv"
+
+	proj, err := acl.Project(mitmService)
+	a.NoError(err)
+	a.Equal("usersec", proj)
+
+	d, err := acl.Decide(mitmService, "example-mitm.com", "")
+	a.NoError(err)
+	a.Equal(Allow, d.Result)
+	a.Equal("host matched allowed domain in rule", d.Reason)
+
+	a.NotNil(d.MitmConfig)
+	a.Equal(true, d.MitmConfig.DetailedHttpLogs)
+	a.Equal([]string{"User-Agent"}, d.MitmConfig.DetailedHttpLogsFullHeaders)
+	a.Equal(map[string]string{"Accept-Language": "el"}, d.MitmConfig.AddHeaders)
+}
