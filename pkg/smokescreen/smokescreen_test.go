@@ -1403,7 +1403,7 @@ func TestMitm(t *testing.T) {
 		r.NoError(err)
 		mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0])
 		r.NoError(err)
-		cfg.MitmCa = &mitmCa
+		cfg.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)

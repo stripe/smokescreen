@@ -695,7 +695,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	connectAction := goproxy.OkConnect
 	// If the ACLDecision matched a MITM rule
 	if sctx.Decision.MitmConfig != nil {
-		if config.MitmCa == nil {
+		if config.MitmTLSConfig == nil {
 			deny := denyError{errors.New("ACLDecision specified MITM but Smokescreen doesn't have MITM enabled")}
 			sctx.Decision.allow = false
 			sctx.Decision.MitmConfig = nil
@@ -716,7 +716,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 
 		connectAction = &goproxy.ConnectAction{
 			Action:            goproxy.ConnectMitm,
-			TLSConfig:         goproxy.TLSConfigFromCA(config.MitmCa),
+			TLSConfig:         config.MitmTLSConfig,
 			MitmMutateRequest: mitmMutateRequest,
 		}
 	}

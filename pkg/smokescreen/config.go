@@ -19,6 +19,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stripe/goproxy"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -100,7 +101,7 @@ type Config struct {
 	// If the handler returns an error, smokescreen will deny the request.
 	PostDecisionRequestHandler func(*http.Request) error
 	// MitmCa is used to provide a custom CA for MITM
-	MitmCa *tls.Certificate
+	MitmTLSConfig func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error)
 }
 
 type missingRoleError struct {
