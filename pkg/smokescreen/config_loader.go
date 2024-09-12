@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stripe/goproxy"
 	"gopkg.in/yaml.v2"
 )
 
@@ -169,7 +170,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		if mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0]); err != nil {
 			return fmt.Errorf("could not populate x509 Leaf value: %v", err)
 		}
-		c.MitmCa = &mitmCa
+		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
 	}
 
 	return nil
