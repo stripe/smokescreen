@@ -165,10 +165,14 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 		mitmCa, err := tls.LoadX509KeyPair(yc.MitmCaCertFile, yc.MitmCaKeyFile)
 		if err != nil {
-			return fmt.Errorf("could not load mitmCa: %v", err)
+			return fmt.Errorf("mitm_ca_key_file error tls.LoadX509KeyPair: %w", err)
+		}
+		// set the leaf certificat to reduce per-handshake processing
+		if len(mitmCa.Certificate) == 0 {
+			return errors.New("mitm_ca_key_file error: mitm_ca_key_file contains no certificates")
 		}
 		if mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0]); err != nil {
-			return fmt.Errorf("could not populate x509 Leaf value: %v", err)
+			return fmt.Errorf("could not populate x509 Leaf value: %w", err)
 		}
 		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
 	}

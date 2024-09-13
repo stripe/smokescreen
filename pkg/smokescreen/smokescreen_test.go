@@ -1432,9 +1432,10 @@ func TestMitm(t *testing.T) {
 		r.NoError(err)
 		cfg.Listener = l
 
-		proxy := proxyServer(cfg)
+		proxy := BuildProxy(cfg)
+		httpProxy := httptest.NewServer(proxy)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(proxy.URL)
+		client, err := proxyClient(httpProxy.URL)
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
@@ -1480,6 +1481,7 @@ func TestMitm(t *testing.T) {
 		r.NotNil(proxyDecision)
 		r.Contains(proxyDecision.Data, "proxy_type")
 		r.Equal("connect", proxyDecision.Data["proxy_type"])
+		proxy.Tr.CloseIdleConnections()
 		// check proxyclose log entry has information about the request headers
 		proxyClose := findCanonicalProxyClose(logHook.AllEntries())
 		r.NotNil(proxyClose)

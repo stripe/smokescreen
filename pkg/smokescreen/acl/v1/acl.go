@@ -30,8 +30,10 @@ type Rule struct {
 }
 
 type MitmDomain struct {
-	MitmConfig
-	Domain string
+	AddHeaders                  map[string]string
+	DetailedHttpLogs            bool
+	DetailedHttpLogsFullHeaders []string
+	Domain                      string
 }
 
 type MitmConfig struct {
@@ -142,8 +144,12 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 	// if the host matches any of the rule's allowed domains with MITM config, allow
 	for _, dg := range rule.DomainMitmGlobs {
 		if HostMatchesGlob(host, dg.Domain) {
-			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
-			d.MitmConfig = (*MitmConfig)(&dg.MitmConfig)
+			d.Result, d.Reason = Allow, "host matched allowed domain in MITM rule"
+			d.MitmConfig = &MitmConfig{
+				AddHeaders:                  dg.AddHeaders,
+				DetailedHttpLogs:            dg.DetailedHttpLogs,
+				DetailedHttpLogsFullHeaders: dg.DetailedHttpLogsFullHeaders,
+			}
 			return d, nil
 		}
 	}
@@ -215,59 +221,58 @@ func (acl *ACL) Validate() error {
 }
 
 func (acl *ACL) ValidateRuleDomainsGlobs(svc string, r Rule) error {
-	err := acl.ValidateDomainGlobs(svc, r.DomainGlobs)
-	if err != nil {
-		return err
+	var err error
+	for _, d := range r.DomainGlobs {
+		err = acl.ValidateDomainGlob(svc, d)
+		if err != nil {
+			return err
+		}
 	}
-	mitmDomainGlobs := make([]string, len(r.DomainMitmGlobs))
-	for i, d := range r.DomainMitmGlobs {
-		mitmDomainGlobs[i] = d.Domain
-	}
-	err = acl.ValidateDomainGlobs(svc, mitmDomainGlobs)
-	if err != nil {
-		return err
+	for _, d := range r.DomainMitmGlobs {
+		err = acl.ValidateDomainGlob(svc, d.Domain)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// ValidateDomainGlobs takes a slice of domain globs and verifies they conform to smokescreen's
+// ValidateDomainGlob takes a domain glob and verifies they conform to smokescreen's
 // domain glob policy.
 //
 // Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
 // pattern is allowed. Globs must include text after a wildcard.
 //
 // Domains must use their normalized form (e.g., Punycode)
-func (acl *ACL) ValidateDomainGlobs(svc string, globs []string) error {
-	for _, glob := range globs {
-		if glob == "" {
-			return fmt.Errorf("glob cannot be empty")
-		}
+func (*ACL) ValidateDomainGlob(svc string, glob string) error {
+	if glob == "" {
+		return fmt.Errorf("glob cannot be empty")
+	}
 
-		if glob == "*" || glob == "*." {
-			return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
-		}
+	if glob == "*" || glob == "*." {
+		return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
+	}
 
-		if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
-			return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
-		}
+	if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
+		return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
+	}
 
-		domainToCheck := strings.TrimPrefix(glob, "*")
-		if strings.Contains(domainToCheck, "*") {
-			return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
-		}
+	domainToCheck := strings.TrimPrefix(glob, "*")
+	if strings.Contains(domainToCheck, "*") {
+		return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
+	}
 
-		normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
+	normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
 
-		if err != nil {
-			return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
-		} else if normalizedDomain != domainToCheck {
-			// There was no error but the config contains a non-normalized form
-			if strings.HasPrefix(glob, "*.") {
-				// (Re-add) wildcard if one was provided (for the error message)
-				normalizedDomain = "*." + normalizedDomain
-			}
-			return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
+	if err != nil {
+		return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
+		// There was no error but the config contains a non-normalized form
+	} else if normalizedDomain != domainToCheck {
+		if strings.HasPrefix(glob, "*.") {
+			// (Re-add) wildcard if one was provided (for the error message)
+			normalizedDomain = "*." + normalizedDomain
 		}
+		return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
 	}
 	return nil
 }
