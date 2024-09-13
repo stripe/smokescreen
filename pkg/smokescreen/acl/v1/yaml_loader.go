@@ -89,14 +89,7 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 		var allowedHostsMitm []MitmDomain
 
 		for _, w := range v.AllowedHostsMitm {
-			mitmDomain := MitmDomain{
-				MitmConfig: MitmConfig{
-					AddHeaders:                  w.AddHeaders,
-					DetailedHttpLogs:            w.DetailedHttpLogs,
-					DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
-				},
-				Domain: w.Domain,
-			}
+			mitmDomain := NewMITMDomain(w)
 			allowedHostsMitm = append(allowedHostsMitm, mitmDomain)
 		}
 
@@ -123,14 +116,7 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 		var allowedHostsMitm []MitmDomain
 
 		for _, w := range cfg.Default.AllowedHostsMitm {
-			mitmDomain := MitmDomain{
-				MitmConfig: MitmConfig{
-					AddHeaders:                  w.AddHeaders,
-					DetailedHttpLogs:            w.DetailedHttpLogs,
-					DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
-				},
-				Domain: w.Domain,
-			}
+			mitmDomain := NewMITMDomain(w)
 			allowedHostsMitm = append(allowedHostsMitm, mitmDomain)
 		}
 
@@ -154,4 +140,13 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 	}
 
 	return &acl, nil
+}
+
+func NewMITMDomain(w YAMLMitmRule) MitmDomain {
+	return MitmDomain{
+		AddHeaders:                  w.AddHeaders,
+		DetailedHttpLogs:            w.DetailedHttpLogs,
+		DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
+		Domain:                      w.Domain,
+	}
 }

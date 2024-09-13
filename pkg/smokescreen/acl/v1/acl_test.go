@@ -377,7 +377,7 @@ func TestMitmComfig(t *testing.T) {
 	d, err := acl.Decide(mitmService, "example-mitm.com", "")
 	a.NoError(err)
 	a.Equal(Allow, d.Result)
-	a.Equal("host matched allowed domain in rule", d.Reason)
+	a.Equal("host matched allowed domain in MITM rule", d.Reason)
 
 	a.NotNil(d.MitmConfig)
 	a.Equal(true, d.MitmConfig.DetailedHttpLogs)

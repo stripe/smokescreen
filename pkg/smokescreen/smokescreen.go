@@ -289,10 +289,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	}
 	connTime := time.Since(start)
-
-	fields := logrus.Fields{
-		LogFieldConnEstablishMS: connTime.Milliseconds(),
-	}
+	sctx.logger = sctx.logger.WithFields(dialContextLoggerFields(pctx, sctx, conn, connTime))
 
 	if sctx.cfg.TimeConnect {
 		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, map[string]string{"domain": sctx.requestedHost}, 1)
@@ -307,6 +304,22 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", map[string]string{"success": "true"}, 1)
 	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
 
+	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
+	// requests are pooled and reused by net.Transport.
+	if sctx.proxyType == connectProxy {
+		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.logger, d.role, d.outboundHost, sctx.proxyType)
+		pctx.ConnErrorHandler = ic.Error
+		conn = ic
+	} else {
+		conn = NewTimeoutConn(conn, sctx.cfg.IdleTimeout)
+	}
+
+	return conn, nil
+}
+func dialContextLoggerFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext, conn net.Conn, connTime time.Duration) logrus.Fields {
+	fields := logrus.Fields{
+		LogFieldConnEstablishMS: connTime.Milliseconds(),
+	}
 	if conn != nil {
 		if addr := conn.LocalAddr(); addr != nil {
 			fields[LogFieldOutLocalAddr] = addr.String()
@@ -316,30 +329,14 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 			fields[LogFieldOutRemoteAddr] = addr.String()
 		}
 	}
-	sctx.logger = sctx.logger.WithFields(fields)
-
-	// Only wrap CONNECT conns and MITM http conns with an InstrumentedConn. Connections used for traditional HTTP proxy
-	// requests are pooled and reused by net.Transport.
-	if sctx.proxyType == connectProxy || pctx.ConnectAction == goproxy.ConnectMitm {
-		// If we have a MITM and option is enabled, we can add detailed Request log fields
-		if pctx.ConnectAction == goproxy.ConnectMitm && sctx.Decision.MitmConfig != nil && sctx.Decision.MitmConfig.DetailedHttpLogs {
-			fields := logrus.Fields{
-				LogMitmReqUrl:     pctx.Req.URL.String(),
-				LogMitmReqMethod:  pctx.Req.Method,
-				LogMitmReqHeaders: redactHeaders(pctx.Req.Header, sctx.Decision.MitmConfig.DetailedHttpLogsFullHeaders),
-			}
-
-			sctx.logger = sctx.logger.WithFields(fields)
-
-		}
-		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, sctx.logger, d.role, d.outboundHost, sctx.proxyType)
-		pctx.ConnErrorHandler = ic.Error
-		conn = ic
-	} else {
-		conn = NewTimeoutConn(conn, sctx.cfg.IdleTimeout)
+	// If we have a MITM and option is enabled, we can add detailed Request log fields
+	if pctx.ConnectAction == goproxy.ConnectMitm && sctx.Decision.MitmConfig != nil && sctx.Decision.MitmConfig.DetailedHttpLogs {
+		fields[LogMitmReqUrl] = pctx.Req.URL.String()
+		fields[LogMitmReqMethod] = pctx.Req.Method
+		fields[LogMitmReqHeaders] = redactHeaders(pctx.Req.Header, sctx.Decision.MitmConfig.DetailedHttpLogsFullHeaders)
 	}
 
-	return conn, nil
+	return fields
 }
 
 // HTTPErrorHandler allows returning a custom error response when smokescreen
@@ -468,12 +465,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 	}
 
-	// Handle traditional HTTP proxy
+	// Handle traditional HTTP proxy and MITM outgoing requests (smokescreen - remote )
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
 		pctx.RoundTripper = rtFn
 
-		// For MITM requests intended for the remote host, the sole requirement was to configure the RoundTripper
+		// In the context of MITM request. Once the originating request (client - smokescreen) has been allowed
+		// goproxy/https.go calls proxy.filterRequest on the outgoing request (smokescreen - remote host) which calls this function
+		// in this case we ony want to configure the RoundTripper
 		if pctx.ConnectAction == goproxy.ConnectMitm {
 			return req, nil
 		}
@@ -571,13 +570,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return rejectResponse(pctx, pctx.Error)
 		}
 
-		if pctx.ConnectAction == goproxy.ConnectMitm {
-			// If the connection is a MITM
-			// 1 we don't want to log as it will be done in HandleConnectFunc
-			// 2 we want to close idle connections as they are not closed by default
-			// and CANONICAL-PROXY-CN-CLOSE is called on InstrumentedConn.Close
-			proxy.Tr.CloseIdleConnections()
-		} else {
+		// We don't want to log if the connection is a MITM as it will be done in HandleConnectFunc
+		if pctx.ConnectAction != goproxy.ConnectMitm {
 			// In case of an error, this function is called a second time to filter the
 			// response we generate so this logger will be called once.
 			logProxy(pctx)

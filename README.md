@@ -186,3 +186,4 @@ See [Development.md](Development.md)
 - Evan Broder
 - Marc-André Tremblay
 - Ryan Koppenhaver
+- Harold Simpson
