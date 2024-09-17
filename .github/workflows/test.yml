@@ -4,6 +4,7 @@ name: Test
 # See https://github.com/lemurheavy/coveralls-public/issues/1716
 env:
   COVERALLS_SERVICE_NUMBER: ${{ github.run_id }}-${{ github.run_attempt }}
+  COVERALLS_PARALLEL: true
 jobs:
   test:
     strategy:
@@ -36,3 +37,15 @@ jobs:
       env:
         COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: goveralls -coverprofile=.covprofile -service=github
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - name: Install goveralls 
+        run: go install github.com/mattn/goveralls@latest
+      - name: Close goveralls parallel build 
+        env:
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goveralls -coverprofile=.covprofile -service=github -parallel-finish=true
