@@ -83,7 +83,7 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
-	err = acl.ValidateRuleDomainsGlobsAndMitm(svc, r)
+	err = acl.ValidateRule(svc, r)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
-		err := acl.ValidateRuleDomainsGlobsAndMitm(svc, r)
+		err := acl.ValidateRule(svc, r)
 		if err != nil {
 			return err
 		}
@@ -218,7 +218,7 @@ func (acl *ACL) Validate() error {
 	return nil
 }
 
-func (acl *ACL) ValidateRuleDomainsGlobsAndMitm(svc string, r Rule) error {
+func (acl *ACL) ValidateRule(svc string, r Rule) error {
 	var err error
 	for _, d := range r.DomainGlobs {
 		err = acl.ValidateDomainGlob(svc, d)
