@@ -229,8 +229,9 @@ default:
   name: default
   project: security
   action: enforce
-  allowed_domains: []
-  allowed_domains_mitm:
+  allowed_domains:
+    - wttr.in
+  mitm_domains:
   - domain: wttr.in
     add_headers:
       Accept-Language: el
@@ -278,8 +279,9 @@ services:
   - name: localhost
     project: github
     action: enforce
-    allowed_domains: []
-    allowed_domains_mitm:
+    allowed_domains:
+      - wttr.in
+    mitm_domains:
       - domain: wttr.in
         add_headers:
           Accept-Language: el

@@ -7,7 +7,8 @@ services:
     allowed_domains:
       - examplea.com
       - exampleb.com
-    allowed_domains_mitm:
+      - example-mitm.com
+    mitm_domains:
       - domain: example-mitm.com
         add_headers:
           Accept-Language: el
