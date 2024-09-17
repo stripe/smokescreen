@@ -36,7 +36,9 @@ services:
   - name: test-mitm
     project: security
     action: enforce
-    allowed_domains_mitm:
+    allowed_domains:
+      - 127.0.0.1
+    mitm_domains:
       - domain: 127.0.0.1
         add_headers:
           Accept-Language: el

@@ -47,6 +47,16 @@ func TestYAMLLoader(t *testing.T) {
 		a.NotNil(err)
 		a.Nil(acl)
 	}
+
+	// Load a valid MITM config
+	{
+		yl := NewYAMLLoader("testdata/mitm_config.yaml")
+		acl, err := New(logrus.New(), yl, []string{})
+		a.Nil(err)
+		a.NotNil(acl)
+		a.Equal(1, len(acl.Rules))
+		a.Equal(1, len(acl.Rules["enforce-dummy-mitm-srv"].MitmDomains))
+	}
 }
 
 func TestYAMLLoaderInvalidGlob(t *testing.T) {

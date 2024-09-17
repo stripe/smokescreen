@@ -25,7 +25,7 @@ type Rule struct {
 	Project            string
 	Policy             EnforcementPolicy
 	DomainGlobs        []string
-	DomainMitmGlobs    []MitmDomain
+	MitmDomains        []MitmDomain
 	ExternalProxyGlobs []string
 }
 
@@ -83,7 +83,7 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
-	err = acl.ValidateRuleDomainsGlobs(svc, r)
+	err = acl.ValidateRuleDomainsGlobsAndMitm(svc, r)
 	if err != nil {
 		return err
 	}
@@ -137,18 +137,16 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 	for _, dg := range rule.DomainGlobs {
 		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
-			return d, nil
-		}
-	}
-
-	// if the host matches any of the rule's allowed domains with MITM config, allow
-	for _, dg := range rule.DomainMitmGlobs {
-		if HostMatchesGlob(host, dg.Domain) {
-			d.Result, d.Reason = Allow, "host matched allowed domain in MITM rule"
-			d.MitmConfig = &MitmConfig{
-				AddHeaders:                  dg.AddHeaders,
-				DetailedHttpLogs:            dg.DetailedHttpLogs,
-				DetailedHttpLogsFullHeaders: dg.DetailedHttpLogsFullHeaders,
+			// Check if we can find a matching MITM config
+			for _, dg := range rule.MitmDomains {
+				if HostMatchesGlob(host, dg.Domain) {
+					d.MitmConfig = &MitmConfig{
+						AddHeaders:                  dg.AddHeaders,
+						DetailedHttpLogs:            dg.DetailedHttpLogs,
+						DetailedHttpLogsFullHeaders: dg.DetailedHttpLogsFullHeaders,
+					}
+					return d, nil
+				}
 			}
 			return d, nil
 		}
@@ -208,7 +206,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
-		err := acl.ValidateRuleDomainsGlobs(svc, r)
+		err := acl.ValidateRuleDomainsGlobsAndMitm(svc, r)
 		if err != nil {
 			return err
 		}
@@ -220,7 +218,7 @@ func (acl *ACL) Validate() error {
 	return nil
 }
 
-func (acl *ACL) ValidateRuleDomainsGlobs(svc string, r Rule) error {
+func (acl *ACL) ValidateRuleDomainsGlobsAndMitm(svc string, r Rule) error {
 	var err error
 	for _, d := range r.DomainGlobs {
 		err = acl.ValidateDomainGlob(svc, d)
@@ -228,10 +226,15 @@ func (acl *ACL) ValidateRuleDomainsGlobs(svc string, r Rule) error {
 			return err
 		}
 	}
-	for _, d := range r.DomainMitmGlobs {
+	for _, d := range r.MitmDomains {
 		err = acl.ValidateDomainGlob(svc, d.Domain)
 		if err != nil {
 			return err
+		}
+		// Check if the MITM config domain is also in DomainGlobs
+		// Replace with slices.ContainsString when project upgraded to > 1.21
+		if !containsString(r.DomainGlobs, d.Domain) {
+			return fmt.Errorf("domain %s was added to mitm_domains but is missing in allowed_domains", d.Domain)
 		}
 	}
 	return nil
@@ -324,6 +327,14 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 		}
 	} else if g == h {
 		return true
+	}
+	return false
+}
+func containsString(slice []string, str string) bool {
+	for _, item := range slice {
+		if item == str {
+			return true
+		}
 	}
 	return false
 }
