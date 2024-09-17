@@ -60,6 +60,9 @@ const (
 	CanonicalProxyDecision   = "CANONICAL-PROXY-DECISION"
 	LogFieldConnEstablishMS  = "conn_establish_time_ms"
 	LogFieldDNSLookupTime    = "dns_lookup_time_ms"
+	LogMitmReqUrl            = "mitm_req_url"
+	LogMitmReqMethod         = "mitm_req_method"
+	LogMitmReqHeaders        = "mitm_req_headers"
 )
 
 type ipType int
@@ -69,6 +72,7 @@ type ACLDecision struct {
 	ResolvedAddr                        *net.TCPAddr
 	allow                               bool
 	enforceWouldDeny                    bool
+	MitmConfig                          *acl.MitmConfig
 }
 
 type SmokescreenContext struct {
@@ -285,10 +289,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
 	}
 	connTime := time.Since(start)
-
-	fields := logrus.Fields{
-		LogFieldConnEstablishMS: connTime.Milliseconds(),
-	}
+	sctx.logger = sctx.logger.WithFields(dialContextLoggerFields(pctx, sctx, conn, connTime))
 
 	if sctx.cfg.TimeConnect {
 		sctx.cfg.MetricsClient.TimingWithTags("cn.atpt.connect.time", connTime, map[string]string{"domain": sctx.requestedHost}, 1)
@@ -303,17 +304,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	sctx.cfg.MetricsClient.IncrWithTags("cn.atpt.total", map[string]string{"success": "true"}, 1)
 	sctx.cfg.ConnTracker.RecordAttempt(sctx.requestedHost, true)
 
-	if conn != nil {
-		if addr := conn.LocalAddr(); addr != nil {
-			fields[LogFieldOutLocalAddr] = addr.String()
-		}
-
-		if addr := conn.RemoteAddr(); addr != nil {
-			fields[LogFieldOutRemoteAddr] = addr.String()
-		}
-	}
-	sctx.logger = sctx.logger.WithFields(fields)
-
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
 	if sctx.proxyType == connectProxy {
@@ -325,6 +315,28 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+func dialContextLoggerFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext, conn net.Conn, connTime time.Duration) logrus.Fields {
+	fields := logrus.Fields{
+		LogFieldConnEstablishMS: connTime.Milliseconds(),
+	}
+	if conn != nil {
+		if addr := conn.LocalAddr(); addr != nil {
+			fields[LogFieldOutLocalAddr] = addr.String()
+		}
+
+		if addr := conn.RemoteAddr(); addr != nil {
+			fields[LogFieldOutRemoteAddr] = addr.String()
+		}
+	}
+	// If we have a MITM and option is enabled, we can add detailed Request log fields
+	if pctx.ConnectAction == goproxy.ConnectMitm && sctx.Decision.MitmConfig != nil && sctx.Decision.MitmConfig.DetailedHttpLogs {
+		fields[LogMitmReqUrl] = pctx.Req.URL.String()
+		fields[LogMitmReqMethod] = pctx.Req.Method
+		fields[LogMitmReqHeaders] = redactHeaders(pctx.Req.Header, sctx.Decision.MitmConfig.DetailedHttpLogsFullHeaders)
+	}
+
+	return fields
 }
 
 // HTTPErrorHandler allows returning a custom error response when smokescreen
@@ -453,8 +465,17 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 	}
 
-	// Handle traditional HTTP proxy
+	// Handle traditional HTTP proxy and MITM outgoing requests (smokescreen - remote )
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// Set this on every request as every request mints a new goproxy.ProxyCtx
+		pctx.RoundTripper = rtFn
+
+		// In the context of MITM request. Once the originating request (client - smokescreen) has been allowed
+		// goproxy/https.go calls proxy.filterRequest on the outgoing request (smokescreen - remote host) which calls this function
+		// in this case we ony want to configure the RoundTripper
+		if pctx.ConnectAction == goproxy.ConnectMitm {
+			return req, nil
+		}
 
 		// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
 		// proxy requests we are able to specify the request during the call to OnResponse().
@@ -469,9 +490,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			req.Header.Del(traceHeader)
 		}()
 
-		// Set this on every request as every request mints a new goproxy.ProxyCtx
-		pctx.RoundTripper = rtFn
-
+		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 		// Build an address parsable by net.ResolveTCPAddr
 		destination, err := hostport.NewWithScheme(req.Host, req.URL.Scheme, false)
 		if err != nil {
@@ -479,7 +498,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return req, rejectResponse(pctx, pctx.Error)
 		}
 
-		sctx.logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
@@ -512,15 +530,15 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		// Defer logging the proxy event here because logProxy relies
 		// on state set in handleConnect
-		defer logProxy(config, pctx)
+		defer logProxy(pctx)
 		defer pctx.Req.Header.Del(traceHeader)
 
-		destination, err := handleConnect(config, pctx)
+		connectAction, destination, err := handleConnect(config, pctx)
 		if err != nil {
 			pctx.Resp = rejectResponse(pctx, err)
 			return goproxy.RejectConnect, ""
 		}
-		return goproxy.OkConnect, destination
+		return connectAction, destination
 	})
 
 	// Strangely, goproxy can invoke this same function twice for a single HTTP request.
@@ -552,9 +570,12 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return rejectResponse(pctx, pctx.Error)
 		}
 
-		// In case of an error, this function is called a second time to filter the
-		// response we generate so this logger will be called once.
-		logProxy(config, pctx)
+		// We don't want to log if the connection is a MITM as it will be done in HandleConnectFunc
+		if pctx.ConnectAction != goproxy.ConnectMitm {
+			// In case of an error, this function is called a second time to filter the
+			// response we generate so this logger will be called once.
+			logProxy(pctx)
+		}
 		return resp
 	})
 
@@ -573,32 +594,11 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	return proxy
 }
 
-func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
+func logProxy(pctx *goproxy.ProxyCtx) {
 	sctx := pctx.UserData.(*SmokescreenContext)
 
 	fields := logrus.Fields{}
-
-	// attempt to retrieve information about the host originating the proxy request
-	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
-		fields[LogFieldInRemoteX509CN] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
-		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if len(ouEntries) > 0 {
-			fields[LogFieldInRemoteX509OU] = ouEntries[0]
-		}
-	}
-
 	decision := sctx.Decision
-	if sctx.Decision != nil {
-		fields[LogFieldRole] = decision.role
-		fields[LogFieldProject] = decision.project
-	}
-
-	// add the above fields to all future log messages sent using this smokescreen context's logger
-	sctx.logger = sctx.logger.WithFields(fields)
-
-	// start a new set of fields used only in this log message
-	fields = logrus.Fields{}
-
 	// If a lookup takes less than 1ms it will be rounded down to zero. This can separated from
 	// actual failures where the default zero value will also have the error field set.
 	fields[LogFieldDNSLookupTime] = sctx.lookupTime.Milliseconds()
@@ -630,14 +630,35 @@ func logProxy(config *Config, pctx *goproxy.ProxyCtx) {
 	logMethod(CanonicalProxyDecision)
 }
 
-func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
+func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) logrus.Fields {
+	fields := logrus.Fields{}
+
+	// attempt to retrieve information about the host originating the proxy request
+	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
+		fields[LogFieldInRemoteX509CN] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
+		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
+		if len(ouEntries) > 0 {
+			fields[LogFieldInRemoteX509OU] = ouEntries[0]
+		}
+	}
+
+	// Retrieve information from the ACL decision
+	decision := sctx.Decision
+	if sctx.Decision != nil {
+		fields[LogFieldRole] = decision.role
+		fields[LogFieldProject] = decision.project
+	}
+	return fields
+}
+
+func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string, error) {
 	sctx := pctx.UserData.(*SmokescreenContext)
 
 	// Check if requesting role is allowed to talk to remote
 	destination, err := hostport.New(pctx.Req.Host, false)
 	if err != nil {
 		pctx.Error = denyError{err}
-		return "", pctx.Error
+		return nil, "", pctx.Error
 	}
 
 	// checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
@@ -646,10 +667,14 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
 	if pctx.Error != nil {
 		// DNS resolution failure
-		return "", pctx.Error
+		return nil, "", pctx.Error
 	}
+
+	// add context fields to all future log messages sent using this smokescreen context's logger
+	sctx.logger = sctx.logger.WithFields(extractContextLogFields(pctx, sctx))
+
 	if !sctx.Decision.allow {
-		return "", denyError{errors.New(sctx.Decision.reason)}
+		return nil, "", denyError{errors.New(sctx.Decision.reason)}
 	}
 
 	// Call the custom request handler if it exists
@@ -657,11 +682,40 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (string, error) {
 		err = config.PostDecisionRequestHandler(pctx.Req)
 		if err != nil {
 			pctx.Error = denyError{err}
-			return "", pctx.Error
+			return nil, "", pctx.Error
 		}
 	}
 
-	return destination.String(), nil
+	connectAction := goproxy.OkConnect
+	// If the ACLDecision matched a MITM rule
+	if sctx.Decision.MitmConfig != nil {
+		if config.MitmTLSConfig == nil {
+			deny := denyError{errors.New("ACLDecision specified MITM but Smokescreen doesn't have MITM enabled")}
+			sctx.Decision.allow = false
+			sctx.Decision.MitmConfig = nil
+			sctx.Decision.reason = deny.Error()
+			return nil, "", deny
+		}
+		mitm := sctx.Decision.MitmConfig
+
+		var mitmMutateRequest func(req *http.Request, ctx *goproxy.ProxyCtx)
+
+		if len(mitm.AddHeaders) > 0 {
+			mitmMutateRequest = func(req *http.Request, ctx *goproxy.ProxyCtx) {
+				for k, v := range mitm.AddHeaders {
+					req.Header.Set(k, v)
+				}
+			}
+		}
+
+		connectAction = &goproxy.ConnectAction{
+			Action:            goproxy.ConnectMitm,
+			TLSConfig:         config.MitmTLSConfig,
+			MitmMutateRequest: mitmMutateRequest,
+		}
+	}
+
+	return connectAction, destination.String(), nil
 }
 
 func findListener(ip string, defaultPort uint16) (net.Listener, error) {
@@ -964,6 +1018,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
 	decision.project = ACLDecision.Project
 	decision.reason = ACLDecision.Reason
+	decision.MitmConfig = ACLDecision.MitmConfig
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -1006,4 +1061,33 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	}
 
 	return decision
+}
+
+func redactHeaders(originalHeaders http.Header, allowedHeaders []string) http.Header {
+	// Create a new map to store the redacted headers
+	redactedHeaders := make(http.Header)
+
+	// Convert allowedHeaders to a map for faster lookup
+	allowedHeadersMap := make(map[string]bool)
+	for _, h := range allowedHeaders {
+		allowedHeadersMap[strings.ToLower(h)] = true
+	}
+
+	// Iterate through the original headers
+	for key, values := range originalHeaders {
+		lowerKey := strings.ToLower(key)
+		if allowedHeadersMap[lowerKey] {
+			// If the header is in the allowed list, copy it as is
+			redactedHeaders[key] = values
+		} else {
+			// If not, redact the values
+			redactedValues := make([]string, len(values))
+			for i := range values {
+				redactedValues[i] = "[REDACTED]"
+			}
+			redactedHeaders[key] = redactedValues
+		}
+	}
+
+	return redactedHeaders
 }

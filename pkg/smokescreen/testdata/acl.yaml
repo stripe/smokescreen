@@ -33,6 +33,18 @@ services:
       - myproxy.com
       - myproxy2.com
       - thisisaproxy.com
+  - name: test-mitm
+    project: security
+    action: enforce
+    allowed_domains:
+      - 127.0.0.1
+    mitm_domains:
+      - domain: 127.0.0.1
+        add_headers:
+          Accept-Language: el
+        detailed_http_logs: true
+        detailed_http_logs_full_headers:
+          - User-Agent
 
 global_deny_list:
   - stripe.com

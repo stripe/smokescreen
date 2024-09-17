@@ -19,6 +19,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stripe/goproxy"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -73,7 +74,7 @@ type Config struct {
 	TransportMaxIdleConns        int
 	TransportMaxIdleConnsPerHost int
 
-	// These are the http and https address for the upstream proxy 
+	// These are the http and https address for the upstream proxy
 	UpstreamHttpProxyAddr  string
 	UpstreamHttpsProxyAddr string
 
@@ -99,6 +100,8 @@ type Config struct {
 	// If smokescreen denies a request, this handler is not called.
 	// If the handler returns an error, smokescreen will deny the request.
 	PostDecisionRequestHandler func(*http.Request) error
+	// MitmCa is used to provide a custom CA for MITM
+	MitmTLSConfig func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error)
 }
 
 type missingRoleError struct {

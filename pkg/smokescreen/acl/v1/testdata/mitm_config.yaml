@@ -1,0 +1,24 @@
+---
+version: v1
+services:
+  - name: enforce-dummy-mitm-srv
+    project: usersec
+    action: enforce
+    allowed_domains:
+      - examplea.com
+      - exampleb.com
+      - example-mitm.com
+    mitm_domains:
+      - domain: example-mitm.com
+        add_headers:
+          Accept-Language: el
+        detailed_http_logs: true
+        detailed_http_logs_full_headers:
+          - User-Agent
+
+default:
+    project: other
+    action: enforce
+    allowed_domains:
+      - default.example.com
+

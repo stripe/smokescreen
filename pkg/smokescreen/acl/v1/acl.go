@@ -25,14 +25,29 @@ type Rule struct {
 	Project            string
 	Policy             EnforcementPolicy
 	DomainGlobs        []string
+	MitmDomains        []MitmDomain
 	ExternalProxyGlobs []string
 }
 
+type MitmDomain struct {
+	AddHeaders                  map[string]string
+	DetailedHttpLogs            bool
+	DetailedHttpLogsFullHeaders []string
+	Domain                      string
+}
+
+type MitmConfig struct {
+	AddHeaders                  map[string]string
+	DetailedHttpLogs            bool
+	DetailedHttpLogsFullHeaders []string
+}
+
 type Decision struct {
-	Reason  string
-	Default bool
-	Result  DecisionResult
-	Project string
+	Reason     string
+	Default    bool
+	Result     DecisionResult
+	Project    string
+	MitmConfig *MitmConfig
 }
 
 func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, error) {
@@ -68,7 +83,7 @@ func (acl *ACL) Add(svc string, r Rule) error {
 		return err
 	}
 
-	err = acl.ValidateDomainGlobs(svc, r.DomainGlobs)
+	err = acl.ValidateRule(svc, r)
 	if err != nil {
 		return err
 	}
@@ -122,6 +137,17 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 	for _, dg := range rule.DomainGlobs {
 		if HostMatchesGlob(host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
+			// Check if we can find a matching MITM config
+			for _, dg := range rule.MitmDomains {
+				if HostMatchesGlob(host, dg.Domain) {
+					d.MitmConfig = &MitmConfig{
+						AddHeaders:                  dg.AddHeaders,
+						DetailedHttpLogs:            dg.DetailedHttpLogs,
+						DetailedHttpLogsFullHeaders: dg.DetailedHttpLogsFullHeaders,
+					}
+					return d, nil
+				}
+			}
 			return d, nil
 		}
 	}
@@ -180,7 +206,7 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 // and is not utilizing a disabled enforcement policy.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
-		err := acl.ValidateDomainGlobs(svc, r.DomainGlobs)
+		err := acl.ValidateRule(svc, r)
 		if err != nil {
 			return err
 		}
@@ -192,44 +218,64 @@ func (acl *ACL) Validate() error {
 	return nil
 }
 
-// ValidateDomainGlobs takes a slice of domain globs and verifies they conform to smokescreen's
+func (acl *ACL) ValidateRule(svc string, r Rule) error {
+	var err error
+	for _, d := range r.DomainGlobs {
+		err = acl.ValidateDomainGlob(svc, d)
+		if err != nil {
+			return err
+		}
+	}
+	for _, d := range r.MitmDomains {
+		err = acl.ValidateDomainGlob(svc, d.Domain)
+		if err != nil {
+			return err
+		}
+		// Check if the MITM config domain is also in DomainGlobs
+		// Replace with slices.ContainsString when project upgraded to > 1.21
+		if !containsString(r.DomainGlobs, d.Domain) {
+			return fmt.Errorf("domain %s was added to mitm_domains but is missing in allowed_domains", d.Domain)
+		}
+	}
+	return nil
+}
+
+// ValidateDomainGlob takes a domain glob and verifies they conform to smokescreen's
 // domain glob policy.
 //
 // Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
 // pattern is allowed. Globs must include text after a wildcard.
 //
 // Domains must use their normalized form (e.g., Punycode)
-func (acl *ACL) ValidateDomainGlobs(svc string, globs []string) error {
-	for _, glob := range globs {
-		if glob == "" {
-			return fmt.Errorf("glob cannot be empty")
-		}
+func (*ACL) ValidateDomainGlob(svc string, glob string) error {
+	if glob == "" {
+		return fmt.Errorf("glob cannot be empty")
+	}
 
-		if glob == "*" || glob == "*." {
-			return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
-		}
+	if glob == "*" || glob == "*." {
+		return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
+	}
 
-		if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
-			return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
-		}
+	if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
+		return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
+	}
 
-		domainToCheck := strings.TrimPrefix(glob, "*")
-		if strings.Contains(domainToCheck, "*") {
-			return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
-		}
+	domainToCheck := strings.TrimPrefix(glob, "*")
+	if strings.Contains(domainToCheck, "*") {
+		return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
+	}
 
-		normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
+	normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
 
-		if err != nil {
-			return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
-		} else if normalizedDomain != domainToCheck {
-			// There was no error but the config contains a non-normalized form
-			if strings.HasPrefix(glob, "*.") {
-				// (Re-add) wildcard if one was provided (for the error message)
-				normalizedDomain = "*." + normalizedDomain
-			}
-			return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
+	if err != nil {
+		return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
+		// There was no error but the config contains a non-normalized form
+	} else if normalizedDomain != domainToCheck {
+		if strings.HasPrefix(glob, "*.") {
+			// (Re-add) wildcard if one was provided (for the error message)
+			normalizedDomain = "*." + normalizedDomain
 		}
+		return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
 	}
 	return nil
 }
@@ -281,6 +327,14 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 		}
 	} else if g == h {
 		return true
+	}
+	return false
+}
+func containsString(slice []string, str string) bool {
+	for _, item := range slice {
+		if item == str {
+			return true
+		}
 	}
 	return false
 }

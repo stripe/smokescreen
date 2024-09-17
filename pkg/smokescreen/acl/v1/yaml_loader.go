@@ -26,11 +26,19 @@ type YAMLConfig struct {
 }
 
 type YAMLRule struct {
-	Name                      string   `yaml:"name"`
-	Project                   string   `yaml:"project"` // owner
-	Action                    string   `yaml:"action"`
-	AllowedHosts              []string `yaml:"allowed_domains"`
-	AllowedExternalProxyHosts []string `yaml:"allowed_external_proxies"`
+	Name                      string           `yaml:"name"`
+	Project                   string           `yaml:"project"` // owner
+	Action                    string           `yaml:"action"`
+	AllowedHosts              []string         `yaml:"allowed_domains"`
+	MitmDomains               []YAMLMitmDomain `yaml:"mitm_domains"`
+	AllowedExternalProxyHosts []string         `yaml:"allowed_external_proxies"`
+}
+
+type YAMLMitmDomain struct {
+	Domain                      string            `yaml:"domain"`
+	AddHeaders                  map[string]string `yaml:"add_headers"`
+	DetailedHttpLogs            bool              `yaml:"detailed_http_logs"`
+	DetailedHttpLogsFullHeaders []string          `yaml:"detailed_http_logs_full_headers"`
 }
 
 func (yc *YAMLConfig) ValidateConfig() error {
@@ -78,10 +86,18 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 			return nil, err
 		}
 
+		var mitmDomains []MitmDomain
+
+		for _, w := range v.MitmDomains {
+			mitmDomain := NewMITMDomain(w)
+			mitmDomains = append(mitmDomains, mitmDomain)
+		}
+
 		r := Rule{
 			Project:            v.Project,
 			Policy:             p,
 			DomainGlobs:        v.AllowedHosts,
+			MitmDomains:        mitmDomains,
 			ExternalProxyGlobs: v.AllowedExternalProxyHosts,
 		}
 
@@ -97,10 +113,19 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 			return nil, err
 		}
 
+		var mitmDomains []MitmDomain
+
+		for _, w := range cfg.Default.MitmDomains {
+
+			mitmDomain := NewMITMDomain(w)
+			mitmDomains = append(mitmDomains, mitmDomain)
+		}
+
 		acl.DefaultRule = &Rule{
 			Project:            cfg.Default.Project,
 			Policy:             p,
 			DomainGlobs:        cfg.Default.AllowedHosts,
+			MitmDomains:        mitmDomains,
 			ExternalProxyGlobs: cfg.Default.AllowedExternalProxyHosts,
 		}
 	}
@@ -116,4 +141,13 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 	}
 
 	return &acl, nil
+}
+
+func NewMITMDomain(w YAMLMitmDomain) MitmDomain {
+	return MitmDomain{
+		AddHeaders:                  w.AddHeaders,
+		DetailedHttpLogs:            w.DetailedHttpLogs,
+		DetailedHttpLogsFullHeaders: w.DetailedHttpLogsFullHeaders,
+		Domain:                      w.Domain,
+	}
 }

@@ -1,6 +1,8 @@
 package smokescreen
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -8,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stripe/goproxy"
 	"gopkg.in/yaml.v2"
 )
 
@@ -48,7 +51,9 @@ type yamlConfig struct {
 	Tls *yamlConfigTls
 	// Currently not configurable via YAML: RoleFromRequest, Log, DisabledAclPolicyActions
 
-	UnsafeAllowPrivateRanges bool `yaml:"unsafe_allow_private_ranges"`
+	UnsafeAllowPrivateRanges bool   `yaml:"unsafe_allow_private_ranges"`
+	MitmCaCertFile           string `yaml:"mitm_ca_cert_file"`
+	MitmCaKeyFile            string `yaml:"mitm_ca_key_file"`
 }
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -150,6 +155,27 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.AdditionalErrorMessageOnDeny = yc.DenyMessageExtra
 	c.TimeConnect = yc.TimeConnect
 	c.UnsafeAllowPrivateRanges = yc.UnsafeAllowPrivateRanges
+
+	if yc.MitmCaCertFile != "" || yc.MitmCaKeyFile != "" {
+		if yc.MitmCaCertFile == "" {
+			return errors.New("mitm_ca_cert_file required when mitm_ca_key_file is set")
+		}
+		if yc.MitmCaKeyFile == "" {
+			return errors.New("mitm_ca_key_file required when mitm_ca_cert_file is set")
+		}
+		mitmCa, err := tls.LoadX509KeyPair(yc.MitmCaCertFile, yc.MitmCaKeyFile)
+		if err != nil {
+			return fmt.Errorf("mitm_ca_key_file error tls.LoadX509KeyPair: %w", err)
+		}
+		// set the leaf certificat to reduce per-handshake processing
+		if len(mitmCa.Certificate) == 0 {
+			return errors.New("mitm_ca_key_file error: mitm_ca_key_file contains no certificates")
+		}
+		if mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0]); err != nil {
+			return fmt.Errorf("could not populate x509 Leaf value: %w", err)
+		}
+		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
+	}
 
 	return nil
 }
