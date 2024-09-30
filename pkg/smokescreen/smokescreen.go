@@ -33,7 +33,11 @@ const (
 	ipDenyPrivateRange
 	ipDenyUserConfigured
 
-	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
+	gatewayTimeoutMsg = "Connection to remote host '%s' timed out. This could be due to network issues or the remote host being down. Error Details: %s"
+	dnsErrorMsg       = "DNS resolution failed for '%s'. This could be due to an incorrect hostname or DNS issues. Error Details: %s"
+	badGatewayMsg     = "Failed to connect to '%s'. This could be due to network issues or the remote host being down. Error Details: %s"
+	denyMsgTmpl       = "Egress proxying is denied to host '%s'. Error Details: %s."
+	internalErrorMsg  = "An Unexpected error occurred while processing your request for %s. Error Details: %s"
 
 	httpProxy    = "http"
 	connectProxy = "connect"
@@ -365,16 +369,15 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		if e.Timeout() {
 			status = "Gateway timeout"
 			code = http.StatusGatewayTimeout
-			msg = "Timed out connecting to remote host: " + e.Error()
-
+			msg = fmt.Sprintf(gatewayTimeoutMsg, pctx.Req.Host, e.Error())
 		} else if e, ok := err.(*net.DNSError); ok {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			msg = "Failed to resolve remote hostname: " + e.Error()
+			msg = fmt.Sprintf(dnsErrorMsg, pctx.Req.Host, e.Error())
 		} else {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			msg = "Failed to connect to remote host: " + e.Error()
+			msg = fmt.Sprintf(badGatewayMsg, pctx.Req.Host, e.Error())
 		}
 	} else if e, ok := err.(denyError); ok {
 		status = "Request rejected by proxy"
@@ -383,7 +386,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	} else {
 		status = "Internal server error"
 		code = http.StatusInternalServerError
-		msg = "An unexpected error occurred: " + err.Error()
+		msg = fmt.Sprintf(internalErrorMsg, pctx.Req.Host, err.Error())
 		sctx.logger.WithField("error", err.Error()).Warn("rejectResponse called with unexpected error")
 	}
 

@@ -444,7 +444,7 @@ func TestInvalidHost(t *testing.T) {
 
 				defer resp.Body.Close()
 				b, _ := ioutil.ReadAll(resp.Body)
-				r.Contains(string(b), "Failed to resolve remote hostname")
+				r.Contains(string(b), "DNS resolution failed for 'notarealhost.test'")
 			}
 
 			entry := findCanonicalProxyDecision(logHook.AllEntries())
