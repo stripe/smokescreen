@@ -87,6 +87,9 @@ type Config struct {
 	// Custom handler to allow clients to modify reject responses
 	RejectResponseHandler func(*http.Response)
 
+	// Custom handler to allow clients to modify reject responses
+	RejectResponseHandlerWithCtx func(*SmokescreenContext, *http.Response)
+
 	// Custom handler to allow clients to modify successful CONNECT responses
 	AcceptResponseHandler func(*SmokescreenContext, *http.Response) error
 

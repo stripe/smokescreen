@@ -404,6 +404,9 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	if sctx.cfg.RejectResponseHandler != nil {
 		sctx.cfg.RejectResponseHandler(resp)
 	}
+	if sctx.cfg.RejectResponseHandlerWithCtx != nil {
+		sctx.cfg.RejectResponseHandlerWithCtx(sctx, resp)
+	}
 	return resp
 }
 
