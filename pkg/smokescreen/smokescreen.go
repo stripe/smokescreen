@@ -736,9 +736,14 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
+	var err error
+
+	if err = config.Validate(); err != nil {
+		config.Log.Fatal("invalid config", err)
+	}
+
 	proxy := BuildProxy(config)
 	listener := config.Listener
-	var err error
 
 	if listener == nil {
 		listener, err = findListener(config.Ip, config.Port)
@@ -780,6 +785,10 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	// connection in a TimeoutConn which bumps the deadline for every read/write.
 	if config.IdleTimeout != 0 {
 		server.IdleTimeout = config.IdleTimeout
+	}
+
+	if config.RejectResponseHandler != nil && config.RejectResponseHandlerWithCtx != nil {
+		config.Log.Fatal("RejectResponseHandler and RejectResponseHandlerWithCtx cannot be set simultaneously")
 	}
 
 	config.MetricsClient.SetStarted()

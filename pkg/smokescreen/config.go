@@ -85,9 +85,11 @@ type Config struct {
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
 
 	// Custom handler to allow clients to modify reject responses
+	// Deprecated: RejectResponseHandler is deprecated.Please use RejectResponseHandlerWithCtx instead.
 	RejectResponseHandler func(*http.Response)
 
 	// Custom handler to allow clients to modify reject responses
+	// In case RejectResponseHandler is set, this cannot be used.
 	RejectResponseHandlerWithCtx func(*SmokescreenContext, *http.Response)
 
 	// Custom handler to allow clients to modify successful CONNECT responses
@@ -418,6 +420,13 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		ClientCAs:    clientCAs,
 	}
 
+	return nil
+}
+
+func (config *Config) Validate() error {
+	if config.RejectResponseHandler != nil && config.RejectResponseHandlerWithCtx != nil {
+		return errors.New("RejectResponseHandler and RejectResponseHandlerWithCtx cannot be used together")
+	}
 	return nil
 }
 
