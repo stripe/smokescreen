@@ -66,7 +66,7 @@ func (m *MockMetricsClient) GetCount(metric string, tags map[string]string) (uin
 	}
 	i, ok := m.counts[mName]
 	if !ok {
-		keys := make([]string, len(m.counts))
+		keys := make([]string, 0, len(m.counts))
 		for k, _ := range m.counts {
 			keys = append(keys, k)
 		}
@@ -92,7 +92,7 @@ func (m *MockMetricsClient) GetValues(metric string, tags map[string]string) ([]
 	}
 	i, ok := m.values[mName]
 	if !ok {
-		keys := make([]string, len(m.counts))
+		keys := make([]string, 0, len(m.counts))
 		for k, _ := range m.values {
 			keys = append(keys, k)
 		}
