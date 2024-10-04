@@ -1091,7 +1091,7 @@ func TestRejectResponseHandlerWithCtx(t *testing.T) {
 		resp, err := client.Get("http://127.0.0.1")
 		r.NoError(err)
 
-		// The RejectResponseHandler should set our custom header
+		// The RejectResponseHandlerWithCtx should set our custom header
 		h := resp.Header.Get(testHeader)
 		if h == "" {
 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
