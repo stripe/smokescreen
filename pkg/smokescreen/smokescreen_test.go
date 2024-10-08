@@ -1067,6 +1067,47 @@ func TestRejectResponseHandler(t *testing.T) {
 	})
 }
 
+func TestRejectResponseHandlerWithCtx(t *testing.T) {
+	r := require.New(t)
+	testHeader := "TestRejectResponseHandlerWithCtxHeader"
+	t.Run("Testing custom reject response handler", func(t *testing.T) {
+		cfg, err := testConfig("test-local-srv")
+
+		// set a custom RejectResponseHandler that will set a header on every reject response
+		cfg.RejectResponseHandlerWithCtx = func(_ *SmokescreenContext, resp *http.Response) {
+			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandlerWithCtx")
+		}
+		r.NoError(err)
+
+		proxySrv := proxyServer(cfg)
+		r.NoError(err)
+		defer proxySrv.Close()
+
+		// Create a http.Client that uses our proxy
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
+
+		// Send a request that should be blocked
+		resp, err := client.Get("http://127.0.0.1")
+		r.NoError(err)
+
+		// The RejectResponseHandlerWithCtx should set our custom header
+		h := resp.Header.Get(testHeader)
+		if h == "" {
+			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
+		}
+		// Send a request that should be allowed
+		resp, err = client.Get("http://example.com")
+		r.NoError(err)
+
+		// The header set by our custom reject response handler should not be set
+		h = resp.Header.Get(testHeader)
+		if h != "" {
+			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
+		}
+	})
+}
+
 // Test that Smokescreen calls the custom accept response handler (if defined in the Config struct)
 // after every accepted request
 func TestAcceptResponseHandler(t *testing.T) {
@@ -1491,6 +1532,38 @@ func TestMitm(t *testing.T) {
 		r.True(ok)
 		r.Equal("[REDACTED]", mitmReqHeaders.Get("Accept-Language"))
 		r.Equal("Go-http-client/1.1", mitmReqHeaders.Get("User-Agent"))
+	})
+}
+
+func TestConfigValidate(t *testing.T) {
+	t.Run("Test invalid config", func(t *testing.T) {
+		conf := NewConfig()
+		conf.ConnectTimeout = 10 * time.Second
+		conf.ExitTimeout = 10 * time.Second
+		conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+		conf.RejectResponseHandlerWithCtx = func(smokescreenContext *SmokescreenContext, response *http.Response) {
+			fmt.Println("RejectResponseHandlerWithCtx")
+		}
+		conf.RejectResponseHandler = func(response *http.Response) {
+			fmt.Println("RejectResponseHandler")
+		}
+		err := conf.Validate()
+		require.Error(t, err)
+
+	})
+
+	t.Run("Test valid config", func(t *testing.T) {
+		conf := NewConfig()
+		conf.ConnectTimeout = 10 * time.Second
+		conf.ExitTimeout = 10 * time.Second
+		conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+
+		conf.RejectResponseHandler = func(response *http.Response) {
+			fmt.Println("RejectResponseHandler")
+		}
+		err := conf.Validate()
+		require.NoError(t, err)
+
 	})
 }
 

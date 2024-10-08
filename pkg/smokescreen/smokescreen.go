@@ -404,6 +404,9 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	if sctx.cfg.RejectResponseHandler != nil {
 		sctx.cfg.RejectResponseHandler(resp)
 	}
+	if sctx.cfg.RejectResponseHandlerWithCtx != nil {
+		sctx.cfg.RejectResponseHandlerWithCtx(sctx, resp)
+	}
 	return resp
 }
 
@@ -733,9 +736,14 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
+	var err error
+
+	if err = config.Validate(); err != nil {
+		config.Log.Fatal("invalid config", err)
+	}
+
 	proxy := BuildProxy(config)
 	listener := config.Listener
-	var err error
 
 	if listener == nil {
 		listener, err = findListener(config.Ip, config.Port)
