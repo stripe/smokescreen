@@ -787,10 +787,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		server.IdleTimeout = config.IdleTimeout
 	}
 
-	if config.RejectResponseHandler != nil && config.RejectResponseHandlerWithCtx != nil {
-		config.Log.Fatal("RejectResponseHandler and RejectResponseHandlerWithCtx cannot be set simultaneously")
-	}
-
 	config.MetricsClient.SetStarted()
 	config.ShuttingDown.Store(false)
 	runServer(config, &server, listener, quit)
