@@ -50,8 +50,8 @@ const (
 	LogFieldTraceID          = "trace_id"
 	LogFieldInRemoteX509CN   = "inbound_remote_x509_cn"
 	LogFieldInRemoteX509OU   = "inbound_remote_x509_ou"
-	LogFieldRole             = "Role"
-	LogFieldProject          = "Project"
+	LogFieldRole             = "role"
+	LogFieldProject          = "project"
 	LogFieldContentLength    = "content_length"
 	LogFieldDecisionReason   = "decision_reason"
 	LogFieldEnforceWouldDeny = "enforce_would_deny"
@@ -938,7 +938,7 @@ func getRole(config *Config, req *http.Request) (string, error) {
 			"error":              err,
 			"is_missing_role":    IsMissingRoleError(err),
 			"allow_missing_role": config.AllowMissingRole,
-		}).Error("Unable to get Role for request")
+		}).Error("Unable to get role for request")
 		return "", err
 	}
 }
@@ -981,7 +981,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	role, roleErr := getRole(config, req)
 	if roleErr != nil {
 		config.MetricsClient.Incr("acl.role_not_determined", 1)
-		decision.Reason = "Client Role cannot be determined"
+		decision.Reason = "Client role cannot be determined"
 		return decision
 	}
 
@@ -1011,7 +1011,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		if err != nil {
 			config.Log.WithFields(logrus.Fields{
 				"error":               err,
-				"Role":                role,
+				"role":                role,
 				"upstream_proxy_name": req.Header.Get("X-Upstream-Https-Proxy"),
 				"destination_host":    destination.Host,
 				"kind":                "parse_failure",
@@ -1039,9 +1039,9 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	}
 
 	tags := map[string]string{
-		"Role":     decision.Role,
+		"role":     decision.Role,
 		"def_rule": fmt.Sprintf("%t", ACLDecision.Default),
-		"Project":  ACLDecision.Project,
+		"project":  ACLDecision.Project,
 	}
 
 	switch ACLDecision.Result {
@@ -1061,7 +1061,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		config.MetricsClient.IncrWithTags("acl.allow", tags, 1)
 	default:
 		config.Log.WithFields(logrus.Fields{
-			"Role":        role,
+			"role":        role,
 			"destination": destination.Host,
 			"action":      ACLDecision.Result.String(),
 		}).Warn("Unknown ACL action")
