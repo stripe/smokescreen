@@ -710,7 +710,7 @@ func TestProxyTimeouts(t *testing.T) {
 	// for an EOF returned from HTTP client to indicate a connection interruption
 	// which in our case represents the timeout.
 	//
-	// To correctly hook into this, we'd need to pass a logger from Smokescreen to Goproxy
+	// To correctly hook into this, we'd need to pass a Logger from Smokescreen to Goproxy
 	// which we have hooks into. This would be able to verify the timeout as errors from
 	// each end of the connection pair are logged by Goproxy.
 	t.Run("CONNECT proxy timeouts", func(t *testing.T) {
@@ -1310,7 +1310,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
 		r.Equal("connect proxy host not allowed in rule", entry.Data["decision_reason"])
-		r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["role"])
+		r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["Role"])
 		r.Equal(false, entry.Data["allow"])
 	})
 
@@ -1380,7 +1380,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
 		r.Equal("host matched allowed domain in rule", entry.Data["decision_reason"])
-		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["role"])
+		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["Role"])
 		r.Equal(true, entry.Data["allow"])
 	})
 
