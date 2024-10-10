@@ -1031,7 +1031,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	if err != nil {
 		config.Log.WithFields(logrus.Fields{
 			"error": err,
-			"Role":  role,
+			"role":  role,
 		}).Warn("EgressAcl.Decide returned an error.")
 
 		config.MetricsClient.Incr("acl.decide_error", 1)

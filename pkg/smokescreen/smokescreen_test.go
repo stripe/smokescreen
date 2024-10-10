@@ -1310,7 +1310,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
 		r.Equal("connect proxy host not allowed in rule", entry.Data["decision_reason"])
-		r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["Role"])
+		r.Equal("test-external-connect-proxy-blocked-srv", entry.Data["role"])
 		r.Equal(false, entry.Data["allow"])
 	})
 
@@ -1380,7 +1380,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		entry := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(entry)
 		r.Equal("host matched allowed domain in rule", entry.Data["decision_reason"])
-		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["Role"])
+		r.Equal("test-external-connect-proxy-allowed-srv", entry.Data["role"])
 		r.Equal(true, entry.Data["allow"])
 	})
 
