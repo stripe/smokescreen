@@ -710,7 +710,7 @@ func TestProxyTimeouts(t *testing.T) {
 	// for an EOF returned from HTTP client to indicate a connection interruption
 	// which in our case represents the timeout.
 	//
-	// To correctly hook into this, we'd need to pass a logger from Smokescreen to Goproxy
+	// To correctly hook into this, we'd need to pass a Logger from Smokescreen to Goproxy
 	// which we have hooks into. This would be able to verify the timeout as errors from
 	// each end of the connection pair are logged by Goproxy.
 	t.Run("CONNECT proxy timeouts", func(t *testing.T) {
