@@ -228,6 +228,10 @@ github.com/stripe/goproxy v0.0.0-20240909161309-906e92b723dd h1:+GFSUmU0/RS984Zp
 github.com/stripe/goproxy v0.0.0-20240909161309-906e92b723dd/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
 github.com/stripe/goproxy v0.0.0-20241017101008-e12ef0653f22 h1:tyY7UmUjUv1FF6/bv7P9hgRoNJEuKC2wktIm7e+SHeI=
 github.com/stripe/goproxy v0.0.0-20241017101008-e12ef0653f22/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
+github.com/stripe/goproxy v0.0.0-20241022121110-37ebb5c1cae0 h1:4tKku4LktTP2RI8+7f0hV4nlXB8hQK+Bddmnj3oBI5Q=
+github.com/stripe/goproxy v0.0.0-20241022121110-37ebb5c1cae0/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
+github.com/stripe/goproxy v0.0.0-20241022131412-58117846327a h1:7i7jyPHkHbyyqgyoE9dfmP4JtysKB42EemnBRjNofX0=
+github.com/stripe/goproxy v0.0.0-20241022131412-58117846327a/go.mod h1:hF2CVgH4++5ijZiy9grGVP8Fsi4u+SMOtbnIKYbMUjY=
 github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
