@@ -28,6 +28,8 @@ type yamlConfig struct {
 	Port                 *uint16
 	DenyRanges           []string `yaml:"deny_ranges"`
 	AllowRanges          []string `yaml:"allow_ranges"`
+	DenyAddresses        []string `yaml:"deny_addresses"`
+	AllowAddresses       []string `yaml:"allow_addresses"`
 	Resolvers            []string `yaml:"resolver_addresses"`
 	StatsdAddress        string   `yaml:"statsd_address"`
 	EgressAclFile        string   `yaml:"acl_file"`
@@ -77,6 +79,16 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	err = c.SetAllowRanges(yc.AllowRanges)
+	if err != nil {
+		return err
+	}
+
+	err = c.SetDenyAddresses(yc.DenyAddresses)
+	if err != nil {
+		return err
+	}
+
+	err = c.SetAllowAddresses(yc.AllowAddresses)
 	if err != nil {
 		return err
 	}
