@@ -3,7 +3,7 @@ module github.com/stripe/smokescreen
 go 1.18
 
 require (
-	github.com/DataDog/datadog-go v4.5.1+incompatible
+	github.com/DataDog/datadog-go/v5 v5.6.0
 	github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
 	github.com/carlmjohnson/versioninfo v0.22.4
 	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
@@ -11,7 +11,7 @@ require (
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	github.com/stripe/goproxy v0.0.0-20241022131412-58117846327a
 	golang.org/x/net v0.17.0
 	gopkg.in/urfave/cli.v1 v1.20.0
