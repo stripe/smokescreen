@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/DataDog/datadog-go/statsd"
+	"github.com/DataDog/datadog-go/v5/statsd"
 	"sync/atomic"
 	"time"
 )
@@ -20,11 +20,10 @@ type StatsdMetricsClient struct {
 // NewMetricsClient creates a new StatsdMetricsClient with the provided statsd address and
 // namespace.
 func NewStatsdMetricsClient(addr, namespace string) (*StatsdMetricsClient, error) {
-	c, err := statsd.New(addr)
+	c, err := statsd.New(addr, statsd.WithNamespace(namespace))
 	if err != nil {
 		return nil, err
 	}
-	c.Namespace = namespace
 
 	// Populate the client's map to hold metric tags
 	metricsTags := make(map[string][]string)
