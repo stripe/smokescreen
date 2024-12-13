@@ -1,8 +1,11 @@
 package smokescreen
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -448,6 +451,67 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer(goproxy.WithHttpProxyAddr(config.UpstreamHttpProxyAddr), goproxy.WithHttpsProxyAddr(config.UpstreamHttpsProxyAddr))
 	proxy.Verbose = false
+
+	// Add CRL verification to TLS config if CRL file is provided
+	if config.TlsConfig != nil && config.CrlByAuthorityKeyId != nil {
+		originalVerify := config.TlsConfig.VerifyPeerCertificate
+		config.TlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			config.Log.WithFields(logrus.Fields{
+				"rawCerts":       rawCerts,
+				"verifiedChains": verifiedChains,
+			}).Debug("VerifyPeerCertificate called")
+			// First run the original verification if it exists
+			if originalVerify != nil {
+				if err := originalVerify(rawCerts, verifiedChains); err != nil {
+					config.Log.WithFields(logrus.Fields{
+						"error": err,
+					}).Error("original verification failed")
+					return err
+				}
+			}
+
+			// Then check CRL for each certificate in the chain
+			for _, chain := range verifiedChains {
+				for _, cert := range chain {
+					// Skip root CA as it's typically not in CRLs
+					if cert.IsCA && bytes.Equal(cert.RawSubject, cert.RawIssuer) {
+						config.Log.WithFields(logrus.Fields{
+							"cert": cert.Subject.CommonName,
+						}).Debug("skipping root CA")
+						continue
+					}
+
+					// Get CRL for this certificate's issuer
+					crl := config.CrlByAuthorityKeyId[string(cert.AuthorityKeyId)]
+					if crl == nil {
+						// No CRL for this issuer - could be a warning but let's allow for now
+						config.Log.WithFields(logrus.Fields{
+							"cert":           cert.Subject.CommonName,
+							"authorityKeyId": hex.EncodeToString(cert.AuthorityKeyId),
+						}).Warn("no CRL for certificate")
+						continue
+					}
+
+					// Check if certificate is revoked
+					for _, revoked := range crl.TBSCertList.RevokedCertificates {
+						if cert.SerialNumber.Cmp(revoked.SerialNumber) == 0 {
+							config.Log.WithFields(logrus.Fields{
+								"cert":   cert.Subject.CommonName,
+								"serial": cert.SerialNumber,
+							}).Warn("certificate is revoked")
+							return fmt.Errorf("certificate with serial number %v is revoked", cert.SerialNumber)
+						}
+						config.Log.WithFields(logrus.Fields{
+							"cert":   cert.Subject.CommonName,
+							"serial": cert.SerialNumber,
+						}).Debug("certificate is not revoked")
+					}
+				}
+			}
+			return nil
+		}
+	}
+
 	configureTransport(proxy.Tr, config)
 
 	// dialContext will be invoked for both CONNECT and traditional proxy requests

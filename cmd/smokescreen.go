@@ -95,7 +95,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Expose prometheus metrics on `ENDPOINT`. Requires --expose-prometheus-metrics to be set. Defaults to \"/metrics\"",
 		},
 		cli.StringFlag{
-			Name: "prometheus-listen-ip",
+			Name:  "prometheus-listen-ip",
 			Value: "0.0.0.0",
 			Usage: "Listen for prometheus metrics on interface with address IP. Requires --expose-prometheus-metrics to be set. Defaults to \"0.0.0.0\"",
 		},
@@ -270,12 +270,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
-		if c.IsSet("tls-crl-file") {
-			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
-				return err
-			}
-		}
-
 		if c.IsSet("unsafe-allow-private-ranges") {
 			conf.UnsafeAllowPrivateRanges = c.Bool("unsafe-allow-private-ranges")
 		}
@@ -293,6 +287,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				bundleFile,
 				bundleFile,
 				c.StringSlice("tls-client-ca-file")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("tls-crl-file") {
+			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
 				return err
 			}
 		}
