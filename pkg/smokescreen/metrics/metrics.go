@@ -21,9 +21,15 @@ var metrics = []string{
 	"acl.unknown_error",
 
 	// Connection statistics (cn.atpt == connection attempt)
-	"cn.atpt.total",        // Total connection attempts, tagged by success
-	"cn.atpt.connect.err",  // Connection failures, tagged by failure type
-	"cn.atpt.connect.time", // Connect time in ms, tagged by domain
+	"cn.atpt.total",                         // Total connection attempts, tagged by success
+	"cn.atpt.connect.err",                   // Connection failures, tagged by failure type
+	"cn.atpt.connect.time",                  // Connect time in ms, tagged by domain
+	"cn.close",                              // Number of times open/idle connections were closed
+	"cn.duration",                           // Connection duration in seconds
+	"cn.bytes_in",                           // Total bytes received
+	"cn.bytes_out",                          // Total bytes sent
+	"cn.active_at_termination",              // Number of open connections at shutdown
+
 	// The following are only emitted if Smokescreen is configured to use a ConnSuccessRateTracker.
 	"cn.atpt.distinct_domains",              // Number of distinct domains seen by ConnSuccessRateTracker in computation window
 	"cn.atpt.distinct_domains_success_rate", // Domain connection success rate computed by ConnSuccessRateTracker
@@ -35,7 +41,7 @@ var metrics = []string{
 	"resolver.deny.not_global_unicast",
 	"resolver.deny.private_range",
 	"resolver.deny.user_configured",
-	"resolver.lookup_time", // DNS lookup time in ms, not tagged
+	"resolver.lookup_time",                  // DNS lookup time in ms, not tagged
 	"resolver.errors_total",
 }
 
