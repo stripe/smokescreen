@@ -1,0 +1,12 @@
+version: v1
+services:
+  - name: some-service # Keep at least one valid service to ensure basic parsing works
+    project: test-project
+    action: enforce
+    allowed_domains:
+      - "example.com"
+default:
+  project: default-project
+  action: open # This policy will be globally disabled
+  allowed_domains:
+    - "allowedbydefault.com"

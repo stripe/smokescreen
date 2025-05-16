@@ -215,6 +215,17 @@ func (acl *ACL) Validate() error {
 			return err
 		}
 	}
+	if acl.DefaultRule != nil {
+		err := acl.ValidateRule("default_rule", *acl.DefaultRule)
+		if err != nil {
+			return err
+		}
+		err = acl.PolicyDisabled("default_rule", acl.DefaultRule.Policy)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

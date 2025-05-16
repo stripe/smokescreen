@@ -410,3 +410,32 @@ func TestInvalidMitmComfig(t *testing.T) {
 	err := acl.Validate()
 	a.Error(err)
 }
+func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
+	a := assert.New(t)
+	logger := logrus.New()
+
+	// Config with open default rule
+	yamlFilePath := path.Join("testdata", "sample_default_bypass_config.yaml")
+	yl := NewYAMLLoader(yamlFilePath)
+
+	// Attempt to load the ACL with "open" policy disabled
+	acl, err := New(logger, yl, []string{"open"})
+
+	a.Error(err, "ACL loading should have errored due to invalid default rule.")
+	a.Nil(acl, "ACL should not be loaded when the default rule is invalid.")
+}
+
+func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
+	a := assert.New(t)
+	logger := logrus.New()
+
+	// Config with open default rule
+	yamlFilePath := path.Join("testdata", "contains_invalid_glob_default.yaml")
+	yl := NewYAMLLoader(yamlFilePath)
+
+	// Attempt to load the ACL with "open" policy disabled
+	acl, err := New(logger, yl, []string{"open"})
+
+	a.Error(err, "ACL loading should have errored due to invalid default rule.")
+	a.Nil(acl, "ACL should not be loaded when the default rule is invalid.")
+}
