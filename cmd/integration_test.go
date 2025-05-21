@@ -37,6 +37,19 @@ var ProxyTargetHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Re
 	io.WriteString(w, "okok")
 })
 
+var mitmReflectingHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Echo back specific headers that Smokescreen might add
+	if val := r.Header.Get("X-Mitm-Test"); val != "" {
+		w.Header().Set("Echo-X-Mitm-Test", val)
+	}
+	if val := r.Header.Get("X-Another-Mitm"); val != "" {
+		w.Header().Set("Echo-X-Another-Mitm", val)
+	}
+	// Optionally log received headers for debugging during test development
+	// log.Printf("mitmReflectingHandler received headers: %v", r.Header)
+	io.WriteString(w, "mitm-ok")
+})
+
 // RoleFromRequest implementations
 func testRFRHeader(req *http.Request) (string, error) {
 	idHeader := req.Header["X-Smokescreen-Role"]
@@ -63,32 +76,59 @@ type TestCase struct {
 	TargetURL     string
 	RoleName      string
 	UpstreamProxy string
+
+	// Fields for MITM testing
+	ExpectEchoHeaders      map[string]string // Expected echoed headers in response
+	ExpectDetailedLogs     bool              // True if detailed logs are expected for this request
+	ShouldNotHaveDetailedLogs bool           // True if detailed logs should NOT be present (for control cases)
+	MitmConfiguredHeaderKey string           // The key of the header configured in mitm_domains.add_headers
+
+	// Fields for External Proxy testing
+	HeaderToAdd map[string]string // Headers to add to the outgoing request to Smokescreen
 }
 
 // validateProxyResponse validates tests cases and expected responses from TestSmokescreenIntegration
 func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
 	t.Logf("HTTP Response: %#v", resp)
-
 	a := assert.New(t)
+
+	// MITM Header Validation
+	if test.ExpectEchoHeaders != nil {
+		require.NotNil(t, resp, "Response should not be nil for MITM header check")
+		for k, v := range test.ExpectEchoHeaders {
+			a.Equal(v, resp.Header.Get(k), fmt.Sprintf("Expected echo header %s not found or value mismatch", k))
+		}
+	}
+
 	if test.ExpectAllow {
 		// In some cases we expect the proxy to allow the request but the upstream to return an error
+		// or for MITM tests, the body might be different
 		if test.ExpectStatus != 0 {
-			if resp == nil {
-				t.Fatal(err)
-			}
+			require.NotNil(t, resp, "Response should not be nil when expecting a specific status")
 			a.Equal(test.ExpectStatus, resp.StatusCode, "Expected HTTP response code did not match")
-			return
+			// For MITM tests, we might not want to return early, to allow for log validation.
+			// So, only return if not a MITM detailed log check.
+			if test.MitmConfiguredHeaderKey == "" && test.ExpectEchoHeaders == nil {
+				return
+			}
 		}
 		// CONNECT requests which return a non-200 return an error and a nil response
-		if resp == nil {
-			a.Error(err)
-			return
+		if resp == nil && !test.OverConnect { // Normal HTTP requests should have a response if allowed
+			t.Fatal("Response is nil for an allowed non-CONNECT request", err)
 		}
-		a.Equal(test.ExpectStatus, resp.StatusCode, "HTTP Response code should indicate success.")
+		if resp != nil { // For CONNECT, resp can be nil if an error occurred during tunnel setup after initial 200 OK
+			a.Equal(test.ExpectStatus, resp.StatusCode, "HTTP Response code should indicate success.")
+		} else if test.OverConnect && test.ExpectStatus == http.StatusOK {
+			// If it's a CONNECT request expecting OK, but resp is nil, means an error post-tunnel.
+			// This can happen if the upstream target server is problematic, but Smokescreen allowed the CONNECT.
+			// The error 'err' will contain details.
+			a.NoError(err, "CONNECT request expecting OK resulted in nil response and an error")
+		}
+
 	} else {
 		// CONNECT requests which return a non-200 return an error and a nil response
 		if resp == nil {
-			a.Error(err)
+			a.Error(err) // Expecting an error if response is nil for denied requests
 			return
 		}
 		// If there is a response returned, it should contain smokescreen's error message
@@ -102,27 +142,51 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 		a.Equal(test.ExpectStatus, resp.StatusCode, "Expected status did not match actual response code")
 	}
 
+	// Log validation
 	var entries []*logrus.Entry
 	entries = append(entries, logs...)
+	foundCanonicalDecision := false
+	foundDetailedLogEvidence := false
 
 	if len(entries) > 0 {
-		entry := findLogEntry(entries, smokescreen.CanonicalProxyDecision)
-		a.NotNil(entry)
-		a.Equal(entry.Message, smokescreen.CanonicalProxyDecision)
+		for _, entry := range entries {
+			if entry.Message == smokescreen.CanonicalProxyDecision {
+				foundCanonicalDecision = true
+				a.Contains(entry.Data, "allow", "Canonical log missing 'allow' field")
+				a.Equal(test.ExpectAllow, entry.Data["allow"], "Canonical log 'allow' field mismatch")
 
-		a.Contains(entry.Data, "allow")
-		a.Equal(test.ExpectAllow, entry.Data["allow"])
+				a.Contains(entry.Data, "proxy_type", "Canonical log missing 'proxy_type' field")
+				if test.OverConnect {
+					a.Equal("connect", entry.Data["proxy_type"], "Canonical log 'proxy_type' mismatch for CONNECT")
+				} else {
+					a.Equal("http", entry.Data["proxy_type"], "Canonical log 'proxy_type' mismatch for HTTP")
+				}
 
-		a.Contains(entry.Data, "proxy_type")
-		if test.OverConnect {
-			a.Equal("connect", entry.Data["proxy_type"])
-		} else {
-			a.Equal("http", entry.Data["proxy_type"])
+				a.Contains(entry.Data, "requested_host", "Canonical log missing 'requested_host' field")
+				u, _ := url.Parse(test.TargetURL)
+				a.Equal(fmt.Sprintf("%s:%s", u.Hostname(), u.Port()), entry.Data["requested_host"], "Canonical log 'requested_host' mismatch")
+			}
+
+			// Check for detailed logging evidence (presence of the MITM-configured header key in log fields)
+			// This is a heuristic. A more robust check might look for a specific "detailed logging" message if Smokescreen emits one.
+			if test.MitmConfiguredHeaderKey != "" && entry.Data[test.MitmConfiguredHeaderKey] != nil {
+				t.Logf("Found MITM header key '%s' in log entry fields: %v", test.MitmConfiguredHeaderKey, entry.Data)
+				foundDetailedLogEvidence = true
+			}
+			// Alternative check: look for a hypothetical specific message
+			// if entry.Message == "Detailed HTTP logging enabled for request" {
+			// 	foundDetailedLogEvidence = true
+			// }
+
 		}
+	}
+	a.True(foundCanonicalDecision, "Expected canonical proxy decision log entry was not found")
 
-		a.Contains(entry.Data, "requested_host")
-		u, _ := url.Parse(test.TargetURL)
-		a.Equal(fmt.Sprintf("%s:%s", u.Hostname(), u.Port()), entry.Data["requested_host"])
+	if test.ExpectDetailedLogs {
+		a.True(foundDetailedLogEvidence, fmt.Sprintf("Expected detailed logging evidence (e.g., header '%s' in log fields) but found none.", test.MitmConfiguredHeaderKey))
+	}
+	if test.ShouldNotHaveDetailedLogs {
+		a.False(foundDetailedLogEvidence, fmt.Sprintf("Expected no detailed logging evidence (e.g., header '%s' in log fields) but found some.", test.MitmConfiguredHeaderKey))
 	}
 }
 
@@ -262,6 +326,14 @@ func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hoo
 	client := generateClientForTest(t, test)
 	req := generateRequestForTest(t, test)
 
+	// Add any custom headers for this test case
+	if test.HeaderToAdd != nil {
+		for k, v := range test.HeaderToAdd {
+			req.Header.Add(k, v)
+			t.Logf("Added header to request: %s: %s", k, v)
+		}
+	}
+
 	return client.Do(req)
 }
 
@@ -270,6 +342,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 	// Holds TLS and non-TLS enabled local HTTP servers
 	httpServers := map[bool]*httptest.Server{}
+	mitmHttpServers := map[bool]*httptest.Server{} // For MITM tests
 
 	// Holds TLS and non-TLS enabled Smokescreen instances
 	proxyServers := map[bool]*httptest.Server{}
@@ -290,6 +363,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 			httpServer := httptest.NewTLSServer(ProxyTargetHandler)
 			defer httpServer.Close()
 			httpServers[useTLS] = httpServer
+
+			mitmServer := httptest.NewTLSServer(mitmReflectingHandler)
+			defer mitmServer.Close()
+			mitmHttpServers[useTLS] = mitmServer
 		} else {
 			// Must specify a domain which won't redirect to HTTPS
 			externalHosts[useTLS] = "http://checkip.amazonaws.com:80"
@@ -297,6 +374,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 			httpServer := httptest.NewServer(ProxyTargetHandler)
 			defer httpServer.Close()
 			httpServers[useTLS] = httpServer
+
+			mitmServer := httptest.NewServer(mitmReflectingHandler)
+			defer mitmServer.Close()
+			mitmHttpServers[useTLS] = mitmServer
 		}
 	}
 
@@ -422,8 +503,696 @@ func TestSmokescreenIntegration(t *testing.T) {
 		)
 	}
 
+	// Wildcard domain test cases
+	wildcardRoleName := "service-wildcard-mitm" // This role is used for wildcard and MITM tests
+
+	// Wildcard domain test cases (existing)
+	wildcardTestCases := []*TestCase{
+		// HTTP Proxy (overConnect=false, overTLS=false)
+		// Target: http://sub.wildcard.test:<port_from_httpServers[false]>
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce, // Matches the service-wildcard-mitm config
+			ExpectStatus: http.StatusOK,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://sub.wildcard.test:%s", getPort(httpServers[false].URL)), // Uses standard httpServers
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+			MitmConfiguredHeaderKey: "",     // Not a MITM target, so no specific header key to look for in logs
+		},
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://deep.sub.wildcard.test:%s", getPort(httpServers[false].URL)), // Uses standard httpServers
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+			MitmConfiguredHeaderKey: "",     // Not a MITM target
+		},
+		{
+			ExpectAllow:  false, // *.wildcard.test requires at least one label before .wildcard.test
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://wildcard.test:%s", getPort(httpServers[false].URL)), // Uses standard httpServers
+			RoleName:     wildcardRoleName,
+			MitmConfiguredHeaderKey: "", // Not a MITM target
+		},
+		{
+			ExpectAllow:  false,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://foo.anotherdomain.test:%s", getPort(httpServers[false].URL)), // Uses standard httpServers
+			RoleName:     wildcardRoleName,
+			MitmConfiguredHeaderKey: "", // Not a MITM target
+		},
+		// This specific.wildcard.test is allowed by wildcard rules, AND is a MITM target.
+		// It uses the standard httpServers, so it won't echo headers back to the client.
+		// However, Smokescreen should still perform MITM header addition and detailed logging internally.
+		{
+			ExpectAllow:  true, // specific.wildcard.test is explicitly allowed
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://specific.wildcard.test:%s", getPort(httpServers[false].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ExpectDetailedLogs: true, // It IS a MITM domain with detailed_http_logs: true
+			MitmConfiguredHeaderKey: "X-Mitm-Test", // Smokescreen will log this header
+		},
+
+		// CONNECT Proxy (overConnect=true, overTLS=true)
+		// Target: https://sub.wildcard.test:<port_from_httpServers[true]>
+		// Note: For CONNECT, TargetURL in NewRequest is host:port, scheme is implicit from TLS
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL, // Proxy is TLS enabled
+			TargetURL:    fmt.Sprintf("https://sub.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+			MitmConfiguredHeaderKey: "",     // Not a MITM target
+		},
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://deep.sub.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+			MitmConfiguredHeaderKey: "",     // Not a MITM target
+		},
+		{
+			ExpectAllow:  false, // *.wildcard.test requires at least one label
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired, // Smokescreen itself will deny via CONNECT response
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			MitmConfiguredHeaderKey: "", // Not a MITM target
+		},
+		{
+			ExpectAllow:  false,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://foo.anotherdomain.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			MitmConfiguredHeaderKey: "", // Not a MITM target
+		},
+		// Similar to the HTTP case, this specific.wildcard.test is allowed by wildcard rules,
+		// AND is a MITM target. Uses standard httpServers (TLS), so no client-side header echo.
+		// Smokescreen should still do MITM header addition and detailed logging.
+		{
+			ExpectAllow:  true, // specific.wildcard.test is explicitly allowed
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://specific.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ExpectDetailedLogs: true, // It IS a MITM domain with detailed_http_logs: true
+			MitmConfiguredHeaderKey: "X-Mitm-Test", // Smokescreen will log this header
+		},
+	}
+	testCases = append(testCases, wildcardTestCases...)
+
+	// MITM Test Cases
+	mitmTestCases := []*TestCase{
+		// --- Test for specific.wildcard.test (detailed_http_logs: true, X-Mitm-Test: Value1) ---
+		// HTTP Proxy (non-TLS proxy, non-TLS target)
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           false,
+			OverConnect:       false,
+			ProxyURL:          proxyServers[false].URL,
+			TargetURL:         fmt.Sprintf("http://specific.wildcard.test:%s", getPort(mitmHttpServers[false].URL)), // Target MITM server
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Mitm-Test": "Value1"},
+			ExpectDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Mitm-Test", // Help log validation find this header
+		},
+		// CONNECT Proxy (TLS proxy, TLS target)
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           true,
+			OverConnect:       true,
+			ProxyURL:          proxyServers[true].URL,
+			TargetURL:         fmt.Sprintf("https://specific.wildcard.test:%s", getPort(mitmHttpServers[true].URL)), // Target MITM server
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Mitm-Test": "Value1"},
+			ExpectDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Mitm-Test",
+		},
+
+		// --- Test for another.specific.wildcard.test (detailed_http_logs: false, X-Another-Mitm: Value2) ---
+		// HTTP Proxy
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           false,
+			OverConnect:       false,
+			ProxyURL:          proxyServers[false].URL,
+			TargetURL:         fmt.Sprintf("http://another.specific.wildcard.test:%s", getPort(mitmHttpServers[false].URL)),
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Another-Mitm": "Value2"},
+			// detailed_http_logs is false for this domain in the config.
+			// So, we should NOT find evidence of *detailed* logging (like X-Another-Mitm in log fields).
+			ShouldNotHaveDetailedLogs: true,
+			// However, Smokescreen *will* add the "X-Another-Mitm" header to the request sent to the upstream.
+			// The MitmConfiguredHeaderKey is set to "X-Another-Mitm" to indicate this is the header we're focused on.
+			// The current log check `entry.Data[test.MitmConfiguredHeaderKey] != nil` would imply that if this header
+			// is found in *any* log field, `foundDetailedLogEvidence` becomes true.
+			// This might conflict with `ShouldNotHaveDetailedLogs: true`.
+			//
+			// Let's refine the meaning of MitmConfiguredHeaderKey for ShouldNotHaveDetailedLogs.
+			// If ShouldNotHaveDetailedLogs is true, then the log check should assert that
+			// entry.Data[MitmConfiguredHeaderKey] is *NOT* found (or that specific detailed log messages are absent).
+			// The current logic in validateProxyResponse for ShouldNotHaveDetailedLogs is:
+			// `a.False(foundDetailedLogEvidence, ...)`
+			// And foundDetailedLogEvidence is true if `entry.Data[test.MitmConfiguredHeaderKey] != nil`.
+			// This setup is correct: we expect X-Another-Mitm NOT to be in the log fields because detailed_http_logs is false.
+			MitmConfiguredHeaderKey: "X-Another-Mitm",
+		},
+		// CONNECT Proxy
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           true,
+			OverConnect:       true,
+			ProxyURL:          proxyServers[true].URL,
+			TargetURL:         fmt.Sprintf("https://another.specific.wildcard.test:%s", getPort(mitmHttpServers[true].URL)),
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Another-Mitm": "Value2"},
+			ShouldNotHaveDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Another-Mitm",
+		},
+	}
+	testCases = append(testCases, mitmTestCases...)
+
+	// External Proxy Globs Test Cases
+	// These tests primarily focus on CONNECT requests (OverConnect=true, OverTLS=true)
+	// as X-Upstream-Https-Proxy is most relevant there.
+	extProxyRoleName := "service-ext-proxy"
+	externalProxyTestCases := []*TestCase{
+		// Scenario a: Allowed - Matching X-Upstream-Https-Proxy and matching allowed_domains
+		{
+			ExpectAllow:   true,
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusOK,
+			OverTLS:       true,
+			OverConnect:   true,
+			ProxyURL:      proxyServers[true].URL,
+			TargetURL:     fmt.Sprintf("https://proxied.target.test:%s", getPort(httpServers[true].URL)),
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   map[string]string{"X-Upstream-Https-Proxy": "https://foo.externalproxy.com:8443"},
+		},
+		// Scenario b: Denied (External Proxy Mismatch) - Non-matching X-Upstream-Https-Proxy, matching allowed_domains
+		{
+			ExpectAllow:   false,
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusProxyAuthRequired,
+			OverTLS:       true,
+			OverConnect:   true,
+			ProxyURL:      proxyServers[true].URL,
+			TargetURL:     fmt.Sprintf("https://proxied.target.test:%s", getPort(httpServers[true].URL)),
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   map[string]string{"X-Upstream-Https-Proxy": "https://foo.anotherproxy.org:8443"},
+		},
+		// Scenario c: Denied (Domain Mismatch) - Matching X-Upstream-Https-Proxy, non-matching allowed_domains
+		{
+			ExpectAllow:   false,
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusProxyAuthRequired,
+			OverTLS:       true,
+			OverConnect:   true,
+			ProxyURL:      proxyServers[true].URL,
+			TargetURL:     fmt.Sprintf("https://another.target.net:%s", getPort(httpServers[true].URL)), // Non-allowed domain
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   map[string]string{"X-Upstream-Https-Proxy": "https://foo.externalproxy.com:8443"},
+		},
+		// Scenario d: Allowed (No Header) - No X-Upstream-Https-Proxy header, matching allowed_domains
+		{
+			ExpectAllow:   true,
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusOK,
+			OverTLS:       true,
+			OverConnect:   true,
+			ProxyURL:      proxyServers[true].URL,
+			TargetURL:     fmt.Sprintf("https://proxied.target.test:%s", getPort(httpServers[true].URL)),
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   nil, // No extra header
+		},
+		// Additional test: Denied (No Header, domain mismatch) - To ensure baseline domain check still works
+		{
+			ExpectAllow:   false,
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusProxyAuthRequired,
+			OverTLS:       true,
+			OverConnect:   true,
+			ProxyURL:      proxyServers[true].URL,
+			TargetURL:     fmt.Sprintf("https://another.target.net:%s", getPort(httpServers[true].URL)), // Non-allowed domain
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   nil,
+		},
+		// Additional test: Non-CONNECT, HTTP, with X-Upstream-Https-Proxy (behavior might be undefined by Smokescreen, but ACL should still deny if proxy glob mismatches)
+		// Smokescreen's current ACL logic for ExternalProxyGlobs applies regardless of CONNECT, if the header is present.
+		{
+			ExpectAllow:   false, // Denied due to ext proxy glob mismatch for the role
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusProxyAuthRequired,
+			OverTLS:       false, // HTTP proxy
+			OverConnect:   false, // Not a CONNECT request
+			ProxyURL:      proxyServers[false].URL,
+			TargetURL:     fmt.Sprintf("http://proxied.target.test:%s", getPort(httpServers[false].URL)),
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   map[string]string{"X-Upstream-Https-Proxy": "https://foo.anotherproxy.org:8080"},
+		},
+		// Additional test: Non-CONNECT, HTTP, with matching X-Upstream-Https-Proxy
+		{
+			ExpectAllow:   true, // Allowed as domain and ext proxy glob match
+			Action:        acl.Enforce,
+			ExpectStatus:  http.StatusOK,
+			OverTLS:       false, // HTTP proxy
+			OverConnect:   false, // Not a CONNECT request
+			ProxyURL:      proxyServers[false].URL,
+			TargetURL:     fmt.Sprintf("http://proxied.target.test:%s", getPort(httpServers[false].URL)),
+			RoleName:      extProxyRoleName,
+			HeaderToAdd:   map[string]string{"X-Upstream-Https-Proxy": "https://bar.externalproxy.com:8080"},
+		},
+	}
+	testCases = append(testCases, externalProxyTestCases...)
+
+	// Global Allow/Deny List Test Cases
+	globalListTestCases := []*TestCase{}
+
+	// --- Test Scenarios for GlobalDenyList ---
+	roleGlobalDeny := "service-global-deny-test" // action: open
+
+	// Scenario a: Denied by global_deny_list (direct match), role is open
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   false,
+		Action:        acl.Open, // Role's action
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://globally.denied.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   false,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://globally.denied.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+
+	// Scenario b: Denied by global_deny_list (wildcard match), role is open
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   false,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://foo.sub.denied.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   false,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://foo.sub.denied.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+
+	// Scenario c: Denied by global_deny_list even if in role's allowed_domains (role is open, so allowed_domains is not strictly enforced by role itself)
+	// This is effectively the same as scenario 'a' because global deny takes precedence.
+	// globally.denied.com is in service-global-deny-test's allowed_domains.
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   false,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://globally.denied.com:%s", getPort(httpServers[false].URL)), // This domain is in its allowed_domains
+		RoleName:      roleGlobalDeny,
+	})
+
+	// Scenario d: Allowed by open role (not on global_deny_list)
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   true,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://normal.allowed.here:%s", getPort(httpServers[false].URL)), // In role's allowed_domains
+		RoleName:      roleGlobalDeny,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   true,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://normal.allowed.here:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // Another random domain for open role
+		ExpectAllow:   true,
+		Action:        acl.Open,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://another.random.domain.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalDeny,
+	})
+
+
+	// --- Test Scenarios for GlobalAllowList ---
+	roleGlobalAllow := "service-global-allow-test" // action: enforce, allowed_domains: ["onlythis.specificdomain.com"]
+
+	// Scenario e: Allowed by global_allow_list (direct match), role is enforce and domain not in role's allowed_domains
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   true,
+		Action:        acl.Enforce, // Role's action
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://globally.allowed.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   true,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://globally.allowed.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+
+	// Scenario f: Allowed by global_allow_list (wildcard match), role is enforce and domain not in role's allowed_domains
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   true,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://foo.sub.allowed.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   true,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://foo.sub.allowed.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+
+	// Scenario g: Denied by enforce role (not on global_allow_list, not in role's allowed_domains)
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   false,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://another.random.domain.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   false,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://another.random.domain.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+
+	// Scenario h: Allowed by enforce role (in role's allowed_domains, not on global_allow_list but global_allow_list doesn't prevent this)
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   true,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://onlythis.specificdomain.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   true,
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusOK,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://onlythis.specificdomain.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+	
+	// Scenario: Global Deny List should take precedence over Global Allow List
+	// Test this by having a domain that could be on both (implicitly or explicitly).
+	// Current config: globally.denied.com (deny), globally.allowed.com (allow) - no direct overlap.
+	// *.sub.denied.com (deny), *.sub.allowed.com (allow) - no direct overlap for a single domain.
+	// If we had deny: *.example.com, allow: foo.example.com, then foo.example.com should be denied.
+	// We can test a domain that is on global_deny_list, and try to access it with a role that
+	// might otherwise allow it (e.g. an "open" role, or an "enforce" role that has it in global_allow_list).
+	// Since global_deny_list is checked first, it should be denied.
+	// This is already covered by scenario 'a' and 'b' where the role is 'open'.
+	// To make it more explicit for an 'enforce' role:
+	// If 'service-global-allow-test' (enforce) tries to access 'globally.denied.com', it should be denied.
+	globalListTestCases = append(globalListTestCases, &TestCase{
+		ExpectAllow:   false, // Denied by global_deny_list
+		Action:        acl.Enforce, // Role is service-global-allow-test
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       false, OverConnect: false, ProxyURL: proxyServers[false].URL,
+		TargetURL:     fmt.Sprintf("http://globally.denied.com:%s", getPort(httpServers[false].URL)),
+		RoleName:      roleGlobalAllow, // Using the 'enforce' role that has its own rules + global allow
+	})
+	globalListTestCases = append(globalListTestCases, &TestCase{ // CONNECT version
+		ExpectAllow:   false, // Denied by global_deny_list
+		Action:        acl.Enforce,
+		ExpectStatus:  http.StatusProxyAuthRequired,
+		OverTLS:       true, OverConnect: true, ProxyURL: proxyServers[true].URL,
+		TargetURL:     fmt.Sprintf("https://globally.denied.com:%s", getPort(httpServers[true].URL)),
+		RoleName:      roleGlobalAllow,
+	})
+
+
+	testCases = append(testCases, globalListTestCases...)
+
 	for _, testCase := range testCases {
-		t.Run("", func(t *testing.T) {
+		var targetServerType string
+		// Determine if the target URL uses a port from mitmHttpServers or httpServers for test naming
+		isMitmTarget := false
+		mitmPortNonTLS := getPort(mitmHttpServers[false].URL)
+		mitmPortTLS := getPort(mitmHttpServers[true].URL)
+		targetPort := getPort(testCase.TargetURL)
+
+		if targetPort == mitmPortNonTLS || targetPort == mitmPortTLS {
+			isMitmTarget = true
+		}
+
+		if isMitmTarget {
+			targetServerType = "MitmTarget"
+		} else {
+			targetServerType = "StdTarget"
+		}
+		
+		runName := fmt.Sprintf("Target_%s_Role_%s_Connect_%t_ProxyTLS_%t_ServerType_%s_DetailedLogsExpected_%t_NoDetailedLogsExpected_%t",
+			testCase.TargetURL, testCase.RoleName, testCase.OverConnect,
+			testCase.ProxyURL == proxyServers[true].URL, targetServerType, testCase.ExpectDetailedLogs, testCase.ShouldNotHaveDetailedLogs)
+
+		t.Run(runName, func(t *testing.T) {
+			testCase.RandomTrace = rand.Int()
+			resp, err := executeRequestForTest(t, testCase, &logHook)
+			validateProxyResponse(t, testCase, resp, err, logHook.AllEntries())
+		})
+	}
+}
+		// which use the mitmHttpServers. We can remove or adapt. For now, let's adapt it to be a non-MITM check
+		// if we assume the MITM handler is different. Or, if it's the same handler, this is fine.
+		// Given we now have mitmHttpServers, this existing test should point to httpServers.
+		{
+			ExpectAllow:  true, // specific.wildcard.test is explicitly allowed
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      false,
+			OverConnect:  false,
+			ProxyURL:     proxyServers[false].URL,
+			TargetURL:    fmt.Sprintf("http://specific.wildcard.test:%s", getPort(httpServers[false].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			// This domain IS configured for MITM, so detailed logs might appear depending on Smokescreen's behavior.
+			// If Smokescreen logs added headers even if the upstream doesn't see them (due to different handler),
+			// then ExpectDetailedLogs might be true. For now, let's assume the log check is tied to the mitmHttpServer use.
+			// This test case might become redundant or need careful thought.
+			// For now, let's assume it's a baseline check that it's allowed, without specific MITM log checks.
+		},
+
+		// CONNECT Proxy (overConnect=true, overTLS=true)
+		// Target: https://sub.wildcard.test:<port_from_httpServers[true]>
+		// Note: For CONNECT, TargetURL in NewRequest is host:port, scheme is implicit from TLS
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL, // Proxy is TLS enabled
+			TargetURL:    fmt.Sprintf("https://sub.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+		},
+		{
+			ExpectAllow:  true,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://deep.sub.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+			ShouldNotHaveDetailedLogs: true, // Control: non-MITM domain for this role
+		},
+		{
+			ExpectAllow:  false, // *.wildcard.test requires at least one label
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired, // Smokescreen itself will deny via CONNECT response
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+		},
+		{
+			ExpectAllow:  false,
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusProxyAuthRequired,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://foo.anotherdomain.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+		},
+		// Similar to the HTTP case, this specific.wildcard.test is allowed by wildcard rules,
+		// but will now also be a MITM target. This existing test should point to httpServers.
+		{
+			ExpectAllow:  true, // specific.wildcard.test is explicitly allowed
+			Action:       acl.Enforce,
+			ExpectStatus: http.StatusOK,
+			OverTLS:      true,
+			OverConnect:  true,
+			ProxyURL:     proxyServers[true].URL,
+			TargetURL:    fmt.Sprintf("https://specific.wildcard.test:%s", getPort(httpServers[true].URL)), // Standard server
+			RoleName:     wildcardRoleName,
+		},
+	}
+	testCases = append(testCases, wildcardTestCases...)
+
+	// MITM Test Cases
+	mitmTestCases := []*TestCase{
+		// --- Test for specific.wildcard.test (detailed_http_logs: true, X-Mitm-Test: Value1) ---
+		// HTTP Proxy (non-TLS proxy, non-TLS target)
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           false,
+			OverConnect:       false,
+			ProxyURL:          proxyServers[false].URL,
+			TargetURL:         fmt.Sprintf("http://specific.wildcard.test:%s", getPort(mitmHttpServers[false].URL)), // Target MITM server
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Mitm-Test": "Value1"},
+			ExpectDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Mitm-Test", // Help log validation find this header
+		},
+		// CONNECT Proxy (TLS proxy, TLS target)
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           true,
+			OverConnect:       true,
+			ProxyURL:          proxyServers[true].URL,
+			TargetURL:         fmt.Sprintf("https://specific.wildcard.test:%s", getPort(mitmHttpServers[true].URL)), // Target MITM server
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Mitm-Test": "Value1"},
+			ExpectDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Mitm-Test",
+		},
+
+		// --- Test for another.specific.wildcard.test (detailed_http_logs: false, X-Another-Mitm: Value2) ---
+		// HTTP Proxy
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           false,
+			OverConnect:       false,
+			ProxyURL:          proxyServers[false].URL,
+			TargetURL:         fmt.Sprintf("http://another.specific.wildcard.test:%s", getPort(mitmHttpServers[false].URL)),
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Another-Mitm": "Value2"},
+			ShouldNotHaveDetailedLogs: true, // Detailed logs are false for this one
+			MitmConfiguredHeaderKey: "X-Another-Mitm", // Still, Smokescreen might log the header it adds.
+		},
+		// CONNECT Proxy
+		{
+			ExpectAllow:       true,
+			Action:            acl.Enforce,
+			ExpectStatus:      http.StatusOK,
+			OverTLS:           true,
+			OverConnect:       true,
+			ProxyURL:          proxyServers[true].URL,
+			TargetURL:         fmt.Sprintf("https://another.specific.wildcard.test:%s", getPort(mitmHttpServers[true].URL)),
+			RoleName:          wildcardRoleName,
+			ExpectEchoHeaders: map[string]string{"Echo-X-Another-Mitm": "Value2"},
+			ShouldNotHaveDetailedLogs: true,
+			MitmConfiguredHeaderKey: "X-Another-Mitm",
+		},
+	}
+	testCases = append(testCases, mitmTestCases...)
+
+	for _, testCase := range testCases {
+		var targetServerType string
+		// Determine if the target URL uses a port from mitmHttpServers or httpServers for test naming
+		isMitmTarget := false
+		mitmPortNonTLS := getPort(mitmHttpServers[false].URL)
+		mitmPortTLS := getPort(mitmHttpServers[true].URL)
+		targetPort := getPort(testCase.TargetURL)
+
+		if targetPort == mitmPortNonTLS || targetPort == mitmPortTLS {
+			isMitmTarget = true
+		}
+
+		if isMitmTarget {
+			targetServerType = "MitmTarget"
+		} else {
+			targetServerType = "StdTarget"
+		}
+		
+		runName := fmt.Sprintf("Target_%s_Role_%s_Connect_%t_ProxyTLS_%t_ServerType_%s_DetailedLogsExpected_%t_NoDetailedLogsExpected_%t",
+			testCase.TargetURL, testCase.RoleName, testCase.OverConnect,
+			testCase.ProxyURL == proxyServers[true].URL, targetServerType, testCase.ExpectDetailedLogs, testCase.ShouldNotHaveDetailedLogs)
+
+		t.Run(runName, func(t *testing.T) {
 			testCase.RandomTrace = rand.Int()
 			resp, err := executeRequestForTest(t, testCase, &logHook)
 			validateProxyResponse(t, testCase, resp, err, logHook.AllEntries())
@@ -682,4 +1451,164 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	}
 
 	return conf, server, nil
+}
+
+func getPort(serverURL string) string {
+	parsedURL, _ := url.Parse(serverURL)
+	return parsedURL.Port()
+}
+
+func TestInvalidACLConfigs(t *testing.T) {
+	runACLValidationTest := func(t *testing.T, aclContent string, expectedErrorMsgSubstring string) {
+		tmpDir := t.TempDir()
+		aclFilePath := filepath.Join(tmpDir, "invalid_acl.yaml")
+		require.NoError(t, ioutil.WriteFile(aclFilePath, []byte(aclContent), 0644))
+
+		// Minimal args needed to trigger ACL loading.
+		// Listen IP and port are not strictly necessary if we only load config,
+		// but NewConfiguration might have checks for them.
+		// Using dummy values.
+		args := []string{
+			"smokescreen",
+			"--listen-ip=127.0.0.1",
+			"--listen-port=0", // Use port 0 for OS to pick a free port if it tries to listen
+			"--egress-acl-file=" + aclFilePath,
+		}
+
+		// We are testing NewConfiguration from the cmd package.
+		// This function sets up the SmokescreenConfig, including loading the ACL.
+		_, err := NewConfiguration(args, nil)
+
+		require.Error(t, err, "Expected NewConfiguration to fail for this ACL content")
+		if expectedErrorMsgSubstring != "" {
+			assert.Contains(t, err.Error(), expectedErrorMsgSubstring, "Error message mismatch")
+		}
+	}
+
+	t.Run("glob_wildcard_not_prefix_segment", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-invalid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - "*foo.com"
+`
+		// Error from pkg/smokescreen/acl/acl.go -> normalizeDomain -> Validate
+		// The actual error is "glob forms are only supported for prefix matching (e.g. *.example.com)"
+		// but it gets wrapped. Let's check for a core part.
+		runACLValidationTest(t, aclContent, "glob forms are only supported for prefix matching")
+	})
+
+	t.Run("glob_wildcard_internal_segment", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-invalid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - "foo.*.com"
+`
+		// Error from pkg/smokescreen/acl/acl.go -> normalizeDomain -> Validate
+		runACLValidationTest(t, aclContent, "glob forms are only supported for prefix matching")
+	})
+
+	t.Run("glob_wildcard_match_all", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-invalid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - "*"
+`
+		// Error from pkg/smokescreen/acl/acl.go -> normalizeDomain -> Validate
+		runACLValidationTest(t, aclContent, "glob must not match everything")
+	})
+
+	t.Run("glob_wildcard_match_all_dot", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-invalid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - "*."
+`
+		// Error from pkg/smokescreen/acl/acl.go -> normalizeDomain -> Validate
+		runACLValidationTest(t, aclContent, "glob must not match everything")
+	})
+
+	t.Run("glob_empty_string", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-invalid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - ""
+`
+		// Error from pkg/smokescreen/acl/acl.go -> normalizeDomain -> Validate
+		runACLValidationTest(t, aclContent, "glob cannot be empty")
+	})
+
+	// Domain Normalization Scenarios
+	t.Run("normalization_domain_with_caps", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-normalization
+    project: test
+    action: open
+    allowed_domains:
+      - "DomainWithCaps.com"
+`
+		// This error comes from config.go's SetupEgressAcl, which calls acl.Validate()
+		// acl.Validate() itself calls hostport.NormalizeHost and compares.
+		runACLValidationTest(t, aclContent, "incorrect ACL entry 'DomainWithCaps.com'; use 'domainwithcaps.com'")
+	})
+
+	t.Run("normalization_unicode_domain", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-normalization
+    project: test
+    action: open
+    allowed_domains:
+      - "bücher.example.com"
+`
+		// Similar to above, this comes from acl.Validate() via hostport.NormalizeHost comparison.
+		runACLValidationTest(t, aclContent, "incorrect ACL entry 'bücher.example.com'; use 'xn--bcher-kva.example.com'")
+	})
+
+	// Test a valid glob to ensure the helper and basic setup is fine
+	t.Run("valid_glob_sanity_check", func(t *testing.T) {
+		aclContent := `
+version: v1
+services:
+  - name: test-valid-glob
+    project: test
+    action: open
+    allowed_domains:
+      - "*.example.com"
+`
+		tmpDir := t.TempDir()
+		aclFilePath := filepath.Join(tmpDir, "valid_acl.yaml")
+		require.NoError(t, ioutil.WriteFile(aclFilePath, []byte(aclContent), 0644))
+
+		args := []string{
+			"smokescreen",
+			"--listen-ip=127.0.0.1",
+			"--listen-port=0",
+			"--egress-acl-file=" + aclFilePath,
+		}
+		_, err := NewConfiguration(args, nil)
+		require.NoError(t, err, "Expected NewConfiguration to succeed for a valid glob")
+	})
 }

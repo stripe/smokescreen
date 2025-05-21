@@ -16,6 +16,50 @@ services:
     project: test
     action: open
 
+  - name: service-wildcard-mitm
+    project: test-wildcard
+    action: enforce
+    allowed_domains:
+      - "*.wildcard.test"
+      - "specific.wildcard.test"
+      - "another.specific.wildcard.test"
+    mitm_domains:
+      - domain: "specific.wildcard.test"
+        add_headers: {"X-Mitm-Test": "Value1"}
+        detailed_http_logs: true
+      - domain: "another.specific.wildcard.test"
+        add_headers: {"X-Another-Mitm": "Value2"}
+        detailed_http_logs: false
+
+  - name: service-ext-proxy
+    project: test-extproxy
+    action: enforce
+    allowed_domains:
+      - "proxied.target.test"
+    external_proxy_globs:
+      - "*.externalproxy.com"
+
+  - name: service-global-deny-test
+    project: test-globaldeny
+    action: open
+    allowed_domains:
+      - "globally.denied.com"
+      - "normal.allowed.here"
+
+  - name: service-global-allow-test
+    project: test-globalallow
+    action: enforce
+    allowed_domains:
+      - "onlythis.specificdomain.com"
+
+global_deny_list:
+  - "globally.denied.com"
+  - "*.sub.denied.com"
+
+global_allow_list:
+  - "globally.allowed.com"
+  - "*.sub.allowed.com"
+
 default:
   name: unknown-role
   project: security
