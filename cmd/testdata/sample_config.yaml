@@ -60,6 +60,40 @@ global_allow_list:
   - "globally.allowed.com"
   - "*.sub.allowed.com"
 
+  - name: role-redirect-allow-all
+    project: test-redirects
+    action: open # Allows both redirecting and final servers
+
+  - name: role-redirect-allow-deny
+    project: test-redirects
+    action: enforce
+    # Intentionally allow only redirecting.localhost (or 127.0.0.1:port1)
+    # final.localhost (or 127.0.0.1:port2) will be denied by this role's restrictive allowed_domains.
+    # We'll use 127.0.0.1 with specific ports for test servers.
+    # allowed_domains: will be set dynamically in the test if needed, or use specific ports.
+    # For now, assume redirecting_server_port is allowed, final_server_port is not.
+    # This will be made concrete by how target URLs and ACLs are set up for the specific test case.
+    # Example if redirecting server is on 50001, final on 50002:
+    allowed_domains:
+      - "127.0.0.1:50001" # Placeholder, will match targetServerRedirecting
+      # - "redirecting.localhost" # Alternative if using hostnames
+
+  - name: role-redirect-deny-initial
+    project: test-redirects
+    action: enforce
+    # Intentionally does not allow redirecting.localhost (or 127.0.0.1:port1)
+    allowed_domains:
+      - "final.localhost" # Or 127.0.0.1:port_of_final_server
+      - "127.0.0.1:50002" # Placeholder for final server if using ports
+
+  - name: role-redirect-post-allow
+    project: test-redirects-post
+    action: open # Allows POST to the redirecting server
+
+  - name: role-echo-test
+    project: test-forwarding
+    action: open
+
 default:
   name: unknown-role
   project: security
