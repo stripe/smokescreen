@@ -266,7 +266,7 @@ func NewConfig() *Config {
 
 func (config *Config) SetupCrls(crlFiles []string) error {
 	for _, crlFile := range crlFiles {
-		crlBytes, err := ioutil.ReadFile(crlFile)
+		crlBytes, err := os.ReadFile(crlFile)
 		if err != nil {
 			return err
 		}
