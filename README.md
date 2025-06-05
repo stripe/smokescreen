@@ -140,15 +140,46 @@ Three policies are supported:
 
 A host can be specified with or without a globbing prefix. The host (without the globbing prefix) must be in Punycode to prevent ambiguity.
 
-| host                | valid   |
-| ------------------- | ------- |
-| `example.com`       | yes     |
-| `*.example.com`     | yes     |
-| `api.*.example.com` | no      |
-| `*example.com`      | no      |
-| `ex*ample.com`      | no      |
-| `éxämple.com`       | no      |
-| `example.*`         | hell no |
+#### Supported Domain Patterns
+
+Smokescreen supports various domain glob patterns with the following rules:
+
+**Single Wildcard Patterns** (allowed for any domain):
+- `example.com` - Exact match
+- `*.example.com` - Leading wildcard (matches any subdomain)
+- `service.*.example.com` - Middle wildcard (matches any component in that position)
+
+**Multiple Wildcard Patterns** (allowed for any domain with at least one non-wildcard component before the TLD):
+- `*.*.example.com` - Multiple wildcards for any domain
+- `api.*.service.*.com` - Multiple wildcards in different positions
+- `*.subdomain.*.example.org` - Mixed wildcard and specific components
+- `service.*.region.*.example.net` - Multiple wildcards with specific components
+
+**Security Restrictions**:
+- Wildcard TLD patterns like `example.*` or `*.service.*` are not allowed
+- Patterns that could match any TLD like `*.*.com` (without specific components) are not allowed
+- All-wildcard patterns like `*`, `*.*`, or `*.*.*` are always rejected
+- Partial wildcards within components like `test*.example.com` are not allowed
+
+**Examples**:
+
+| Pattern                              | Valid | Reason                                                    |
+| ------------------------------------ | ----- | --------------------------------------------------------- |
+| `example.com`                        | ✅    | Exact match                                               |
+| `*.example.com`                      | ✅    | Single leading wildcard                                   |
+| `api.*.example.com`                  | ✅    | Single middle wildcard                                    |
+| `*.*.example.com`                    | ✅    | Multiple wildcards with specific domain before TLD       |
+| `api.*.service.*.com`                | ✅    | Multiple wildcards with specific components               |
+| `service.*.region.*.example.net`     | ✅    | Multiple wildcards with mixed specific components         |
+| `access-analyzer.*.amazonaws.com`    | ✅    | Single wildcard for cloud provider domain                |
+| `*.*.amazonaws.com`                  | ✅    | Multiple wildcards for cloud provider domain             |
+| `example.*`                          | ❌    | Wildcard TLD patterns are not allowed                    |
+| `*.service.*`                        | ❌    | Wildcard TLD patterns are not allowed                    |
+| `*.*.com`                            | ❌    | No specific domain component before TLD                   |
+| `*`                                  | ❌    | Matches everything                                        |
+| `*.*`                                | ❌    | Matches everything                                        |
+| `test*.example.com`                  | ❌    | Partial wildcards within components not allowed           |
+| `éxämple.com`                        | ❌    | Must be in Punycode (normalized form)                     |
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
 

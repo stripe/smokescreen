@@ -4,6 +4,7 @@
 package acl
 
 import (
+	"fmt"
 	"path"
 	"testing"
 
@@ -242,10 +243,6 @@ func TestACLAddInvalidGlob(t *testing.T) {
 		glob     string
 		errorMsg string
 	}{
-		"multiple wildcards": {
-			"*.*.stripe.com",
-			"domain globs are only supported as prefix",
-		},
 		"matches everything (*)": {
 			"*",
 			"domain glob must not match everything",
@@ -254,9 +251,37 @@ func TestACLAddInvalidGlob(t *testing.T) {
 			"*.",
 			"domain glob must not match everything",
 		},
+		"matches everything (*.*)": {
+			"*.*",
+			"domain glob must not match everything",
+		},
+		"wildcard TLD": {
+			"example.*",
+			"wildcard TLD patterns are not allowed",
+		},
+		"multiple wildcards with wildcard TLD": {
+			"*.service.*",
+			"wildcard TLD patterns are not allowed",
+		},
+		"multiple wildcards without non-wildcard before TLD": {
+			"*.*.com",
+			"multiple wildcards require at least one non-wildcard component before the TLD",
+		},
+		"all wildcards": {
+			"*.*.*",
+			"domain glob must contain at least one non-wildcard component",
+		},
+		"partial wildcard in component": {
+			"test*.example.com",
+			"wildcards must represent complete domain components",
+		},
+		"partial wildcard at end": {
+			"example.co*",
+			"wildcards must represent complete domain components",
+		},
 		"non-normalized domain": {
 			"éxämple.com",
-			"incorrect ACL entry; use \"xn--xmple-gra7a.com\"",
+			"incorrect ACL entry; domain components must be normalized",
 		},
 	}
 
@@ -324,6 +349,56 @@ func TestHostMatchesGlob(t *testing.T) {
 		"wildcard after leading component": {
 			"login.eu.example.com",
 			"login.*.example.com",
+			true,
+		},
+		"wildcard in middle matches region": {
+			"access-analyzer.us-west-2.amazonaws.com",
+			"access-analyzer.*.amazonaws.com",
+			true,
+		},
+		"wildcard in middle matches different region": {
+			"access-analyzer.eu-central-1.amazonaws.com",
+			"access-analyzer.*.amazonaws.com",
+			true,
+		},
+		"wildcard in middle no match wrong service": {
+			"s3.us-west-2.amazonaws.com",
+			"access-analyzer.*.amazonaws.com",
+			false,
+		},
+		"wildcard in middle no match wrong suffix": {
+			"access-analyzer.us-west-2.example.com",
+			"access-analyzer.*.amazonaws.com",
+			false,
+		},
+		"multiple wildcards trusted domain": {
+			"service.us-west-2.amazonaws.com",
+			"*.*.amazonaws.com",
+			true,
+		},
+		"multiple wildcards trusted domain different service": {
+			"ec2.eu-central-1.amazonaws.com",
+			"*.*.amazonaws.com",
+			true,
+		},
+		"multiple wildcards trusted domain no match": {
+			"service.amazonaws.com",
+			"*.*.amazonaws.com",
+			false,
+		},
+		"wildcard at end": {
+			"example.com.test",
+			"example.com.*",
+			true,
+		},
+		"component count mismatch more host": {
+			"a.b.c.example.com",
+			"*.example.com",
+			true,
+		},
+		"component count mismatch fewer host": {
+			"example.com",
+			"*.*.example.com",
 			false,
 		},
 		"trailing dot": {
@@ -438,4 +513,38 @@ func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
 
 	a.Error(err, "ACL loading should have errored due to invalid default rule.")
 	a.Nil(acl, "ACL should not be loaded when the default rule is invalid.")
+}
+
+func TestACLAddValidGlob(t *testing.T) {
+	validGlobs := []string{
+		"*.example.com",
+		"access-analyzer.*.amazonaws.com",
+		"*.*.amazonaws.com",
+		"service.*.googleapis.com",
+		"*.*.azure.com",
+		"service.region.amazonaws.com",
+		// Multiple wildcards are now allowed for any domain with non-wildcard before TLD
+		"*.*.example.com",
+		"api.*.service.*.com",
+		"*.subdomain.*.example.org",
+		"service.*.region.*.example.net",
+	}
+
+	acl := &ACL{
+		Rules: make(map[string]Rule),
+	}
+
+	for i, glob := range validGlobs {
+		t.Run(fmt.Sprintf("valid_glob_%d_%s", i, glob), func(t *testing.T) {
+			a := assert.New(t)
+
+			err := acl.Add(fmt.Sprintf("service%d", i), Rule{
+				Project:     "security",
+				Policy:      Open,
+				DomainGlobs: []string{glob},
+			})
+
+			a.NoError(err, "Expected glob %s to be valid", glob)
+		})
+	}
 }
