@@ -151,15 +151,18 @@ Smokescreen supports various domain glob patterns with the following rules:
 
 **Multiple Wildcard Patterns** (allowed for any domain with at least one non-wildcard component before the TLD):
 - `*.*.example.com` - Multiple wildcards for any domain
-- `api.*.service.*.com` - Multiple wildcards in different positions
-- `*.subdomain.*.example.org` - Mixed wildcard and specific components
-- `service.*.region.*.example.net` - Multiple wildcards with specific components
+- `api.*.service.example.com` - Multiple wildcards with specific components
+- `*.subdomain.example.org` - Mixed wildcard and specific components
+- `service.*.amazonaws.com` - Multiple wildcards for cloud provider domains
 
 **Security Restrictions**:
+- Empty glob patterns are not allowed
 - Wildcard TLD patterns like `example.*` or `*.service.*` are not allowed
-- Patterns that could match any TLD like `*.*.com` (without specific components) are not allowed
+- Wildcards in the second-to-last position like `*.*.com` or `service.*.region.*.net` are not allowed (creates overly broad patterns)
+- Patterns that require at least one non-wildcard component before the TLD for multiple wildcards
 - All-wildcard patterns like `*`, `*.*`, or `*.*.*` are always rejected
 - Partial wildcards within components like `test*.example.com` are not allowed
+- Domain components must be in normalized form (Punycode)
 
 **Examples**:
 
@@ -169,15 +172,19 @@ Smokescreen supports various domain glob patterns with the following rules:
 | `*.example.com`                      | ✅    | Single leading wildcard                                   |
 | `api.*.example.com`                  | ✅    | Single middle wildcard                                    |
 | `*.*.example.com`                    | ✅    | Multiple wildcards with specific domain before TLD       |
-| `api.*.service.*.com`                | ✅    | Multiple wildcards with specific components               |
-| `service.*.region.*.example.net`     | ✅    | Multiple wildcards with mixed specific components         |
+| `api.*.service.example.com`          | ✅    | Multiple wildcards with specific components               |
 | `access-analyzer.*.amazonaws.com`    | ✅    | Single wildcard for cloud provider domain                |
 | `*.*.amazonaws.com`                  | ✅    | Multiple wildcards for cloud provider domain             |
+| `service.region.amazonaws.com`       | ✅    | No wildcards, exact match                                |
+| `*.subdomain.example.org`            | ✅    | Single wildcard with specific components                  |
+| ``                                   | ❌    | Empty glob patterns are not allowed                       |
 | `example.*`                          | ❌    | Wildcard TLD patterns are not allowed                    |
 | `*.service.*`                        | ❌    | Wildcard TLD patterns are not allowed                    |
-| `*.*.com`                            | ❌    | No specific domain component before TLD                   |
+| `*.*.com`                            | ❌    | Wildcard in second-to-last position creates overly broad pattern |
+| `service.*.region.*.net`             | ❌    | Wildcard in second-to-last position creates overly broad pattern |
 | `*`                                  | ❌    | Matches everything                                        |
 | `*.*`                                | ❌    | Matches everything                                        |
+| `*.*.*`                              | ❌    | All wildcards, no specific components                    |
 | `test*.example.com`                  | ❌    | Partial wildcards within components not allowed           |
 | `éxämple.com`                        | ❌    | Must be in Punycode (normalized form)                     |
 
