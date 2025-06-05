@@ -243,6 +243,10 @@ func TestACLAddInvalidGlob(t *testing.T) {
 		glob     string
 		errorMsg string
 	}{
+		"empty glob": {
+			"",
+			"glob cannot be empty",
+		},
 		"matches everything (*)": {
 			"*",
 			"domain glob must not match everything",
@@ -265,7 +269,7 @@ func TestACLAddInvalidGlob(t *testing.T) {
 		},
 		"multiple wildcards without non-wildcard before TLD": {
 			"*.*.com",
-			"multiple wildcards require at least one non-wildcard component before the TLD",
+			"wildcard in second-to-last position creates overly broad pattern",
 		},
 		"all wildcards": {
 			"*.*.*",
@@ -282,6 +286,10 @@ func TestACLAddInvalidGlob(t *testing.T) {
 		"non-normalized domain": {
 			"éxämple.com",
 			"incorrect ACL entry; domain components must be normalized",
+		},
+		"wildcard in second-to-last position": {
+			"service.*.region.*.net",
+			"wildcard in second-to-last position creates overly broad pattern",
 		},
 	}
 
@@ -525,9 +533,8 @@ func TestACLAddValidGlob(t *testing.T) {
 		"service.region.amazonaws.com",
 		// Multiple wildcards are now allowed for any domain with non-wildcard before TLD
 		"*.*.example.com",
-		"api.*.service.*.com",
-		"*.subdomain.*.example.org",
-		"service.*.region.*.example.net",
+		"api.*.service.example.com",
+		"*.subdomain.example.org",
 	}
 
 	acl := &ACL{

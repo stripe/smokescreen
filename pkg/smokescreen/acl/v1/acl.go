@@ -302,6 +302,12 @@ func (*ACL) ValidateDomainGlob(svc string, glob string) error {
 		return fmt.Errorf("%v: %v: wildcard TLD patterns are not allowed", svc, glob)
 	}
 
+	// Additional security check: prevent wildcards in the second-to-last position
+	// This prevents patterns like "service.*.region.*.net" which could be overly broad
+	if len(components) >= 2 && components[len(components)-2] == "*" {
+		return fmt.Errorf("%v: %v: wildcard in second-to-last position creates overly broad pattern", svc, glob)
+	}
+
 	// Check if multiple wildcards are allowed
 	if wildcardCount > 1 {
 		// Multiple wildcards are allowed as long as we don't have a pattern that could match any TLD
