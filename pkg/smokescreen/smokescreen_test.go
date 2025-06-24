@@ -1637,3 +1637,79 @@ func proxyClientWithConnectHeaders(proxy string, proxyConnectHeaders http.Header
 		},
 	}, nil
 }
+
+func TestRoleLoggingInCanonicalProxyDecision(t *testing.T) {
+	r := require.New(t)
+
+	testRole := "test-local-srv"
+
+	t.Run("HTTP requests log role", func(t *testing.T) {
+		cfg, err := testConfig(testRole)
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		logHook := proxyLogHook(cfg)
+		proxySrv := proxyServer(cfg)
+		defer proxySrv.Close()
+
+		testSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			w.Write([]byte("OK"))
+		}))
+		defer testSrv.Close()
+
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
+
+		resp, err := client.Get(testSrv.URL)
+		r.NoError(err)
+		defer resp.Body.Close()
+
+		r.Equal(200, resp.StatusCode)
+
+		proxyDecision := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(proxyDecision, "Should have CANONICAL-PROXY-DECISION log")
+
+		r.Contains(proxyDecision.Data, LogFieldRole, "CANONICAL-PROXY-DECISION should contain role field")
+		r.Equal(testRole, proxyDecision.Data[LogFieldRole], "Role should match expected value")
+
+		r.Contains(proxyDecision.Data, "proxy_type")
+		r.Equal("http", proxyDecision.Data["proxy_type"])
+	})
+
+	t.Run("CONNECT requests log role", func(t *testing.T) {
+		cfg, err := testConfig(testRole)
+		r.NoError(err)
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		logHook := proxyLogHook(cfg)
+		proxySrv := proxyServer(cfg)
+		defer proxySrv.Close()
+
+		testSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			w.Write([]byte("OK"))
+		}))
+		defer testSrv.Close()
+
+		client, err := proxyClient(proxySrv.URL)
+		r.NoError(err)
+
+		resp, err := client.Get(testSrv.URL)
+		r.NoError(err)
+		defer resp.Body.Close()
+
+		r.Equal(200, resp.StatusCode)
+
+		proxyDecision := findCanonicalProxyDecision(logHook.AllEntries())
+		r.NotNil(proxyDecision, "Should have CANONICAL-PROXY-DECISION log")
+
+		r.Contains(proxyDecision.Data, LogFieldRole, "CANONICAL-PROXY-DECISION should contain role field")
+		r.Equal(testRole, proxyDecision.Data[LogFieldRole], "Role should match expected value")
+
+		r.Contains(proxyDecision.Data, "proxy_type")
+		r.Equal("connect", proxyDecision.Data["proxy_type"])
+	})
+}
