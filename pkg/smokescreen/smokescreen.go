@@ -503,6 +503,9 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
 
+		// add context fields to all future log messages sent using this smokescreen context's Logger
+		sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
+
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
 		// response filter attached via the OnResponse() handler.
