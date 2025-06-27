@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -648,7 +649,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 		)
 	}
 
-	if httpProxyAddr != ""{
+	if httpProxyAddr != "" {
 		args = append(args, fmt.Sprintf("--upstream-http-proxy-addr=%s", httpProxyAddr))
 		args = append(args, fmt.Sprintf("--upstream-https-proxy-addr=%s", httpProxyAddr))
 	}
@@ -682,4 +683,229 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	}
 
 	return conf, server, nil
+}
+
+func TestCRLValidation(t *testing.T) {
+	cleanup := generateTestPKI(t)
+	defer cleanup()
+
+	cleanupACL := generatePermissiveACL(t)
+	defer cleanupACL()
+
+	// Start smokescreen with TLS and CRL configuration
+	args := []string{
+		"smokescreen",
+		"--listen-ip=127.0.0.1",
+		"--egress-acl-file=testdata/pki-crl/acl.yaml",
+		"--tls-crl-file=testdata/pki-crl/crl.pem",
+		"--tls-server-bundle-file=testdata/pki-crl/server-bundle.pem",
+		"--tls-client-ca-file=testdata/pki-crl/ca.pem",
+	}
+	conf, err := NewConfiguration(args, nil)
+	require.NoError(t, err)
+
+	// Add role from request function
+	conf.RoleFromRequest = testRFRCert
+	conf.MetricsClient = metrics.NewNoOpMetricsClient()
+
+	handler := smokescreen.BuildProxy(conf)
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = conf.TlsConfig
+	server.StartTLS()
+	defer server.Close()
+
+	// Test cases for valid and revoked certificates
+	testCases := []struct {
+		name          string
+		certFile      string
+		keyFile       string
+		expectSuccess bool
+	}{
+		{
+			name:          "Valid certificate",
+			certFile:      "testdata/pki-crl/valid-client.pem",
+			keyFile:       "testdata/pki-crl/valid-client-key.pem",
+			expectSuccess: true,
+		},
+		{
+			name:          "Revoked certificate",
+			certFile:      "testdata/pki-crl/revoked-client.pem",
+			keyFile:       "testdata/pki-crl/revoked-client-key.pem",
+			expectSuccess: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cert, err := tls.LoadX509KeyPair(tc.certFile, tc.keyFile)
+			require.NoError(t, err)
+
+			caCert, err := os.ReadFile("testdata/pki-crl/ca.pem")
+			require.NoError(t, err)
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+
+			proxyURL, err := url.Parse(server.URL)
+			require.NoError(t, err)
+
+			client := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						Certificates:       []tls.Certificate{cert},
+						RootCAs:            caCertPool,
+						InsecureSkipVerify: true, // For testing only - allows connecting to proxy with self-signed cert
+					},
+					Proxy: http.ProxyURL(proxyURL),
+				},
+			}
+
+			// Make request through proxy
+			resp, err := client.Get("https://example.com")
+
+			if tc.expectSuccess {
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+			} else {
+				require.Error(t, err)
+				var netErr *net.OpError
+				require.True(t, errors.As(err, &netErr))
+			}
+		})
+	}
+}
+
+func generateTestPKI(t *testing.T) func() {
+	// Create test directory
+	err := os.MkdirAll("testdata/pki-crl", 0755)
+	require.NoError(t, err)
+
+	// Helper function to run openssl commands
+	runOpenSSL := func(args ...string) {
+		cmd := exec.Command("openssl", args...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("openssl %v failed: %v\nOutput: %s", args, err, output)
+		}
+	}
+
+	// Generate CA key and certificate
+	runOpenSSL("genrsa", "-out", "testdata/pki-crl/ca-key.pem", "2048")
+	runOpenSSL("req", "-new", "-x509", "-days", "365", "-key", "testdata/pki-crl/ca-key.pem",
+		"-out", "testdata/pki-crl/ca.pem", "-subj", "/CN=Test CA")
+
+	// Generate server key and certificate
+	runOpenSSL("genrsa", "-out", "testdata/pki-crl/server-key.pem", "2048")
+	runOpenSSL("req", "-new", "-key", "testdata/pki-crl/server-key.pem",
+		"-out", "testdata/pki-crl/server.csr", "-subj", "/CN=localhost")
+	runOpenSSL("x509", "-req", "-days", "365", "-in", "testdata/pki-crl/server.csr",
+		"-CA", "testdata/pki-crl/ca.pem", "-CAkey", "testdata/pki-crl/ca-key.pem",
+		"-CAcreateserial", "-out", "testdata/pki-crl/server.pem")
+
+	// Create server bundle by concatenating key and cert
+	serverKey, err := os.ReadFile("testdata/pki-crl/server-key.pem")
+	require.NoError(t, err)
+	serverCert, err := os.ReadFile("testdata/pki-crl/server.pem")
+	require.NoError(t, err)
+	err = os.WriteFile("testdata/pki-crl/server-bundle.pem",
+		append(serverKey, serverCert...), 0644)
+	require.NoError(t, err)
+
+	// Generate valid client key and certificate
+	runOpenSSL("genrsa", "-out", "testdata/pki-crl/valid-client-key.pem", "2048")
+	runOpenSSL("req", "-new", "-key", "testdata/pki-crl/valid-client-key.pem",
+		"-out", "testdata/pki-crl/valid-client.csr", "-subj", "/CN=valid-client")
+	runOpenSSL("x509", "-req", "-days", "365", "-in", "testdata/pki-crl/valid-client.csr",
+		"-CA", "testdata/pki-crl/ca.pem", "-CAkey", "testdata/pki-crl/ca-key.pem",
+		"-CAcreateserial", "-out", "testdata/pki-crl/valid-client.pem")
+
+	// Generate to-be-revoked client key and certificate
+	runOpenSSL("genrsa", "-out", "testdata/pki-crl/revoked-client-key.pem", "2048")
+	runOpenSSL("req", "-new", "-key", "testdata/pki-crl/revoked-client-key.pem",
+		"-out", "testdata/pki-crl/revoked-client.csr", "-subj", "/CN=revoked-client")
+	runOpenSSL("x509", "-req", "-days", "365", "-in", "testdata/pki-crl/revoked-client.csr",
+		"-CA", "testdata/pki-crl/ca.pem", "-CAkey", "testdata/pki-crl/ca-key.pem",
+		"-CAcreateserial", "-out", "testdata/pki-crl/revoked-client.pem")
+
+	// Create index.txt and crlnumber for CRL generation
+	err = os.WriteFile("testdata/pki-crl/index.txt", []byte{}, 0644)
+	require.NoError(t, err)
+	err = os.WriteFile("testdata/pki-crl/crlnumber", []byte("01\n"), 0644)
+	require.NoError(t, err)
+
+	// Create openssl CA config with extensions
+	caConfig := `
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+database = testdata/pki-crl/index.txt
+crlnumber = testdata/pki-crl/crlnumber
+default_days = 365
+default_crl_days = 30
+default_md = sha256
+copy_extensions = copy
+crl_extensions = crl_ext
+
+[ crl_ext ]
+authorityKeyIdentifier=keyid:always,issuer:always
+`
+	err = os.WriteFile("testdata/pki-crl/ca-config.conf", []byte(caConfig), 0644)
+	require.NoError(t, err)
+
+	// Generate initial CRL
+	runOpenSSL("ca", "-gencrl",
+		"-keyfile", "testdata/pki-crl/ca-key.pem",
+		"-cert", "testdata/pki-crl/ca.pem",
+		"-out", "testdata/pki-crl/crl.pem",
+		"-config", "testdata/pki-crl/ca-config.conf")
+
+	// Revoke the second certificate
+	runOpenSSL("ca", "-revoke", "testdata/pki-crl/revoked-client.pem",
+		"-keyfile", "testdata/pki-crl/ca-key.pem",
+		"-cert", "testdata/pki-crl/ca.pem",
+		"-config", "testdata/pki-crl/ca-config.conf")
+
+	// Generate updated CRL with the revoked certificate
+	runOpenSSL("ca", "-gencrl",
+		"-keyfile", "testdata/pki-crl/ca-key.pem",
+		"-cert", "testdata/pki-crl/ca.pem",
+		"-out", "testdata/pki-crl/crl.pem",
+		"-config", "testdata/pki-crl/ca-config.conf")
+
+	// Return cleanup function
+	return func() {
+		err := os.RemoveAll("testdata/pki-crl")
+		if err != nil {
+			t.Logf("Failed to cleanup test PKI: %v", err)
+		}
+	}
+}
+
+func generatePermissiveACL(t *testing.T) func() {
+	aclConfig := `---
+version: v1
+services:
+  - name: "*"
+    project: test
+    action: open
+    allowed_domains:
+      - "*.example.com"
+
+default:
+  name: unknown-role
+  project: security
+  action: open
+`
+	err := os.MkdirAll("testdata/pki-crl", 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile("testdata/pki-crl/acl.yaml", []byte(aclConfig), 0644)
+	require.NoError(t, err)
+
+	return func() {
+		err := os.Remove("testdata/pki-crl/acl.yaml")
+		if err != nil {
+			t.Logf("Failed to cleanup ACL config: %v", err)
+		}
+	}
 }
