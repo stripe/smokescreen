@@ -703,7 +703,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		r.Equal("http", entry.Data["proxy_type"])
 		r.Contains(entry.Data["error"], "i/o timeout")
-		r.equal(entry.Data["status_code"], 504)
+		r.Equal(entry.Data["status_code"], 504)
 	})
 
 	// This isn't quite correct, as there is some nondeterministic behavior with the way
