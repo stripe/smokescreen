@@ -366,6 +366,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 			status = "Gateway timeout"
 			code = http.StatusGatewayTimeout
 			msg = "Timed out connecting to remote host: " + e.Error()
+			sctx.Logger = sctx.Logger.WithField("status_code", code)
 
 		} else if e, ok := err.(*net.DNSError); ok {
 			status = "Bad gateway"
