@@ -386,6 +386,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		msg = "An unexpected error occurred: " + err.Error()
 		sctx.Logger.WithField("error", err.Error()).Warn("rejectResponse called with unexpected error")
 	}
+	sctx.Logger = sctx.Logger.WithField("status_code", code)
 
 	// Do not double log deny errors, they are logged in a previous call to logProxy.
 	if _, ok := err.(denyError); !ok {
