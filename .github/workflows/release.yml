@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to apply to image"
+        required: true
+        default: "latest"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+
+      - name: Setup ko
+        uses: ko-build/setup-ko@v0.9
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-platform image
+        id: build
+        env:
+          KO_DOCKER_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          GOFLAGS: -mod=vendor
+        run: |
+          # Get git hash for tagging
+          GIT_HASH=$(git rev-parse --short HEAD)
+          FULL_GIT_HASH=${{ github.sha }}
+
+          # Build and push multi-platform image with git hash tags
+          # Note: platforms are defined in .ko.yaml as defaultPlatforms
+          IMAGE_URI=$(ko build . --tags=${GIT_HASH},${FULL_GIT_HASH},${{ inputs.tag }} --bare)
+          echo "image-uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "Built and pushed: $IMAGE_URI"
+          echo "Tagged with: ${GIT_HASH}, ${FULL_GIT_HASH}, ${{ inputs.tag }}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.9.1
+        with:
+          cosign-release: "v2.5.2"
+
+      - name: Sign container image
+        run: |
+          # Sign the container image
+          cosign sign --yes ${{ steps.build.outputs.image-uri }}
