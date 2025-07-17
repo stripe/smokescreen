@@ -17,7 +17,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
     steps:
@@ -30,6 +30,37 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.5"
+
+      - name: Build cross-platform binaries
+        env:
+          GOFLAGS: -mod=vendor
+        run: |
+          # Get version info
+          GIT_HASH=$(git rev-parse --short HEAD)
+          FULL_GIT_HASH=${{ github.sha }}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Set ldflags for version information
+          LDFLAGS="-s -w -X github.com/carlmjohnson/versioninfo.Version=${GIT_HASH} -X github.com/carlmjohnson/versioninfo.Revision=${FULL_GIT_HASH}"
+
+          # Create binaries directory
+          mkdir -p binaries
+
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o binaries/smokescreen-linux-amd64 .
+
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o binaries/smokescreen-linux-arm64 .
+
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o binaries/smokescreen-darwin-amd64 .
+
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o binaries/smokescreen-darwin-arm64 .
+
+          # Create checksums
+          cd binaries
+          sha256sum * > checksums.txt
+          cd ..
+
+          # List built binaries
+          ls -la binaries/
 
       - name: Setup ko
         uses: ko-build/setup-ko@v0.9
@@ -51,12 +82,22 @@ jobs:
           GIT_HASH=$(git rev-parse --short HEAD)
           FULL_GIT_HASH=${{ github.sha }}
 
+          # Determine tags based on trigger type
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # For version tags, use the tag name
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            TAGS="${GIT_HASH},${FULL_GIT_HASH},${TAG_NAME},latest"
+          else
+            # For manual dispatch, use the input tag
+            TAGS="${GIT_HASH},${FULL_GIT_HASH},${{ inputs.tag }}"
+          fi
+
           # Build and push multi-platform image with git hash tags
           # Note: platforms are defined in .ko.yaml as defaultPlatforms
-          IMAGE_URI=$(ko build . --tags=${GIT_HASH},${FULL_GIT_HASH},${{ inputs.tag }} --bare)
+          IMAGE_URI=$(ko build . --tags=${TAGS} --bare)
           echo "image-uri=$IMAGE_URI" >> $GITHUB_OUTPUT
           echo "Built and pushed: $IMAGE_URI"
-          echo "Tagged with: ${GIT_HASH}, ${FULL_GIT_HASH}, ${{ inputs.tag }}"
+          echo "Tagged with: ${TAGS}"
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.9.1
@@ -67,3 +108,13 @@ jobs:
         run: |
           # Sign the container image
           cosign sign --yes ${{ steps.build.outputs.image-uri }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        # v2.3.2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8
+        with:
+          files: |
+            binaries/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
