@@ -617,18 +617,9 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 
 	fields := logrus.Fields{}
 	decision := sctx.Decision
-	// If a lookup takes less than 1ms it will be rounded down to zero. This can separated from
-	// actual failures where the default zero value will also have the error field set.
-	fields[LogFieldDNSLookupTime] = sctx.lookupTime.Milliseconds()
 
 	if pctx.Resp != nil {
 		fields[LogFieldContentLength] = pctx.Resp.ContentLength
-	}
-
-	if sctx.Decision != nil {
-		fields[LogFieldDecisionReason] = decision.Reason
-		fields[LogFieldEnforceWouldDeny] = decision.enforceWouldDeny
-		fields[LogFieldAllow] = decision.allow
 	}
 
 	err := pctx.Error
@@ -656,7 +647,17 @@ func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) l
 	if sctx.Decision != nil {
 		fields[LogFieldRole] = decision.Role
 		fields[LogFieldProject] = decision.Project
+		// Add decision-related fields that are available early
+		fields[LogFieldDecisionReason] = decision.Reason
+		fields[LogFieldEnforceWouldDeny] = decision.enforceWouldDeny
+		fields[LogFieldAllow] = decision.allow
 	}
+
+	// Add DNS lookup time (available after checkIfRequestShouldBeProxied)
+	// If a lookup takes less than 1ms it will be rounded down to zero. This can be separated from
+	// actual failures where the default zero value will also have the error field set.
+	fields[LogFieldDNSLookupTime] = sctx.lookupTime.Milliseconds()
+
 	return fields
 }
 
