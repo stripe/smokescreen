@@ -428,15 +428,25 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenContext {
 	start := time.Now()
 
-	logger := cfg.Log.WithFields(logrus.Fields{
+	fields := logrus.Fields{
 		LogFieldID:            xid.New().String(),
 		LogFieldInRemoteAddr:  req.RemoteAddr,
 		LogFieldProxyType:     proxyType,
 		LogFieldRequestedHost: req.Host,
 		LogFieldStartTime:     start.UTC(),
 		LogFieldTraceID:       req.Header.Get(traceHeader),
-	})
+	}
 
+	// Add TLS fields immediately if available
+	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
+		fields[LogFieldInRemoteX509CN] = req.TLS.PeerCertificates[0].Subject.CommonName
+		var ouEntries = req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
+		if len(ouEntries) > 0 {
+			fields[LogFieldInRemoteX509OU] = ouEntries[0]
+		}
+	}
+
+	logger := cfg.Log.WithFields(fields)
 	return &SmokescreenContext{
 		cfg:           cfg,
 		Logger:        logger,
@@ -640,15 +650,6 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 
 func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) logrus.Fields {
 	fields := logrus.Fields{}
-
-	// attempt to retrieve information about the host originating the proxy request
-	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
-		fields[LogFieldInRemoteX509CN] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
-		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if len(ouEntries) > 0 {
-			fields[LogFieldInRemoteX509OU] = ouEntries[0]
-		}
-	}
 
 	// Retrieve information from the ACL decision
 	decision := sctx.Decision
