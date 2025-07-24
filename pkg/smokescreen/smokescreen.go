@@ -428,15 +428,25 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenContext {
 	start := time.Now()
 
-	logger := cfg.Log.WithFields(logrus.Fields{
+	fields := logrus.Fields{
 		LogFieldID:            xid.New().String(),
 		LogFieldInRemoteAddr:  req.RemoteAddr,
 		LogFieldProxyType:     proxyType,
 		LogFieldRequestedHost: req.Host,
 		LogFieldStartTime:     start.UTC(),
 		LogFieldTraceID:       req.Header.Get(traceHeader),
-	})
+	}
 
+	// Add TLS fields immediately if available
+	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
+		fields[LogFieldInRemoteX509CN] = req.TLS.PeerCertificates[0].Subject.CommonName
+		var ouEntries = req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
+		if len(ouEntries) > 0 {
+			fields[LogFieldInRemoteX509OU] = ouEntries[0]
+		}
+	}
+
+	logger := cfg.Log.WithFields(fields)
 	return &SmokescreenContext{
 		cfg:           cfg,
 		Logger:        logger,
@@ -641,21 +651,13 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) logrus.Fields {
 	fields := logrus.Fields{}
 
-	// attempt to retrieve information about the host originating the proxy request
-	if pctx.Req.TLS != nil && len(pctx.Req.TLS.PeerCertificates) > 0 {
-		fields[LogFieldInRemoteX509CN] = pctx.Req.TLS.PeerCertificates[0].Subject.CommonName
-		var ouEntries = pctx.Req.TLS.PeerCertificates[0].Subject.OrganizationalUnit
-		if len(ouEntries) > 0 {
-			fields[LogFieldInRemoteX509OU] = ouEntries[0]
-		}
-	}
-
 	// Retrieve information from the ACL decision
 	decision := sctx.Decision
 	if sctx.Decision != nil {
 		fields[LogFieldRole] = decision.Role
 		fields[LogFieldProject] = decision.Project
 	}
+
 	return fields
 }
 
@@ -673,13 +675,13 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	// or if there is a DNS resolution failure, or if the subsequent proxy host (specified by the
 	// X-Https-Upstream-Proxy header in the CONNECT request to _this_ proxy) is disallowed.
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
+
+	// add context fields to all future log messages sent using this smokescreen context's Logger
+	sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
 	if pctx.Error != nil {
 		// DNS resolution failure
 		return nil, "", pctx.Error
 	}
-
-	// add context fields to all future log messages sent using this smokescreen context's Logger
-	sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
 
 	if !sctx.Decision.allow {
 		return nil, "", denyError{errors.New(sctx.Decision.Reason)}
