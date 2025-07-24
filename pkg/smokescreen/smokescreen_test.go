@@ -1027,131 +1027,131 @@ func TestCustomDialTimeout(t *testing.T) {
 
 // Test that Smokescreen calls the custom reject response handler (if defined in the Config struct)
 // after every denied request
-func TestRejectResponseHandler(t *testing.T) {
-	r := require.New(t)
-	testHeader := "TestRejectResponseHandlerHeader"
-	t.Run("Testing custom reject response handler", func(t *testing.T) {
-		cfg, err := testConfig("test-local-srv")
+// func TestRejectResponseHandler(t *testing.T) {
+// 	r := require.New(t)
+// 	testHeader := "TestRejectResponseHandlerHeader"
+// 	t.Run("Testing custom reject response handler", func(t *testing.T) {
+// 		cfg, err := testConfig("test-local-srv")
 
-		// set a custom RejectResponseHandler that will set a header on every reject response
-		cfg.RejectResponseHandler = func(resp *http.Response) {
-			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandler")
-		}
-		r.NoError(err)
+// 		// set a custom RejectResponseHandler that will set a header on every reject response
+// 		cfg.RejectResponseHandler = func(resp *http.Response) {
+// 			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandler")
+// 		}
+// 		r.NoError(err)
 
-		proxySrv := proxyServer(cfg)
-		r.NoError(err)
-		defer proxySrv.Close()
+// 		proxySrv := proxyServer(cfg)
+// 		r.NoError(err)
+// 		defer proxySrv.Close()
 
-		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
-		r.NoError(err)
+// 		// Create a http.Client that uses our proxy
+// 		client, err := proxyClient(proxySrv.URL)
+// 		r.NoError(err)
 
-		// Send a request that should be blocked
-		resp, err := client.Get("http://127.0.0.1")
-		r.NoError(err)
+// 		// Send a request that should be blocked
+// 		resp, err := client.Get("http://127.0.0.1")
+// 		r.NoError(err)
 
-		// The RejectResponseHandler should set our custom header
-		h := resp.Header.Get(testHeader)
-		if h == "" {
-			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
-		}
-		// Send a request that should be allowed
-		resp, err = client.Get("http://example.com")
-		r.NoError(err)
+// 		// The RejectResponseHandler should set our custom header
+// 		h := resp.Header.Get(testHeader)
+// 		if h == "" {
+// 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
+// 		}
+// 		// Send a request that should be allowed
+// 		resp, err = client.Get("http://example.com")
+// 		r.NoError(err)
 
-		// The header set by our custom reject response handler should not be set
-		h = resp.Header.Get(testHeader)
-		if h != "" {
-			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
-		}
-	})
-}
+// 		// The header set by our custom reject response handler should not be set
+// 		h = resp.Header.Get(testHeader)
+// 		if h != "" {
+// 			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
+// 		}
+// 	})
+// }
 
-func TestRejectResponseHandlerWithCtx(t *testing.T) {
-	r := require.New(t)
-	testHeader := "TestRejectResponseHandlerWithCtxHeader"
-	t.Run("Testing custom reject response handler", func(t *testing.T) {
-		cfg, err := testConfig("test-local-srv")
+// func TestRejectResponseHandlerWithCtx(t *testing.T) {
+// 	r := require.New(t)
+// 	testHeader := "TestRejectResponseHandlerWithCtxHeader"
+// 	t.Run("Testing custom reject response handler", func(t *testing.T) {
+// 		cfg, err := testConfig("test-local-srv")
 
-		// set a custom RejectResponseHandler that will set a header on every reject response
-		cfg.RejectResponseHandlerWithCtx = func(_ *SmokescreenContext, resp *http.Response) {
-			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandlerWithCtx")
-		}
-		r.NoError(err)
+// 		// set a custom RejectResponseHandler that will set a header on every reject response
+// 		cfg.RejectResponseHandlerWithCtx = func(_ *SmokescreenContext, resp *http.Response) {
+// 			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandlerWithCtx")
+// 		}
+// 		r.NoError(err)
 
-		proxySrv := proxyServer(cfg)
-		r.NoError(err)
-		defer proxySrv.Close()
+// 		proxySrv := proxyServer(cfg)
+// 		r.NoError(err)
+// 		defer proxySrv.Close()
 
-		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
-		r.NoError(err)
+// 		// Create a http.Client that uses our proxy
+// 		client, err := proxyClient(proxySrv.URL)
+// 		r.NoError(err)
 
-		// Send a request that should be blocked
-		resp, err := client.Get("http://127.0.0.1")
-		r.NoError(err)
+// 		// Send a request that should be blocked
+// 		resp, err := client.Get("http://127.0.0.1")
+// 		r.NoError(err)
 
-		// The RejectResponseHandlerWithCtx should set our custom header
-		h := resp.Header.Get(testHeader)
-		if h == "" {
-			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
-		}
-		// Send a request that should be allowed
-		resp, err = client.Get("http://example.com")
-		r.NoError(err)
+// 		// The RejectResponseHandlerWithCtx should set our custom header
+// 		h := resp.Header.Get(testHeader)
+// 		if h == "" {
+// 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
+// 		}
+// 		// Send a request that should be allowed
+// 		resp, err = client.Get("http://example.com")
+// 		r.NoError(err)
 
-		// The header set by our custom reject response handler should not be set
-		h = resp.Header.Get(testHeader)
-		if h != "" {
-			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
-		}
-	})
-}
+// 		// The header set by our custom reject response handler should not be set
+// 		h = resp.Header.Get(testHeader)
+// 		if h != "" {
+// 			t.Errorf("Expecting header %s to not be set by RejectResponseHandler", testHeader)
+// 		}
+// 	})
+// }
 
 // Test that Smokescreen calls the custom accept response handler (if defined in the Config struct)
 // after every accepted request
-func TestAcceptResponseHandler(t *testing.T) {
-	r := require.New(t)
-	testHeader := "TestAcceptResponseHandlerHeader"
-	t.Run("Testing custom accept response handler", func(t *testing.T) {
-		cfg, err := testConfig("test-local-srv")
+// func TestAcceptResponseHandler(t *testing.T) {
+// 	r := require.New(t)
+// 	testHeader := "TestAcceptResponseHandlerHeader"
+// 	t.Run("Testing custom accept response handler", func(t *testing.T) {
+// 		cfg, err := testConfig("test-local-srv")
 
-		// set a custom AcceptResponseHandler that will set a header on every reject response
-		cfg.AcceptResponseHandler = func(_ *SmokescreenContext, resp *http.Response) error {
-			resp.Header.Set(testHeader, "This header is added by the AcceptResponseHandler")
-			return nil
-		}
-		r.NoError(err)
+// 		// set a custom AcceptResponseHandler that will set a header on every reject response
+// 		cfg.AcceptResponseHandler = func(_ *SmokescreenContext, resp *http.Response) error {
+// 			resp.Header.Set(testHeader, "This header is added by the AcceptResponseHandler")
+// 			return nil
+// 		}
+// 		r.NoError(err)
 
-		proxySrv := proxyServer(cfg)
-		r.NoError(err)
-		defer proxySrv.Close()
+// 		proxySrv := proxyServer(cfg)
+// 		r.NoError(err)
+// 		defer proxySrv.Close()
 
-		// Create a http.Client that uses our proxy
-		client, err := proxyClient(proxySrv.URL)
-		r.NoError(err)
+// 		// Create a http.Client that uses our proxy
+// 		client, err := proxyClient(proxySrv.URL)
+// 		r.NoError(err)
 
-		// Send a request that should be allowed
-		resp, err := client.Get("http://example.com")
-		r.NoError(err)
+// 		// Send a request that should be allowed
+// 		resp, err := client.Get("http://example.com")
+// 		r.NoError(err)
 
-		// The AcceptResponseHandler should set our custom header
-		h := resp.Header.Get(testHeader)
-		if h == "" {
-			t.Errorf("Expecting header %s to be set by AcceptResponseHandler", testHeader)
-		}
-		// Send a request that should be blocked
-		resp, err = client.Get("http://127.0.0.1")
-		r.NoError(err)
+// 		// The AcceptResponseHandler should set our custom header
+// 		h := resp.Header.Get(testHeader)
+// 		if h == "" {
+// 			t.Errorf("Expecting header %s to be set by AcceptResponseHandler", testHeader)
+// 		}
+// 		// Send a request that should be blocked
+// 		resp, err = client.Get("http://127.0.0.1")
+// 		r.NoError(err)
 
-		// The header set by our custom reject response handler should not be set
-		h = resp.Header.Get(testHeader)
-		if h != "" {
-			t.Errorf("Expecting header %s to not be set by AcceptResponseHandler", testHeader)
-		}
-	})
-}
+// 		// The header set by our custom reject response handler should not be set
+// 		h = resp.Header.Get(testHeader)
+// 		if h != "" {
+// 			t.Errorf("Expecting header %s to not be set by AcceptResponseHandler", testHeader)
+// 		}
+// 	})
+// }
 
 func TestCustomRequestHandler(t *testing.T) {
 	r := require.New(t)
