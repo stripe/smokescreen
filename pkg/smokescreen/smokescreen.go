@@ -677,7 +677,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 		// DNS resolution failure
 		return nil, "", pctx.Error
 	}
-
+	// test comment
 	// add context fields to all future log messages sent using this smokescreen context's Logger
 	sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
 
