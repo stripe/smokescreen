@@ -2,13 +2,15 @@ package metrics
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 // PrometheusMetricsClient attempts to replicate the functionality of the StatsdMetricsClient, but exposing
@@ -16,6 +18,7 @@ import (
 type PrometheusMetricsClient struct {
 	endpoint    string
 	metricsTags map[string]map[string]string
+	mu          sync.RWMutex
 	started     atomic.Value
 
 	counters   map[string]prometheus.CounterVec
@@ -150,45 +153,78 @@ var _ MetricsClientInterface = &PrometheusMetricsClient{}
 func (mc *PrometheusMetricsClient) incrementPrometheusCounter(
 	metric string,
 	tags map[string]string) {
-	if existingCounter, ok := mc.counters[metric]; ok {
-		existingCounter.With(tags).Inc()
-	} else {
-		counter := promauto.NewCounterVec(prometheus.CounterOpts{
+	mc.mu.RLock()
+	counter, ok := mc.counters[metric]
+	mc.mu.RUnlock()
+
+	if ok {
+		counter.With(tags).Inc()
+		return
+	}
+
+	mc.mu.Lock()
+	// double check just in case it was created between the RLock and Lock
+	if counter, ok = mc.counters[metric]; !ok {
+		counter = *promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: metric,
 		}, mapKeys(tags))
-		counter.With(tags).Inc()
-		mc.counters[metric] = *counter
+		mc.counters[metric] = counter
 	}
+	mc.mu.Unlock()
+
+	counter.With(tags).Inc()
 }
 
 func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 	metric string,
 	value float64,
 	tags map[string]string) {
-	if existingGauge, ok := mc.gauges[metric]; ok {
-		existingGauge.With(tags).Add(value)
-	} else {
-		gauge := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	mc.mu.RLock()
+	gauge, ok := mc.gauges[metric]
+	mc.mu.RUnlock()
+
+	if ok {
+		gauge.With(tags).Add(value)
+		return
+	}
+
+	mc.mu.Lock()
+	// double check just in case it was created between the RLock and Lock
+	if gauge, ok = mc.gauges[metric]; !ok {
+		gauge = *promauto.NewGaugeVec(prometheus.GaugeOpts{
 			Name: metric,
 		}, mapKeys(tags))
-		gauge.With(tags).Add(value)
-		mc.gauges[metric] = *gauge
+		mc.gauges[metric] = gauge
 	}
+	mc.mu.Unlock()
+
+	gauge.With(tags).Add(value)
 }
 
 func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 	metric string,
 	value float64,
 	tags map[string]string) {
-	if existingHistogram, ok := mc.histograms[metric]; ok {
-		existingHistogram.With(tags).Observe(value)
-	} else {
-		histogram := promauto.NewHistogramVec(prometheus.HistogramOpts{
+	mc.mu.RLock()
+	histogram, ok := mc.histograms[metric]
+	mc.mu.RUnlock()
+
+	if ok {
+		histogram.With(tags).Observe(value)
+		return
+	}
+
+	mc.mu.Lock()
+	// double check just in case it was created between the RLock and Lock
+	if histogram, ok = mc.histograms[metric]; !ok {
+		histogram = *promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name: metric,
 		}, mapKeys(tags))
-		histogram.With(tags).Observe(value)
-		mc.histograms[metric] = *histogram
+		mc.histograms[metric] = histogram
 	}
+	mc.mu.Unlock()
+
+	histogram.With(tags).Observe(value)
 }
 
 func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
@@ -196,16 +232,26 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
 	duration time.Duration,
 	tags map[string]string) {
 	timerMetric := metric + "_timer"
-	if existingHistogram, ok := mc.timings[timerMetric]; ok {
-		existingHistogram.With(tags).Observe(float64(duration.Milliseconds()))
-	} else {
-		histogram := promauto.NewHistogramVec(prometheus.HistogramOpts{
+	mc.mu.RLock()
+	histogram, ok := mc.timings[timerMetric]
+	mc.mu.RUnlock()
+
+	if ok {
+		histogram.With(tags).Observe(float64(duration.Milliseconds()))
+		return
+	}
+
+	mc.mu.Lock()
+	// double check just in case it was created between the RLock and Lock
+	if histogram, ok = mc.timings[timerMetric]; !ok {
+		histogram = *promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name: timerMetric,
 		}, mapKeys(tags))
-
-		histogram.With(tags).Observe(float64(duration.Milliseconds()))
-		mc.timings[timerMetric] = *histogram
+		mc.timings[timerMetric] = histogram
 	}
+	mc.mu.Unlock()
+
+	histogram.With(tags).Observe(float64(duration.Milliseconds()))
 }
 
 func mapKeys[T comparable, U any](inputMap map[T]U) []T {
