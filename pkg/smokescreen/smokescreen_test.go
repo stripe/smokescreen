@@ -1030,6 +1030,13 @@ func TestCustomDialTimeout(t *testing.T) {
 func TestRejectResponseHandler(t *testing.T) {
 	r := require.New(t)
 	testHeader := "TestRejectResponseHandlerHeader"
+
+	testSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	}))
+	defer testSrv.Close()
+
 	t.Run("Testing custom reject response handler", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 
@@ -1037,6 +1044,9 @@ func TestRejectResponseHandler(t *testing.T) {
 		cfg.RejectResponseHandler = func(resp *http.Response) {
 			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandler")
 		}
+		r.NoError(err)
+
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
 		proxySrv := proxyServer(cfg)
@@ -1048,7 +1058,7 @@ func TestRejectResponseHandler(t *testing.T) {
 		r.NoError(err)
 
 		// Send a request that should be blocked
-		resp, err := client.Get("http://127.0.0.1")
+		resp, err := client.Get("http://stripe.com")
 		r.NoError(err)
 
 		// The RejectResponseHandler should set our custom header
@@ -1057,7 +1067,7 @@ func TestRejectResponseHandler(t *testing.T) {
 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
 		}
 		// Send a request that should be allowed
-		resp, err = client.Get("http://example.com")
+		resp, err = client.Get(testSrv.URL)
 		r.NoError(err)
 
 		// The header set by our custom reject response handler should not be set
@@ -1071,6 +1081,13 @@ func TestRejectResponseHandler(t *testing.T) {
 func TestRejectResponseHandlerWithCtx(t *testing.T) {
 	r := require.New(t)
 	testHeader := "TestRejectResponseHandlerWithCtxHeader"
+
+	testSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	}))
+	defer testSrv.Close()
+
 	t.Run("Testing custom reject response handler", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 
@@ -1078,6 +1095,9 @@ func TestRejectResponseHandlerWithCtx(t *testing.T) {
 		cfg.RejectResponseHandlerWithCtx = func(_ *SmokescreenContext, resp *http.Response) {
 			resp.Header.Set(testHeader, "This header is added by the RejectResponseHandlerWithCtx")
 		}
+		r.NoError(err)
+
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
 		proxySrv := proxyServer(cfg)
@@ -1089,7 +1109,7 @@ func TestRejectResponseHandlerWithCtx(t *testing.T) {
 		r.NoError(err)
 
 		// Send a request that should be blocked
-		resp, err := client.Get("http://127.0.0.1")
+		resp, err := client.Get("http://stripe.com")
 		r.NoError(err)
 
 		// The RejectResponseHandlerWithCtx should set our custom header
@@ -1098,7 +1118,7 @@ func TestRejectResponseHandlerWithCtx(t *testing.T) {
 			t.Errorf("Expecting header %s to be set by RejectResponseHandler", testHeader)
 		}
 		// Send a request that should be allowed
-		resp, err = client.Get("http://example.com")
+		resp, err = client.Get(testSrv.URL)
 		r.NoError(err)
 
 		// The header set by our custom reject response handler should not be set
@@ -1114,6 +1134,13 @@ func TestRejectResponseHandlerWithCtx(t *testing.T) {
 func TestAcceptResponseHandler(t *testing.T) {
 	r := require.New(t)
 	testHeader := "TestAcceptResponseHandlerHeader"
+
+	testSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	}))
+	defer testSrv.Close()
+
 	t.Run("Testing custom accept response handler", func(t *testing.T) {
 		cfg, err := testConfig("test-local-srv")
 
@@ -1122,6 +1149,9 @@ func TestAcceptResponseHandler(t *testing.T) {
 			resp.Header.Set(testHeader, "This header is added by the AcceptResponseHandler")
 			return nil
 		}
+		r.NoError(err)
+
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
 		r.NoError(err)
 
 		proxySrv := proxyServer(cfg)
@@ -1133,7 +1163,7 @@ func TestAcceptResponseHandler(t *testing.T) {
 		r.NoError(err)
 
 		// Send a request that should be allowed
-		resp, err := client.Get("http://example.com")
+		resp, err := client.Get(testSrv.URL)
 		r.NoError(err)
 
 		// The AcceptResponseHandler should set our custom header
@@ -1142,7 +1172,7 @@ func TestAcceptResponseHandler(t *testing.T) {
 			t.Errorf("Expecting header %s to be set by AcceptResponseHandler", testHeader)
 		}
 		// Send a request that should be blocked
-		resp, err = client.Get("http://127.0.0.1")
+		resp, err = client.Get("http://stripe.com")
 		r.NoError(err)
 
 		// The header set by our custom reject response handler should not be set
