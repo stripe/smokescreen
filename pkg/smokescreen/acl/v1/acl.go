@@ -251,11 +251,11 @@ func (acl *ACL) ValidateRule(svc string, r Rule) error {
 	return nil
 }
 
-// ValidateDomainGlob takes a domain glob and verifies they conform to smokescreen's
-// domain glob policy.
+// ValidateDomainGlob takes a domain glob and verifies it conforms to
+// smokescreen's domain glob policy.
 //
-// Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
-// pattern is allowed. Globs must include text after a wildcard.
+// Only a single wildcard per glob pattern is allowed. Globs must
+// include text after a wildcard.
 //
 // Domains must use their normalized form (e.g., Punycode)
 func (*ACL) ValidateDomainGlob(svc string, glob string) error {
@@ -263,30 +263,38 @@ func (*ACL) ValidateDomainGlob(svc string, glob string) error {
 		return fmt.Errorf("glob cannot be empty")
 	}
 
+	if strings.Count(glob, "*") > 1 {
+		return fmt.Errorf("%v: %v: domain glob must not contain more than one wildcard", svc, glob)
+	}
+
 	if glob == "*" || glob == "*." {
 		return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
 	}
 
-	if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
+	// Ensure there is a `.` after the glob
+	globIndex := strings.Index(glob, "*")
+	if globIndex != -1 && globIndex != len(glob)-1 && glob[globIndex+1] != '.' {
 		return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
 	}
 
-	domainToCheck := strings.TrimPrefix(glob, "*")
-	if strings.Contains(domainToCheck, "*") {
-		return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
+	// If the glob is in the middle of the string, ensure it is preceded by a `.`
+	if globIndex > 0 && glob[globIndex-1] != '.' {
+		return fmt.Errorf("%v: %v: domain glob must be preceded by a full subdomain", svc, glob)
+	}
+
+	// Trim up to and past the wildcard to get the domain to check
+	domainToCheck := glob
+	if globIndex != -1 {
+		domainToCheck = glob[globIndex+1:]
 	}
 
 	normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
 
 	if err != nil {
 		return fmt.Errorf("%v: %v: incorrect ACL entry: %v", svc, glob, err)
-		// There was no error but the config contains a non-normalized form
 	} else if normalizedDomain != domainToCheck {
-		if strings.HasPrefix(glob, "*.") {
-			// (Re-add) wildcard if one was provided (for the error message)
-			normalizedDomain = "*." + normalizedDomain
-		}
-		return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
+		// There was no error but the config contains a non-normalized form
+		return fmt.Errorf("%v: %v: incorrect ACL entry; normalized domain: %q", svc, glob, normalizedDomain)
 	}
 	return nil
 }
@@ -334,6 +342,12 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 	if strings.HasPrefix(g, "*.") {
 		suffix := g[1:]
 		if strings.HasSuffix(h, suffix) {
+			return true
+		}
+	} else if strings.Contains(g, ".*.") {
+		prefix := g[:strings.Index(g, ".*")]
+		suffix := g[strings.Index(g, ".*")+2:]
+		if strings.HasPrefix(h, prefix) && strings.HasSuffix(h, suffix) {
 			return true
 		}
 	} else if g == h {
