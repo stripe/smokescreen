@@ -1,6 +1,6 @@
-# github.com/DataDog/datadog-go v4.5.1+incompatible
-## explicit
-github.com/DataDog/datadog-go/statsd
+# github.com/DataDog/datadog-go/v5 v5.6.0
+## explicit; go 1.13
+github.com/DataDog/datadog-go/v5/statsd
 # github.com/Microsoft/go-winio v0.6.1
 ## explicit; go 1.17
 github.com/Microsoft/go-winio
@@ -65,7 +65,7 @@ github.com/rs/xid
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/test
-# github.com/stretchr/testify v1.8.0
+# github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
