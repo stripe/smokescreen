@@ -170,6 +170,24 @@ func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 	return false
 }
 
+func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAddr) bool {
+	for _, ipRange := range temporarilyDeferredIPs {
+		// Parse as CIDR or single IP
+		if ip := net.ParseIP(ipRange); ip != nil {
+			// Single IP address
+			if addr.IP.Equal(ip) {
+				return true
+			}
+		} else if _, ipnet, err := net.ParseCIDR(ipRange); err == nil {
+			// CIDR range
+			if ipnet.Contains(addr.IP) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	if !addr.IP.IsGlobalUnicast() || addr.IP.IsLoopback() {
 		if addrIsInRuleRange(config.AllowRanges, addr) {
@@ -213,10 +231,56 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, fmt.Errorf("no IPs resolved")
 	}
 
-	return &net.TCPAddr{
-		IP:   ips[0],
-		Port: resolvedPort,
-	}, nil
+	// Select the best IP using prioritization logic
+	selectedAddr, err := selectTargetAddr(config, ips, resolvedPort)
+	if err != nil {
+		return nil, err
+	}
+	return selectedAddr, nil
+}
+
+// selectTargetAddr chooses the best target address from a list of resolved IPs.
+// It prioritizes addresses that are allowed by ACL rules and not in the temporarily deferred list.
+// If no preferred addresses are available, it falls back to temporarily deferred addresses.
+// Returns an error if no valid addresses are found.
+func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, error) {
+	var fallbackTargets []*net.TCPAddr
+	var denialReasons []string
+
+	// First pass: look for preferred IPs (allowed and not temporarily deferred)
+	for _, ip := range ips {
+		targetAddr := &net.TCPAddr{
+			IP:   ip,
+			Port: port,
+		}
+
+		classification := classifyAddr(config, targetAddr)
+		if classification.IsAllowed() {
+			// Check if this IP should be temporarily deferred
+			if len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
+				// IP is allowed but temporarily deferred, save for fallback
+				fallbackTargets = append(fallbackTargets, targetAddr)
+				continue
+			}
+			// IP is allowed and preferred, use it immediately
+			return targetAddr, nil
+		} else {
+			// Track why this IP was denied for error reporting
+			denialReasons = append(denialReasons, fmt.Sprintf("%s denied by rule '%s'", ip.String(), classification))
+		}
+	}
+
+	// Second pass: if no preferred IPs found, use first fallback target
+	if len(fallbackTargets) > 0 {
+		return fallbackTargets[0], nil
+	}
+
+	// If no IP passes validation, return error with details about denials
+	if len(denialReasons) > 0 {
+		return nil, fmt.Errorf("no valid IP found among resolved addresses - %s", denialReasons[0])
+	}
+
+	return nil, fmt.Errorf("no IP addresses to evaluate")
 }
 
 func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
@@ -231,13 +295,11 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 	}
 	config.MetricsClient.Timing("resolver.lookup_time", resolveDuration, 0.5)
 
+	// The classification is already done in resolveTCPAddr, so we just need to log it
 	classification := classifyAddr(config, resolved)
 	config.MetricsClient.Incr(classification.statsdString(), 1)
 
-	if classification.IsAllowed() {
-		return resolved, classification.String(), nil
-	}
-	return nil, "destination address was denied by rule, see error", denyError{fmt.Errorf("The destination address (%s) was denied by rule '%s'", resolved.IP, classification)}
+	return resolved, classification.String(), nil
 }
 
 func proxyContext(ctx context.Context) (*goproxy.ProxyCtx, bool) {
