@@ -172,15 +172,8 @@ func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 
 func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAddr) bool {
 	for _, ipRange := range temporarilyDeferredIPs {
-		// Parse as CIDR or single IP
 		if ip := net.ParseIP(ipRange); ip != nil {
-			// Single IP address
 			if addr.IP.Equal(ip) {
-				return true
-			}
-		} else if _, ipnet, err := net.ParseCIDR(ipRange); err == nil {
-			// CIDR range
-			if ipnet.Contains(addr.IP) {
 				return true
 			}
 		}
@@ -287,11 +280,21 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 
 	// Second pass: if no preferred IPs found, use first fallback target
 	if len(fallbackTargets) > 0 {
-		config.Log.WithFields(logrus.Fields{
-			"ip":   fallbackTargets[0].IP.String(),
-			"port": fallbackTargets[0].Port,
-		}).Info("Using temporarily deferred IP as fallback")
-		return fallbackTargets[0], nil
+		// Iterate through temporarily deferred IPs
+		// and check if each one matches any IP in the fallback targets
+		for _, ipString := range config.TemporarilyDeferredIPs {
+			for _, addr := range fallbackTargets {
+				parsedIP := net.ParseIP(ipString)
+				if parsedIP != nil && addr.IP.Equal(parsedIP) {
+					config.Log.WithFields(logrus.Fields{
+						"ip":     addr.IP.String(),
+						"port":   addr.Port,
+						"reason": "selected by denied timestamp priority",
+					}).Info("Using temporarily deferred IP as fallback")
+					return addr, nil
+				}
+			}
+		}
 	}
 
 	// If no IP passes validation, return error with details about denials
