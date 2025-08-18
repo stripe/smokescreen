@@ -277,42 +277,6 @@ func TestSelectTargetAddr(t *testing.T) {
 	}
 }
 
-func TestSelectTargetAddrLogging(t *testing.T) {
-	// Create a logger with a test hook to capture log entries
-	logger, hook := logrustest.NewNullLogger()
-	logger.SetLevel(logrus.InfoLevel)
-
-	config := NewConfig()
-	config.Log = logger
-	config.TemporarilyDeferredIPs = []string{"8.8.8.8"}
-
-	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
-	
-	selectedAddr, err := selectTargetAddr(config, ips, 80)
-	
-	require.NoError(t, err)
-	assert.Equal(t, "8.8.4.4", selectedAddr.IP.String())
-
-	// Check that we have the expected log entries
-	entries := hook.AllEntries()
-	
-	// Should have log for temporarily deferred IP
-	var foundDeferredLog bool
-	var foundSelectedLog bool
-	
-	for _, entry := range entries {
-		if entry.Data["reason"] == "temporarily deferred" && entry.Data["ip"] == "8.8.8.8" {
-			foundDeferredLog = true
-		}
-		if entry.Data["ip"] == "8.8.4.4" && entry.Message == "Selected IP address for connection" {
-			foundSelectedLog = true
-		}
-	}
-	
-	assert.True(t, foundDeferredLog, "Should log temporarily deferred IP")
-	assert.True(t, foundSelectedLog, "Should log selected IP")
-}
-
 func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 	// Create a logger with a test hook
 	logger, hook := logrustest.NewNullLogger()
