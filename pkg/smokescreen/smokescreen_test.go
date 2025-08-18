@@ -1676,11 +1676,17 @@ func TestCONNECTProxyACLs(t *testing.T) {
 
 		second_client.Do(second_req)
 
-		entries := logHook.AllEntries()
-		r.Equal(2, len(entries))
+		// Filter for only CANONICAL-PROXY-DECISION entries
+		var canonicalEntries []*logrus.Entry
+		for _, entry := range logHook.AllEntries() {
+			if entry.Message == CanonicalProxyDecision {
+				canonicalEntries = append(canonicalEntries, entry)
+			}
+		}
+		r.Equal(2, len(canonicalEntries))
 
-		first_entry := entries[0]
-		second_entry := entries[1]
+		first_entry := canonicalEntries[0]
+		second_entry := canonicalEntries[1]
 		r.Equal("host matched allowed domain in rule", first_entry.Data["decision_reason"])
 		r.Equal("host matched allowed domain in rule", second_entry.Data["decision_reason"])
 	})
