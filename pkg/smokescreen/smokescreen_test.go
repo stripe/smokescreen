@@ -112,6 +112,229 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+func TestAddrIsTemporarilyDeferred(t *testing.T) {
+	tests := []struct {
+		name                   string
+		temporarilyDeferredIPs []string
+		testIP                 string
+		testPort               int
+		expected               bool
+	}{
+		{
+			name:                   "IP in deferred list",
+			temporarilyDeferredIPs: []string{"192.168.1.1", "10.0.0.1"},
+			testIP:                 "192.168.1.1",
+			testPort:               80,
+			expected:               true,
+		},
+		{
+			name:                   "IP not in deferred list",
+			temporarilyDeferredIPs: []string{"192.168.1.1", "10.0.0.1"},
+			testIP:                 "192.168.1.2",
+			testPort:               80,
+			expected:               false,
+		},
+		{
+			name:                   "Empty deferred list",
+			temporarilyDeferredIPs: []string{},
+			testIP:                 "192.168.1.1",
+			testPort:               80,
+			expected:               false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			addr := &net.TCPAddr{
+				IP:   net.ParseIP(tt.testIP),
+				Port: tt.testPort,
+			}
+			result := addrIsTemporarilyDeferred(tt.temporarilyDeferredIPs, addr)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSelectTargetAddr(t *testing.T) {
+	tests := []struct {
+		name                   string
+		ips                    []string
+		port                   int
+		temporarilyDeferredIPs []string
+		allowRanges            []string
+		denyRanges             []string
+		expectedIP             string
+		expectError            bool
+		errorContains          string
+	}{
+		{
+			name:        "Select first allowed IP",
+			ips:         []string{"8.8.8.8", "8.8.4.4"},
+			port:        80,
+			expectedIP:  "8.8.8.8",
+			expectError: false,
+		},
+		{
+			name:        "Skip denied IP, select allowed",
+			ips:         []string{"192.168.1.1", "8.8.8.8"},
+			port:        80,
+			expectedIP:  "8.8.8.8",
+			expectError: false,
+		},
+		{
+			name:                   "Defer first IP, select second",
+			ips:                    []string{"8.8.8.8", "8.8.4.4"},
+			port:                   80,
+			temporarilyDeferredIPs: []string{"8.8.8.8"},
+			expectedIP:             "8.8.4.4",
+			expectError:            false,
+		},
+		{
+			name:                   "All IPs deferred, use fallback with priority",
+			ips:                    []string{"8.8.8.8", "8.8.4.4"},
+			port:                   80,
+			temporarilyDeferredIPs: []string{"8.8.4.4", "8.8.8.8"},
+			expectedIP:             "8.8.4.4", // Should select first in deferred list
+			expectError:            false,
+		},
+		{
+			name:          "All IPs denied",
+			ips:           []string{"192.168.1.1", "10.0.0.1"},
+			port:          80,
+			expectError:   true,
+			errorContains: "no valid IP found among resolved addresses",
+		},
+		{
+			name:        "Empty IP list",
+			ips:         []string{},
+			port:        80,
+			expectError: true,
+			errorContains: "no IP addresses to evaluate",
+		},
+		{
+			name:        "Allow private ranges with allowed IP",
+			ips:         []string{"192.168.1.1", "8.8.8.8"},
+			port:        80,
+			allowRanges: []string{"192.168.1.0/24"},
+			expectedIP:  "192.168.1.1",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test config
+			config := NewConfig()
+			config.Log = logrus.New()
+			config.Log.SetLevel(logrus.DebugLevel)
+			
+			if len(tt.allowRanges) > 0 {
+				err := config.SetAllowRanges(tt.allowRanges)
+				require.NoError(t, err)
+			}
+			
+			if len(tt.denyRanges) > 0 {
+				err := config.SetDenyRanges(tt.denyRanges)
+				require.NoError(t, err)
+			}
+			
+			config.TemporarilyDeferredIPs = tt.temporarilyDeferredIPs
+
+			// Convert string IPs to net.IP
+			var ips []net.IP
+			for _, ipStr := range tt.ips {
+				ip := net.ParseIP(ipStr)
+				if ip != nil {
+					ips = append(ips, ip)
+				}
+			}
+
+			// Test the function
+			selectedAddr, err := selectTargetAddr(config, ips, tt.port)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, selectedAddr)
+				assert.Equal(t, tt.expectedIP, selectedAddr.IP.String())
+				assert.Equal(t, tt.port, selectedAddr.Port)
+			}
+		})
+	}
+}
+
+func TestSelectTargetAddrLogging(t *testing.T) {
+	// Create a logger with a test hook to capture log entries
+	logger, hook := logrustest.NewNullLogger()
+	logger.SetLevel(logrus.InfoLevel)
+
+	config := NewConfig()
+	config.Log = logger
+	config.TemporarilyDeferredIPs = []string{"8.8.8.8"}
+
+	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
+	
+	selectedAddr, err := selectTargetAddr(config, ips, 80)
+	
+	require.NoError(t, err)
+	assert.Equal(t, "8.8.4.4", selectedAddr.IP.String())
+
+	// Check that we have the expected log entries
+	entries := hook.AllEntries()
+	
+	// Should have log for temporarily deferred IP
+	var foundDeferredLog bool
+	var foundSelectedLog bool
+	
+	for _, entry := range entries {
+		if entry.Data["reason"] == "temporarily deferred" && entry.Data["ip"] == "8.8.8.8" {
+			foundDeferredLog = true
+		}
+		if entry.Data["ip"] == "8.8.4.4" && entry.Message == "Selected IP address for connection" {
+			foundSelectedLog = true
+		}
+	}
+	
+	assert.True(t, foundDeferredLog, "Should log temporarily deferred IP")
+	assert.True(t, foundSelectedLog, "Should log selected IP")
+}
+
+func TestSelectTargetAddrFallbackPriority(t *testing.T) {
+	// Create a logger with a test hook
+	logger, hook := logrustest.NewNullLogger()
+	logger.SetLevel(logrus.InfoLevel)
+
+	config := NewConfig()
+	config.Log = logger
+	// Set deferred IPs in specific order to test priority
+	config.TemporarilyDeferredIPs = []string{"8.8.4.4", "8.8.8.8"}
+
+	// All IPs are deferred, should select based on priority in deferred list
+	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
+	
+	selectedAddr, err := selectTargetAddr(config, ips, 80)
+	
+	require.NoError(t, err)
+	// Should select 8.8.4.4 because it's first in the TemporarilyDeferredIPs list
+	assert.Equal(t, "8.8.4.4", selectedAddr.IP.String())
+
+	// Check that we have the fallback log entry
+	entries := hook.AllEntries()
+	
+	var foundFallbackLog bool
+	for _, entry := range entries {
+		if entry.Data["reason"] == "selected by denied timestamp priority" && entry.Data["ip"] == "8.8.4.4" {
+			foundFallbackLog = true
+		}
+	}
+	
+	assert.True(t, foundFallbackLog, "Should log fallback selection with priority reason")
+}
+
 func TestUnsafeAllowPrivateRanges(t *testing.T) {
 	a := assert.New(t)
 
