@@ -297,9 +297,9 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 		}
 	}
 
-	// If no IP passes validation, return error with details about denials
+	// If no IP passes validation, return denyError with details about denials
 	if len(denialReasons) > 0 {
-		return nil, fmt.Errorf("no valid IP found among resolved addresses - %s", denialReasons[0])
+		return nil, denyError{fmt.Errorf("no valid IP found among resolved addresses - %s", denialReasons[0])}
 	}
 
 	return nil, fmt.Errorf("no IP addresses to evaluate")
