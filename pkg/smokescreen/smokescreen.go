@@ -232,6 +232,65 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	return selectedAddr, nil
 }
 
+// logSelectedIP logs when an IP is selected for immediate use
+func logSelectedIP(config *Config, ip net.IP, port int) {
+	config.Log.WithFields(logrus.Fields{
+		"ip":   ip.String(),
+		"port": port,
+	}).Info("Selected IP address for connection")
+}
+
+// logDeferredIP logs when an IP is temporarily deferred for fallback use
+func logDeferredIP(config *Config, ip net.IP, port int) {
+	config.Log.WithFields(logrus.Fields{
+		"ip":     ip.String(),
+		"port":   port,
+		"reason": "temporarily deferred",
+	}).Info("IP temporarily deferred, will use as fallback")
+}
+
+// logDeniedIP logs when an IP is denied with the reason
+func logDeniedIP(config *Config, ip net.IP, port int, reason string) {
+	config.Log.WithFields(logrus.Fields{
+		"ip":           ip.String(),
+		"port":         port,
+		"deny_reason":  reason,
+	}).Info("IP address denied")
+}
+
+// logFallbackIP logs when a deferred IP is selected as fallback
+func logFallbackIP(config *Config, addr *net.TCPAddr) {
+	config.Log.WithFields(logrus.Fields{
+		"ip":     addr.IP.String(),
+		"port":   addr.Port,
+		"reason": "all lookup IPs are in deferred list",
+	}).Info("Using temporarily deferred IP as fallback")
+}
+
+// selectFallbackAddr attempts to select a fallback address from temporarily deferred IPs
+//
+// Input Expectations:
+// - config: Must contain a valid TemporarilyDeferredIPs list (can be empty)
+// - fallbackTargets: Pre-filtered list of *net.TCPAddr that are:
+//   * ACL-allowed addresses
+//   * Present in the TemporarilyDeferredIPs configuration
+//   * Collected during the first pass of IP selection
+//
+// It prioritizes IPs in the order they appear in config.TemporarilyDeferredIPs
+// Returns the first matching address found, or nil if no fallback is available
+func selectFallbackAddr(config *Config, fallbackTargets []*net.TCPAddr) *net.TCPAddr {
+	for _, ipString := range config.TemporarilyDeferredIPs {
+		for _, addr := range fallbackTargets {
+			parsedIP := net.ParseIP(ipString)
+			if parsedIP != nil && addr.IP.Equal(parsedIP) {
+				logFallbackIP(config, addr)
+				return addr
+			}
+		}
+	}
+	return nil
+}
+
 // selectTargetAddr chooses the best target address from a list of resolved IPs.
 // It prioritizes addresses that are allowed by ACL rules and not in the temporarily deferred list.
 // If no preferred addresses are available, it falls back to temporarily deferred addresses.
@@ -249,51 +308,25 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 
 		classification := classifyAddr(config, targetAddr)
 		if classification.IsAllowed() {
-			// Check if this IP should be temporarily deferred
 			if len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
 				// IP is allowed but temporarily deferred, save for fallback
-				config.Log.WithFields(logrus.Fields{
-					"ip":     ip.String(),
-					"port":   port,
-					"reason": "temporarily deferred",
-				}).Info("IP temporarily deferred, will use as fallback")
+				logDeferredIP(config, ip, port)
 				fallbackTargets = append(fallbackTargets, targetAddr)
 				continue
 			}
 			// IP is allowed and preferred, use it immediately
-			config.Log.WithFields(logrus.Fields{
-				"ip":   ip.String(),
-				"port": port,
-			}).Info("Selected IP address for connection")
+			logSelectedIP(config, ip, port)
 			return targetAddr, nil
 		} else {
-			// Log denied IP with reason
-			config.Log.WithFields(logrus.Fields{
-				"ip":           ip.String(),
-				"port":         port,
-				"deny_reason":  classification.String(),
-			}).Info("IP address denied")
-			// Track why this IP was denied for error reporting
+			logDeniedIP(config, ip, port, classification.String())
 			denialReasons = append(denialReasons, fmt.Sprintf("%s denied by rule '%s'", ip.String(), classification))
 		}
 	}
 
-	// Second pass: if no preferred IPs found, use first fallback target
+	// Second pass: if no preferred IPs found, try to use a fallback target
 	if len(fallbackTargets) > 0 {
-		// Iterate through temporarily deferred IPs
-		// and check if each one matches any IP in the fallback targets
-		for _, ipString := range config.TemporarilyDeferredIPs {
-			for _, addr := range fallbackTargets {
-				parsedIP := net.ParseIP(ipString)
-				if parsedIP != nil && addr.IP.Equal(parsedIP) {
-					config.Log.WithFields(logrus.Fields{
-						"ip":     addr.IP.String(),
-						"port":   addr.Port,
-						"reason": "selected by denied timestamp priority",
-					}).Info("Using temporarily deferred IP as fallback")
-					return addr, nil
-				}
-			}
+		if fallbackAddr := selectFallbackAddr(config, fallbackTargets); fallbackAddr != nil {
+			return fallbackAddr, nil
 		}
 	}
 

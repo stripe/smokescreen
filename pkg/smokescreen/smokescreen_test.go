@@ -175,13 +175,6 @@ func TestSelectTargetAddr(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "Skip denied IP, select allowed",
-			ips:         []string{"192.168.1.1", "8.8.8.8"},
-			port:        80,
-			expectedIP:  "8.8.8.8",
-			expectError: false,
-		},
-		{
 			name:                   "Defer first IP, select second",
 			ips:                    []string{"8.8.8.8", "8.8.4.4"},
 			port:                   80,
@@ -218,6 +211,23 @@ func TestSelectTargetAddr(t *testing.T) {
 			allowRanges: []string{"192.168.1.0/24"},
 			expectedIP:  "192.168.1.1",
 			expectError: false,
+		},
+		{
+			name:        "Deny range blocks first IP, select second",
+			ips:         []string{"1.1.1.1", "8.8.8.8"},
+			port:        80,
+			denyRanges:  []string{"1.1.1.0/24"},
+			expectedIP:  "8.8.8.8",
+			expectError: false,
+		},
+		{
+			name:                   "Deny range forces fallback to deferred IP",
+			ips:                    []string{"1.1.1.1", "8.8.8.8"},
+			port:                   80,
+			denyRanges:             []string{"1.1.1.0/24"},
+			temporarilyDeferredIPs: []string{"8.8.8.8"},
+			expectedIP:             "8.8.8.8", // First IP denied by deny range, must use deferred as fallback
+			expectError:            false,
 		},
 	}
 
@@ -327,12 +337,12 @@ func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 	
 	var foundFallbackLog bool
 	for _, entry := range entries {
-		if entry.Data["reason"] == "selected by denied timestamp priority" && entry.Data["ip"] == "8.8.4.4" {
+		if entry.Data["reason"] == "all lookup IPs are in deferred list" && entry.Data["ip"] == "8.8.4.4" {
 			foundFallbackLog = true
 		}
 	}
 	
-	assert.True(t, foundFallbackLog, "Should log fallback selection with priority reason")
+	assert.True(t, foundFallbackLog, "Should log fallback selection when all IPs are deferred")
 }
 
 func TestUnsafeAllowPrivateRanges(t *testing.T) {
