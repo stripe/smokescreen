@@ -100,6 +100,10 @@ type Config struct {
 	// This setting can be used to configure Smokescreen with a blocklist, rather than an allowlist
 	UnsafeAllowPrivateRanges bool
 
+	// TemporarilyDeferredIPs contains a list of IP addresses that should be temporarily
+	// deferred during resolution but can be used as fallback if no other IPs are available
+	TemporarilyDeferredIPs []string
+
 	// Custom handler for users to allow running code per requests, users can pass in custom methods to verify requests based
 	// on headers, code for metrics etc.
 	// If smokescreen denies a request, this handler is not called.
