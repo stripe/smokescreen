@@ -1,0 +1,12 @@
+builds:
+  - id: smokescreen
+    main: ./main.go
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -mod=vendor
+
+defaultBaseImage: gcr.io/distroless/static:nonroot
+defaultPlatforms:
+  - linux/amd64
+  - linux/arm64

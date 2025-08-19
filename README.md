@@ -173,6 +173,48 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
 
 See [Development.md](Development.md)
 
+# Binary Releases
+
+This project provides both pre-built container images and native binaries for smokescreen that are automatically built and published.
+
+## Standalone binaries
+
+Pre-compiled binaries are available for download from the [GitHub Releases](https://github.com/stripe/smokescreen/releases) page:
+
+- **Linux**: `smokescreen-linux-amd64`, `smokescreen-linux-arm64`
+- **macOS**: `smokescreen-darwin-amd64`, `smokescreen-darwin-arm64`
+
+### Download and Install
+
+```bash
+# Download the latest binary (replace with your platform)
+curl -L -o smokescreen https://github.com/stripe/smokescreen/releases/latest/download/smokescreen-linux-amd64
+
+# Make it executable
+chmod +x smokescreen
+
+# Run
+./smokescreen --help
+  ```
+
+## Container Images
+
+The container images are available at:
+- `ghcr.io/stripe/smokescreen:latest`
+
+### Supported Platforms
+
+- `linux/amd64` - Intel/AMD 64-bit
+- `linux/arm64` - ARM 64-bit
+
+### Running the Container
+
+```bash
+docker run -p 4750:4750 ghcr.io/stripe/smokescreen:latest  --listen-ip 0.0.0.0 --listen-port 4750
+```
+
+Smokescreen can then be used like in `curl --proxy localhost:4750 http://example.com`.
+
 # Contributors
 
 - Aditya Mukerjee

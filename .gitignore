@@ -4,3 +4,4 @@
 *.swo
 *.swn
 *debug.test*
+/binaries

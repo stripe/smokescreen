@@ -306,3 +306,27 @@ curl --proxytunnel -x https://localhost:4750 --cacert vendor/github.com/stripe/g
 # Curl with HTTPS_PROXY
 HTTPS_PROXY=https://localhost:4750 curl --cacert vendor/github.com/stripe/goproxy/ca.pem --proxy-cacert mtls_setup/server-ca.crt --proxy-cert mtls_setup/client.crt --proxy-key mtls_setup/client.key https://wttr.in
 ```
+
+## Working with container images locally
+
+### Building Locally
+
+To build the container image outside of CI:
+
+```bash
+# Install ko
+go install github.com/ko-build/ko@latest
+
+# Build for multiple platforms
+ko build . --platform=linux/amd64,linux/arm64 --local
+```
+
+### Verification
+
+To verify the signatures of published images:
+
+```bash
+cosign verify ghcr.io/stripe/smokescreen:latest \
+  --certificate-identity-regexp="https://github.com/stripe/smokescreen" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
