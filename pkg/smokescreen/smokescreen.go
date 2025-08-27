@@ -283,6 +283,11 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 		if classification.IsAllowed() {
 			if len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
 				// IP is allowed but temporarily deferred, save for fallback
+				config.Log.WithFields(logrus.Fields{
+					"ip":     targetAddr.IP.String(),
+					"port":   targetAddr.Port,
+					"reason": "IP is temporarily deny-listed",
+				}).Info("Temporarily denying IP, will be used as fallback")
 				fallbackTargets = append(fallbackTargets, targetAddr)
 				continue
 			}
