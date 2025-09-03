@@ -111,6 +111,10 @@ type Config struct {
 	PostDecisionRequestHandler func(*http.Request) error
 	// MitmCa is used to provide a custom CA for MITM
 	MitmTLSConfig func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error)
+
+	// AddServerIpHeader configures goproxy to add X-Server-Ip header to HTTP CONNECT response
+	// populated with the remote server IP address
+	AddServerIpHeader bool
 }
 
 type missingRoleError struct {

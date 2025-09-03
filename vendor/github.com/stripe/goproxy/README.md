@@ -105,6 +105,10 @@ See additional examples in the examples directory.
 1. Ability to `Hijack` CONNECT requests. See
 [the eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/goproxy-eavesdropper/main.go#L27)
 2. Transparent proxy support for http/https including MITM certificate generation for TLS.  See the [transparent example.](https://github.com/elazarl/goproxy/tree/master/examples/goproxy-transparent)
+3. Ability to extract remote server's IP in CONNECT response as `X-Server-Ip` Header. This can be used as specified below:
+```go
+proxy := goproxy.NewProxyHttpServer(goproxy.WithAddServerIpHeader(true))
+```
 
 # License
 

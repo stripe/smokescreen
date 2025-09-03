@@ -231,6 +231,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	}
 	return selectedAddr, nil
 }
+
 // logFallbackIP logs when a deferred IP is selected as fallback
 func logFallbackIP(config *Config, addr *net.TCPAddr) {
 	config.Log.WithFields(logrus.Fields{
@@ -245,9 +246,9 @@ func logFallbackIP(config *Config, addr *net.TCPAddr) {
 // Input Expectations:
 // - config: Must contain a valid TemporarilyDeferredIPs list (can be empty)
 // - fallbackTargets: Pre-filtered list of *net.TCPAddr that are:
-//   * ACL-allowed addresses
-//   * Present in the TemporarilyDeferredIPs configuration
-//   * Collected during the first pass of IP selection
+//   - ACL-allowed addresses
+//   - Present in the TemporarilyDeferredIPs configuration
+//   - Collected during the first pass of IP selection
 //
 // It prioritizes IPs in the order they appear in config.TemporarilyDeferredIPs
 // Returns the first matching address found, or nil if no fallback is available
@@ -549,7 +550,11 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 }
 
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
-	proxy := goproxy.NewProxyHttpServer(goproxy.WithHttpProxyAddr(config.UpstreamHttpProxyAddr), goproxy.WithHttpsProxyAddr(config.UpstreamHttpsProxyAddr))
+	proxy := goproxy.NewProxyHttpServer(
+		goproxy.WithHttpProxyAddr(config.UpstreamHttpProxyAddr),
+		goproxy.WithHttpsProxyAddr(config.UpstreamHttpsProxyAddr),
+		goproxy.WithAddServerIpHeader(config.AddServerIpHeader),
+	)
 	proxy.Verbose = false
 	configureTransport(proxy.Tr, config)
 

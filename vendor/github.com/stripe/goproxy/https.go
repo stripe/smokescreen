@@ -40,6 +40,7 @@ var (
 	RejectConnect                 = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	httpsRegexp                   = regexp.MustCompile(`^https:\/\/`)
 	PerRequestHTTPSProxyHeaderKey = "X-Upstream-Https-Proxy"
+	ServerIpHeaderKey             = "X-Server-Ip"
 )
 
 type ConnectAction struct {
@@ -144,7 +145,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 
 		ctx.Logf("Accepting CONNECT to %s", host)
-		respBytes, err := createCustomConnectResponse(ctx)
+		var resp *http.Response = nil
+		if proxy.AddServerIpHeader {
+			resp = generateDefaultResponse()
+			resp.Header.Set(ServerIpHeaderKey, extractServerIp(targetSiteCon.RemoteAddr().String()))
+		}
+		respBytes, err := createCustomConnectResponse(ctx, resp)
 		if respBytes != nil {
 			// Write the custom response, if one was created
 			proxyClient.Write(respBytes)
@@ -154,7 +160,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Warnf("Error writing custom CONNECT response: %s", err.Error())
 				return
 			}
-			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+			if resp != nil {
+				buf := &bytes.Buffer{}
+				if err := resp.Write(buf); err != nil {
+					ctx.Warnf("Error writing custom CONNECT response: %s", err.Error())
+					return
+				}
+				proxyClient.Write(buf.Bytes())
+			} else {
+				proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+			}
 		}
 
 		if proxy.ConnectCopyHandler != nil {
@@ -358,11 +373,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func createCustomConnectResponse(ctx *ProxyCtx) ([]byte, error) {
+func createCustomConnectResponse(ctx *ProxyCtx, resp *http.Response) ([]byte, error) {
+	if resp == nil {
+		resp = generateDefaultResponse()
+	}
 	if ctx.proxy.ConnectRespHandler == nil {
 		return nil, nil
 	}
-	resp := &http.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.0", ProtoMajor: 1, ProtoMinor: 0, ContentLength: -1, Header: http.Header{}}
 	err := ctx.proxy.ConnectRespHandler(ctx, resp)
 	if err != nil {
 		return nil, err
@@ -627,4 +644,19 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, hostname, service), nil
+}
+
+func extractServerIp(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return ""
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	return ""
+}
+
+func generateDefaultResponse() *http.Response {
+	return &http.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.0", ProtoMajor: 1, ProtoMinor: 0, ContentLength: -1, Header: http.Header{}}
 }
