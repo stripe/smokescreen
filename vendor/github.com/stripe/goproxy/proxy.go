@@ -61,6 +61,10 @@ type ProxyHttpServer struct {
 	// HTTP and HTTPS proxy addresses
 	HttpProxyAddr  string
 	HttpsProxyAddr string
+
+	// AddServerIpHeader will be used to add custom X-Server-IP header to CONNECT response before it
+	// is return to the client
+	AddServerIpHeader bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -187,8 +191,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 type options struct {
-	httpProxyAddr  string
-	httpsProxyAddr string
+	httpProxyAddr     string
+	httpsProxyAddr    string
+	addServerIpHeader bool
 }
 type fnOption func(*options)
 
@@ -210,11 +215,17 @@ func WithHttpsProxyAddr(httpsProxyAddr string) ProxyHttpServerOptions {
 	})
 }
 
+func WithAddServerIpHeader(addServerIpHeader bool) ProxyHttpServerOptions {
+	return fnOption(func(opts *options) {
+		opts.addServerIpHeader = addServerIpHeader
+	})
+}
+
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer(opts ...ProxyHttpServerOptions) *ProxyHttpServer {
 	appliedOpts := &options{
-		httpProxyAddr: "",
-		httpsProxyAddr:  "",
+		httpProxyAddr:  "",
+		httpsProxyAddr: "",
 	}
 	for _, opt := range opts {
 		opt.apply(appliedOpts)
@@ -228,7 +239,8 @@ func NewProxyHttpServer(opts ...ProxyHttpServerOptions) *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr:                &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		AddServerIpHeader: appliedOpts.addServerIpHeader,
 	}
 
 	// httpProxyCfg holds configuration for HTTP proxy settings. See FromEnvironment for details.
@@ -245,7 +257,7 @@ func NewProxyHttpServer(opts ...ProxyHttpServerOptions) *ProxyHttpServer {
 	}
 
 	proxy.ConnectDial = dialerFromProxy(&proxy)
-	
+
 	if appliedOpts.httpProxyAddr != "" || appliedOpts.httpsProxyAddr != "" {
 		proxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
 			return httpProxyCfg.ProxyFunc()(req.URL)
