@@ -244,7 +244,11 @@ func TestACLAddInvalidGlob(t *testing.T) {
 	}{
 		"multiple wildcards": {
 			"*.*.stripe.com",
-			"domain globs are only supported as prefix",
+			"domain glob must not contain more than one wildcard",
+		},
+		"multiple wildcards 2": {
+			"foo.*.bar.*.stripe.com",
+			"domain glob must not contain more than one wildcard",
 		},
 		"matches everything (*)": {
 			"*",
@@ -254,9 +258,13 @@ func TestACLAddInvalidGlob(t *testing.T) {
 			"*.",
 			"domain glob must not match everything",
 		},
+		"not preceded by subdomain": {
+			"foo*.bar",
+			"domain glob must be preceded by a full subdomain",
+		},
 		"non-normalized domain": {
 			"éxämple.com",
-			"incorrect ACL entry; use \"xn--xmple-gra7a.com\"",
+			"incorrect ACL entry; normalized domain: \"xn--xmple-gra7a.com\"",
 		},
 	}
 
@@ -324,7 +332,7 @@ func TestHostMatchesGlob(t *testing.T) {
 		"wildcard after leading component": {
 			"login.eu.example.com",
 			"login.*.example.com",
-			false,
+			true,
 		},
 		"trailing dot": {
 			"example.com.",
