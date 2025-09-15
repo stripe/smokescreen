@@ -32,6 +32,7 @@ const (
 	ipDenyNotGlobalUnicast
 	ipDenyPrivateRange
 	ipDenyUserConfigured
+	ipDenyCGNAT
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 
@@ -129,6 +130,8 @@ func (t ipType) String() string {
 		return "Deny: Private Range"
 	case ipDenyUserConfigured:
 		return "Deny: User Configured"
+	case ipDenyCGNAT:
+		return "Deny: CGNAT Range"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -146,6 +149,8 @@ func (t ipType) statsdString() string {
 		return "resolver.deny.private_range"
 	case ipDenyUserConfigured:
 		return "resolver.deny.user_configured"
+	case ipDenyCGNAT:
+		return "resolver.deny.cgnat_range"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -168,6 +173,22 @@ func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 		}
 	}
 	return false
+}
+
+var cgnatRange *net.IPNet
+
+func init() {
+	var err error
+	// RFC 6598 CGNAT range
+	_, cgnatRange, err = net.ParseCIDR("100.64.0.0/10")
+	if err != nil {
+		panic(fmt.Sprintf("smokescreen internal error: could not parse CGNAT range: %v", err))
+	}
+}
+
+// addrIsCGNAT checks if an address is within the Carrier-Grade NAT range.
+func addrIsCGNAT(addr *net.TCPAddr) bool {
+	return cgnatRange.Contains(addr.IP)
 }
 
 func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAddr) bool {
@@ -196,6 +217,8 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 		return ipDenyUserConfigured
 	} else if addr.IP.IsPrivate() && !config.UnsafeAllowPrivateRanges {
 		return ipDenyPrivateRange
+	} else if addrIsCGNAT(addr) {
+		return ipDenyCGNAT
 	} else {
 		return ipAllowDefault
 	}

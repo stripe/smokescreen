@@ -77,6 +77,14 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"172.16.1.1", 1, ipAllowUserConfigured},
 		testCase{"192.168.0.1", 1, ipDenyPrivateRange},
 		testCase{"192.168.1.1", 1, ipAllowUserConfigured},
+
+		// CGNAT blocked networks (RFC 6598)
+		testCase{"100.64.0.1", 1, ipDenyCGNAT},
+		testCase{"100.64.0.100", 1, ipDenyCGNAT},
+		testCase{"100.127.255.254", 1, ipDenyCGNAT},
+		testCase{"100.63.255.254", 1, ipAllowDefault}, // Just outside CGNAT range
+		testCase{"100.128.0.1", 1, ipAllowDefault},    // Just outside CGNAT range
+
 		testCase{"8.8.8.8", 321, ipDenyUserConfigured},
 		testCase{"1.1.1.1", 1, ipDenyUserConfigured},
 
@@ -331,6 +339,11 @@ func TestUnsafeAllowPrivateRanges(t *testing.T) {
 		testCase{"172.16.1.1", 1, ipAllowDefault},
 		testCase{"192.168.0.1", 1, ipDenyUserConfigured},
 		testCase{"192.168.1.1", 1, ipAllowDefault},
+
+		// CGNAT blocked networks (RFC 6598) - should still be blocked even with UnsafeAllowPrivateRanges
+		testCase{"100.64.0.1", 1, ipDenyCGNAT},
+		testCase{"100.64.0.100", 1, ipDenyCGNAT},
+		testCase{"100.127.255.254", 1, ipDenyCGNAT},
 
 		// localhost
 		testCase{"127.0.0.1", 1, ipDenyNotGlobalUnicast},
