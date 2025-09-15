@@ -3,6 +3,7 @@ package metrics
 import (
 	"errors"
 	"net"
+	"regexp"
 	"syscall"
 	"time"
 )
@@ -78,4 +79,13 @@ func ReportConnError(mc MetricsClientInterface, err error) {
 	}
 
 	mc.IncrWithTags("cn.atpt.connect.err", errorTag, 1)
+}
+
+// SanitizeTagValue sanitizes tag values to prevent injection attacks in both
+// StatsD and Prometheus metrics. This removes or replaces characters that could
+// be used to inject malicious content through metric tags.
+func SanitizeTagValue(value string) string {
+	dangerousChars := regexp.MustCompile(`[|@#:"}{\\[:cntrl:]]`)
+
+	return dangerousChars.ReplaceAllString(value, "_")
 }
