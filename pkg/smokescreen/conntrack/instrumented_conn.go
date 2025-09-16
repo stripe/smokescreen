@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
 const (
@@ -92,7 +93,7 @@ func (ic *InstrumentedConn) Close() error {
 	duration := end.Sub(ic.Start).Seconds()
 
 	tags := map[string]string{
-		"role": ic.Role,
+		"role": metrics.SanitizeTagValue(ic.Role),
 	}
 
 	ic.tracker.statsc.IncrWithTags("cn.close", tags, 1)

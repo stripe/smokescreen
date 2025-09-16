@@ -1168,7 +1168,7 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	}
 
 	tags := map[string]string{
-		"role":     decision.Role,
+		"role":     metrics.SanitizeTagValue(decision.Role),
 		"def_rule": fmt.Sprintf("%t", ACLDecision.Default),
 		"project":  ACLDecision.Project,
 	}
