@@ -359,6 +359,7 @@ func TestHostMatchesGlob(t *testing.T) {
 	}
 }
 
+
 func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
@@ -410,6 +411,84 @@ func TestInvalidMitmComfig(t *testing.T) {
 	err := acl.Validate()
 	a.Error(err)
 }
+
+// TestIDNValidation tests Internationalized Domain Name handling
+func TestIDNValidation(t *testing.T) {
+	acl := &ACL{}
+	
+	// Unicode domain should be rejected with punycode suggestion
+	err := acl.ValidateDomainGlob("test", "тест.example.com")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "use \"xn--e1aybc.example.com\"")
+	
+	// Punycode domain should be valid
+	err = acl.ValidateDomainGlob("test", "xn--e1aybc.example.com")
+	assert.NoError(t, err)
+	
+	// Unicode with wildcard should be rejected
+	err = acl.ValidateDomainGlob("test", "*.тест.example.com")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "use \"*.xn--e1aybc.example.com\"")
+}
+
+// TestIDNHostMatching tests Unicode/Punycode hostname matching
+func TestIDNHostMatching(t *testing.T) {
+	// Unicode hostname should match punycode glob
+	assert.True(t, HostMatchesGlob("тест.example.com", "xn--e1aybc.example.com"))
+	
+	// Punycode hostname should match unicode glob
+	assert.True(t, HostMatchesGlob("xn--e1aybc.example.com", "тест.example.com"))
+	
+	// Wildcard matching with IDN
+	assert.True(t, HostMatchesGlob("sub.тест.example.com", "*.xn--e1aybc.example.com"))
+	assert.False(t, HostMatchesGlob("тест.example.com", "*.xn--e1aybc.example.com"))
+}
+
+// TestExternalProxyGlobValidation tests external proxy glob validation
+func TestExternalProxyGlobValidation(t *testing.T) {
+	acl := &ACL{}
+	
+	// Valid external proxy globs
+	validRule := Rule{
+		DomainGlobs:        []string{"example.com"},
+		ExternalProxyGlobs: []string{"proxy.example.com", "*.proxies.com"},
+	}
+	assert.NoError(t, acl.ValidateRule("test", validRule))
+	
+	// Invalid external proxy glob
+	invalidRule := Rule{
+		DomainGlobs:        []string{"example.com"},
+		ExternalProxyGlobs: []string{"*"},
+	}
+	err := acl.ValidateRule("test", invalidRule)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "domain glob must not match everything")
+}
+
+// TestDecisionWithProxyHost tests decision logic with connectProxyHost
+func TestDecisionWithProxyHost(t *testing.T) {
+	acl := &ACL{
+		Rules: map[string]Rule{
+			"proxy-service": {
+				Policy:             Enforce,
+				DomainGlobs:        []string{"example.com"},
+				ExternalProxyGlobs: []string{"proxy.example.com"},
+			},
+		},
+	}
+	
+	// Allowed proxy and target
+	decision, err := acl.Decide("proxy-service", "example.com", "proxy.example.com")
+	assert.NoError(t, err)
+	assert.Equal(t, Allow, decision.Result)
+	
+	// Disallowed proxy
+	decision, err = acl.Decide("proxy-service", "example.com", "bad.proxy.com")
+	assert.NoError(t, err)
+	assert.Equal(t, Deny, decision.Result)
+	assert.Equal(t, "connect proxy host not allowed in rule", decision.Reason)
+}
+
 func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 	a := assert.New(t)
 	logger := logrus.New()

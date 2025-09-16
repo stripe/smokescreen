@@ -202,8 +202,9 @@ func (acl *ACL) DisablePolicies(actions []string) error {
 	return nil
 }
 
-// Validate checks that the ACL that every rule has a conformant domain glob
-// and is not utilizing a disabled enforcement policy.
+// Validate checks that the ACL has conformant domain globs in all rules,
+// global lists, and external proxy configurations, and is not utilizing
+// disabled enforcement policies.
 func (acl *ACL) Validate() error {
 	for svc, r := range acl.Rules {
 		err := acl.ValidateRule(svc, r)
@@ -221,6 +222,22 @@ func (acl *ACL) Validate() error {
 			return err
 		}
 		err = acl.PolicyDisabled("default_rule", acl.DefaultRule.Policy)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Validate global deny list
+	for _, d := range acl.GlobalDenyList {
+		err := acl.ValidateDomainGlob("global_deny_list", d)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Validate global allow list
+	for _, d := range acl.GlobalAllowList {
+		err := acl.ValidateDomainGlob("global_allow_list", d)
 		if err != nil {
 			return err
 		}
@@ -248,6 +265,13 @@ func (acl *ACL) ValidateRule(svc string, r Rule) error {
 			return fmt.Errorf("domain %s was added to mitm_domains but is missing in allowed_domains", d.Domain)
 		}
 	}
+	// Validate external proxy globs
+	for _, d := range r.ExternalProxyGlobs {
+		err = acl.ValidateDomainGlob(svc, d)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -271,7 +295,9 @@ func (*ACL) ValidateDomainGlob(svc string, glob string) error {
 		return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
 	}
 
-	domainToCheck := strings.TrimPrefix(glob, "*")
+	// Extract domain part for validation (remove wildcard prefix if present)
+	domainToCheck := strings.TrimPrefix(glob, "*.")
+
 	if strings.Contains(domainToCheck, "*") {
 		return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
 	}
@@ -320,7 +346,7 @@ func (acl *ACL) Rule(service string) *Rule {
 }
 
 // HostMatchesGlob matches a hostname string against a domain glob after
-// converting both to a canonical form (lowercase with trailing dots removed).
+// converting both to a canonical form (punycode normalization, lowercase with trailing dots removed).
 //
 // domainGlob should already have been passed through ACL.Validate().
 func HostMatchesGlob(host string, domainGlob string) bool {
@@ -328,11 +354,30 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 		return false
 	}
 
-	h := strings.TrimRight(strings.ToLower(host), ".")
-	g := strings.TrimRight(strings.ToLower(domainGlob), ".")
+	// Normalize both the request host and the glob to ASCII/Punycode.
+	// Handle optional wildcard prefix by normalizing only the domain part.
+	normalizedHost, err := hostport.NormalizeHost(host, false)
+	if err != nil {
+		return false
+	}
 
-	if strings.HasPrefix(g, "*.") {
-		suffix := g[1:]
+	hasWildcard := strings.HasPrefix(domainGlob, "*.")
+	domainPart := domainGlob
+	if hasWildcard {
+		domainPart = strings.TrimPrefix(domainGlob, "*.")
+	}
+
+	normalizedGlob, err := hostport.NormalizeHost(domainPart, false)
+	if err != nil {
+		return false
+	}
+
+	h := strings.TrimRight(strings.ToLower(normalizedHost), ".")
+	g := strings.TrimRight(strings.ToLower(normalizedGlob), ".")
+
+	if hasWildcard {
+		// Wildcard matches any subdomain of g (e.g., *.example.com), not the root itself
+		suffix := "." + g
 		if strings.HasSuffix(h, suffix) {
 			return true
 		}
