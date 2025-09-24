@@ -42,11 +42,6 @@ type yamlConfig struct {
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
 	ExitTimeout    *time.Duration `yaml:"exit_timeout"`
 
-	// HTTP server timeouts to prevent DoS attacks
-	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
-	ReadTimeout       time.Duration `yaml:"read_timeout"`
-	WriteTimeout      time.Duration `yaml:"write_timeout"`
-
 	StatsSocketDir      string `yaml:"stats_socket_dir"`
 	StatsSocketFileMode string `yaml:"stats_socket_file_mode"`
 
@@ -107,17 +102,6 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.ConnectTimeout = yc.ConnectTimeout
 	if yc.ExitTimeout != nil {
 		c.ExitTimeout = *yc.ExitTimeout
-	}
-
-	// Apply HTTP server timeouts if configured, otherwise keep defaults
-	if yc.ReadHeaderTimeout != 0 {
-		c.ReadHeaderTimeout = yc.ReadHeaderTimeout
-	}
-	if yc.ReadTimeout != 0 {
-		c.ReadTimeout = yc.ReadTimeout
-	}
-	if yc.WriteTimeout != 0 {
-		c.WriteTimeout = yc.WriteTimeout
 	}
 
 	err = c.SetupStatsd(yc.StatsdAddress)
