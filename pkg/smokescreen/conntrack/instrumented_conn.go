@@ -24,6 +24,7 @@ const (
 type InstrumentedConn struct {
 	net.Conn
 	Role         string
+	Project      string
 	OutboundHost string
 	proxyType    string
 	ConnError    error
@@ -44,13 +45,13 @@ type InstrumentedConn struct {
 	CloseError error
 }
 
-func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, logger *logrus.Entry, role, outboundHost, proxyType string) *InstrumentedConn {
-	ic := t.NewInstrumentedConn(conn, logger, role, outboundHost, proxyType)
+func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, logger *logrus.Entry, role, outboundHost, proxyType, project string) *InstrumentedConn {
+	ic := t.NewInstrumentedConn(conn, logger, role, outboundHost, proxyType, project)
 	ic.timeout = timeout
 	return ic
 }
 
-func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *logrus.Entry, role, outboundHost, proxyType string) *InstrumentedConn {
+func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *logrus.Entry, role, outboundHost, proxyType, project string) *InstrumentedConn {
 	now := time.Now()
 	nowUnixNano := now.UnixNano()
 	bytesIn := uint64(0)
@@ -59,6 +60,7 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *logrus.Entry, role,
 	ic := &InstrumentedConn{
 		Conn:         conn,
 		Role:         role,
+		Project:      project,
 		OutboundHost: outboundHost,
 		tracker:      t,
 		logger:       logger,
@@ -93,7 +95,8 @@ func (ic *InstrumentedConn) Close() error {
 	duration := end.Sub(ic.Start).Seconds()
 
 	tags := map[string]string{
-		"role": metrics.SanitizeTagValue(ic.Role),
+		"role":    metrics.SanitizeTagValue(ic.Role),
+		"project": metrics.SanitizeTagValue(ic.Project),
 	}
 
 	ic.tracker.statsc.IncrWithTags("cn.close", tags, 1)
