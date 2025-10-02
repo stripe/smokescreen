@@ -36,7 +36,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 			return
 		}
 
-		icWriter := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "test", "localhost", "http")
+		icWriter := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "test", "localhost", "http", "test_project")
 
 		n, err := icWriter.Write(sent)
 		if err != nil {
@@ -60,7 +60,7 @@ func TestInstrumentedConnByteCounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	icReader := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "testBytesInOut", "localhost", "http")
+	icReader := tr.NewInstrumentedConn(conn, logrus.NewEntry(testLogger), "testBytesInOut", "localhost", "http", "test_project")
 
 	readerErrChan := make(chan error, 1)
 	go func() {
@@ -87,7 +87,7 @@ func TestInstrumentedConnIdle(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Millisecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testIdle", "localhost", "egress")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testIdle", "localhost", "egress", "test_project")
 
 	ic.Write([]byte("egress"))
 	assert.False(ic.Idle())
@@ -138,7 +138,7 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 		}
 
 		var b [1]byte
-		ic := tr.NewInstrumentedConnWithTimeout(c, tt.timeout, logrus.NewEntry(testLogger), "test", "testHost", "http")
+		ic := tr.NewInstrumentedConnWithTimeout(c, tt.timeout, logrus.NewEntry(testLogger), "test", "testHost", "http", "test_project")
 
 		_, err = ic.Read(b[:])
 		if err == nil && tt.expectedError {

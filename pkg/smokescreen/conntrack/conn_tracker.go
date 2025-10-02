@@ -17,8 +17,8 @@ type TrackerInterface interface {
 	ReportConnectionSuccessRate() *ConnSuccessRateStats
 	RecordAttempt(string, bool)
 	MaybeIdleIn(time.Duration) time.Duration
-	NewInstrumentedConn(net.Conn, *logrus.Entry, string, string, string) *InstrumentedConn
-	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *logrus.Entry, string, string, string) *InstrumentedConn
+	NewInstrumentedConn(net.Conn, *logrus.Entry, string, string, string, string) *InstrumentedConn
+	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *logrus.Entry, string, string, string, string) *InstrumentedConn
 	Wg() *sync.WaitGroup
 	Range(f func(interface{}, interface{}) bool)
 }

@@ -18,7 +18,7 @@ var testLogger = logrus.New()
 func TestConnTrackerDelete(t *testing.T) {
 	tr := NewTestTracker(time.Second * 1)
 
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testDeleteConn", "localhost", "http")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testDeleteConn", "localhost", "http", "test_project")
 	ic.Close()
 
 	tr.Range(func(k, v interface{}) bool {
@@ -32,7 +32,7 @@ func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Nanosecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testMaybeIdle", "localhost", "http")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testMaybeIdle", "localhost", "http", "test_project")
 
 	time.Sleep(time.Millisecond)
 
