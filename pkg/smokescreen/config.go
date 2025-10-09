@@ -275,9 +275,9 @@ func NewConfig() *Config {
 		MetricsClient:           metrics.NewNoOpMetricsClient(),
 		Network:                 "ip",
 		// Set secure defaults to prevent DoS attacks
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
 	}
 }
 
