@@ -563,7 +563,15 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	}
 
 	if proxyURL.Scheme == "https" {
-		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+		tlsConfig := proxy.Tr.TLSClientConfig
+		if proxy.UpstreamProxyTLSConfigHandler != nil {
+			tlsConfig, err = proxy.UpstreamProxyTLSConfigHandler(ctx, tlsConfig, proxyURL)
+			if err != nil {
+				c.Close()
+				return nil, err
+			}
+		}
+		c = tls.Client(c, tlsConfig)
 	}
 
 	connectRequestHeaders := make(http.Header)
@@ -582,6 +590,15 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		Host:   host,
 		Header: connectRequestHeaders,
 	}
+
+	if proxy.UpstreamProxyConnectReqHandler != nil {
+		err = proxy.UpstreamProxyConnectReqHandler(ctx, connectReq)
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
+	}
+
 	connectReq.Write(c)
 	// Read response.
 	// Okay to use and discard buffered reader here, because
