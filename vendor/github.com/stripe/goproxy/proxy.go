@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -57,6 +58,16 @@ type ProxyHttpServer struct {
 	// ConnectRespHandler allows users to mutate the response to the CONNECT request before it
 	// is returned to the client.
 	ConnectRespHandler func(ctx *ProxyCtx, resp *http.Response) error
+
+	// UpstreamProxyTLSConfigHandler is called after TCP establishment but before TLS
+	// connection to an upstream HTTPS proxy.
+	// If it returns an error, the connection is closed and the error is returned to the client.
+	UpstreamProxyTLSConfigHandler func(ctx *ProxyCtx, baseConfig *tls.Config, proxyURL *url.URL) (*tls.Config, error)
+
+	// UpstreamProxyConnectReqHandler is called before sending a CONNECT request to an upstream proxy.
+	// It can modify the request that will be sent to the upstream proxy.
+	// If it returns an error, the connection is closed and the error is returned to the client.
+	UpstreamProxyConnectReqHandler func(ctx *ProxyCtx, req *http.Request) error
 
 	// HTTP and HTTPS proxy addresses
 	HttpProxyAddr  string
