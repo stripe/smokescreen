@@ -903,10 +903,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	server := http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: config.ReadHeaderTimeout,
-		ReadTimeout:       config.ReadTimeout,
-		WriteTimeout:      config.WriteTimeout,
+		Handler: handler,
 	}
 
 	// This sets an IdleTimeout on _all_ client connections. CONNECT requests
