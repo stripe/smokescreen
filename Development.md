@@ -246,7 +246,7 @@ default:
 # Run smokescreen (in a different shell)
 go run . --config-file config.yaml --egress-acl-file acl.yaml
 
-# Curl (weather should be in Greek since we set the Accept-Language header)
+# Curl
 curl --proxytunnel -x localhost:4750 --cacert vendor/github.com/stripe/goproxy/ca.pem https://wttr.in
 # Curl with HTTPS_PROXY
 HTTPS_PROXY=localhost:4750 curl --cacert vendor/github.com/stripe/goproxy/ca.pem https://wttr.in
@@ -301,7 +301,7 @@ default:
 # Run smokescreen (in a different shell)
 go run . --config-file config.yaml --egress-acl-file acl.yaml
 
-# Curl (weather should be in Greek since we set the Accept-Language header)
+# Curl
 curl --proxytunnel -x https://localhost:4750 --cacert vendor/github.com/stripe/goproxy/ca.pem --proxy-cacert mtls_setup/server-ca.crt --proxy-cert mtls_setup/client.crt --proxy-key mtls_setup/client.key https://wttr.in
 # Curl with HTTPS_PROXY
 HTTPS_PROXY=https://localhost:4750 curl --cacert vendor/github.com/stripe/goproxy/ca.pem --proxy-cacert mtls_setup/server-ca.crt --proxy-cert mtls_setup/client.crt --proxy-key mtls_setup/client.key https://wttr.in
