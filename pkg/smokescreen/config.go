@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -115,6 +116,33 @@ type Config struct {
 	// AddServerIpHeader configures goproxy to add X-Server-Ip header to HTTP CONNECT response
 	// populated with the remote server IP address
 	AddServerIpHeader bool
+
+	// UpstreamProxySelector allows dynamically selecting an upstream proxy for a request.
+	// Called after ACL decision and DNS resolution, but before establishing the connection.
+	//
+	// Return value should be a complete proxy URL (e.g., "https://proxy.example.com:8080")
+	// or empty string to fall back to the client-requested proxy (if any) or direct connection.
+	//
+	// Selection priority: UpstreamProxySelector > client X-Upstream-Https-Proxy header > direct connection
+	//
+	// IMPORTANT: This function is trusted and returned URLs are NOT validated. Ensure your
+	// implementation returns only safe, verified proxy URLs. The function must be thread-safe
+	// as it will be called concurrently for multiple requests.
+	UpstreamProxySelector func(sctx *SmokescreenContext, decision *ACLDecision) (proxyURL string)
+
+	// UpstreamProxyTLSConfigHandler allows customization of TLS config for upstream proxy connections.
+	// This is passed through to goproxy's UpstreamProxyTLSConfigHandler.
+	//
+	// If this handler returns an error, the connection is closed and the error is returned to the client.
+	// The function must be thread-safe as it will be called concurrently for multiple requests.
+	UpstreamProxyTLSConfigHandler func(ctx *goproxy.ProxyCtx, baseConfig *tls.Config, proxyURL *url.URL) (*tls.Config, error)
+
+	// UpstreamProxyConnectReqHandler allows modification of CONNECT request to upstream proxy.
+	// This is passed through to goproxy's UpstreamProxyConnectReqHandler.
+	//
+	// If this handler returns an error, the connection is closed and the error is returned to the client.
+	// The function must be thread-safe as it will be called concurrently for multiple requests.
+	UpstreamProxyConnectReqHandler func(ctx *goproxy.ProxyCtx, req *http.Request) error
 }
 
 type missingRoleError struct {
