@@ -71,6 +71,11 @@ type Config struct {
 	// A connection is idle if it has been inactive (no bytes in/out) for this many seconds.
 	IdleTimeout time.Duration
 
+	// HTTP server timeouts to prevent DoS attacks
+	ReadHeaderTimeout time.Duration // Maximum time to read request headers
+	ReadTimeout       time.Duration // Maximum time to read entire request
+	WriteTimeout      time.Duration // Maximum time to write response
+
 	// These are *only* used for traditional HTTP proxy requests
 	TransportMaxIdleConns        int
 	TransportMaxIdleConnsPerHost int
@@ -297,6 +302,10 @@ func NewConfig() *Config {
 		ShuttingDown:            atomic.Value{},
 		MetricsClient:           metrics.NewNoOpMetricsClient(),
 		Network:                 "ip",
+		// Set secure defaults to prevent DoS attacks
+		ReadHeaderTimeout: 300 * time.Second,
+		ReadTimeout:       300 * time.Second,
+		WriteTimeout:      300 * time.Second,
 	}
 }
 
