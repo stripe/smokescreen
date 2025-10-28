@@ -74,6 +74,8 @@ type ACLDecision struct {
 	allow                               bool
 	enforceWouldDeny                    bool
 	MitmConfig                          *acl.MitmConfig
+	SelectedUpstreamProxy               string // The proxy that will be used (from selector or client)
+	ClientRequestedProxy                string // The proxy requested by the client via X-Upstream-Https-Proxy header
 }
 
 type SmokescreenContext struct {
@@ -599,6 +601,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 	}
 
+	// Set upstream proxy hooks if configured
+	if config.UpstreamProxyTLSConfigHandler != nil {
+		proxy.UpstreamProxyTLSConfigHandler = config.UpstreamProxyTLSConfigHandler
+	}
+	if config.UpstreamProxyConnectReqHandler != nil {
+		proxy.UpstreamProxyConnectReqHandler = config.UpstreamProxyConnectReqHandler
+	}
+
 	// Handle traditional HTTP proxy and MITM outgoing requests (smokescreen - remote )
 	proxy.OnRequest().DoFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
@@ -632,7 +642,8 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			return req, rejectResponse(pctx, pctx.Error)
 		}
 
-		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, req, destination)
+		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, sctx, req, destination)
+		setUpstreamProxyHeader(req, sctx.Decision.SelectedUpstreamProxy)
 
 		// add context fields to all future log messages sent using this smokescreen context's Logger
 		sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
@@ -794,7 +805,8 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	// checkIfRequestShouldBeProxied can return an error if either the resolved address is disallowed,
 	// or if there is a DNS resolution failure, or if the subsequent proxy host (specified by the
 	// X-Https-Upstream-Proxy header in the CONNECT request to _this_ proxy) is disallowed.
-	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, pctx.Req, destination)
+	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, sctx, pctx.Req, destination)
+	setUpstreamProxyHeader(pctx.Req, sctx.Decision.SelectedUpstreamProxy)
 
 	// add context fields to all future log messages sent using this smokescreen context's Logger
 	sctx.Logger = sctx.Logger.WithFields(extractContextLogFields(pctx, sctx))
@@ -1069,7 +1081,26 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	}
 }
 
-func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destination hostport.HostPort) (*ACLDecision, time.Duration, error) {
+// setUpstreamProxyHeader sets the X-Upstream-Https-Proxy header on the request if a proxy is configured.
+func setUpstreamProxyHeader(req *http.Request, proxyURL string) {
+	if proxyURL != "" {
+		req.Header.Set("X-Upstream-Https-Proxy", proxyURL)
+	}
+}
+
+func selectUpstreamProxy(config *Config, sctx *SmokescreenContext, decision *ACLDecision) {
+	if config.UpstreamProxySelector != nil {
+		proxyURL := config.UpstreamProxySelector(sctx, decision)
+		if proxyURL != "" {
+			decision.SelectedUpstreamProxy = proxyURL
+			config.MetricsClient.Incr("upstream_proxy_selector.proxy_selected", 1)
+			return
+		}
+	}
+	decision.SelectedUpstreamProxy = decision.ClientRequestedProxy
+}
+
+func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req *http.Request, destination hostport.HostPort) (*ACLDecision, time.Duration, error) {
 	decision := checkACLsForRequest(config, req, destination)
 
 	var lookupTime time.Duration
@@ -1087,6 +1118,7 @@ func checkIfRequestShouldBeProxied(config *Config, req *http.Request, destinatio
 			decision.enforceWouldDeny = true
 		} else {
 			decision.ResolvedAddr = resolved
+			selectUpstreamProxy(config, sctx, decision)
 		}
 	}
 
@@ -1097,6 +1129,15 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 	decision := &ACLDecision{
 		OutboundHost: destination.String(),
 	}
+
+	// X-Upstream-Https-Proxy is a header that can be set by the client to specify
+	// a _subsequent_ proxy to use for the CONNECT request. This is used to allow traffic
+	// flow as in: client -(TLS)-> smokescreen -(TLS)-> external proxy -(TLS)-> destination.
+	// Without this header, there's no way for the client to specify a subsequent proxy.
+	// Also note - Get returns the first value for a given header, or the empty string,
+	// which is the behavior we want here.
+	clientProvidedProxy := req.Header.Get("X-Upstream-Https-Proxy")
+	decision.ClientRequestedProxy = clientProvidedProxy
 
 	if config.EgressACL == nil {
 		decision.allow = true
@@ -1120,16 +1161,8 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		return decision
 	}
 
-	// X-Upstream-Https-Proxy is a header that can be set by the client to specify
-	// a _subsequent_ proxy to use for the CONNECT request. This is used to allow traffic
-	// flow as in: client -(TLS)-> smokescreen -(TLS)-> external proxy -(TLS)-> destination.
-	// Without this header, there's no way for the client to specify a subsequent proxy.
-	// Also note - Get returns the first value for a given header, or the empty string,
-	// which is the behavior we want here.
-	connectProxyHost := req.Header.Get("X-Upstream-Https-Proxy")
-
-	if connectProxyHost != "" {
-		connectProxyUrl, err := url.Parse(connectProxyHost)
+	if clientProvidedProxy != "" {
+		connectProxyUrl, err := url.Parse(clientProvidedProxy)
 		if err == nil && connectProxyUrl.Hostname() == "" {
 			err = errors.New("proxy header contains invalid URL. The correct format is https://[username:password@]my.proxy.srv:12345")
 		}
@@ -1147,10 +1180,10 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 			return decision
 		}
 
-		connectProxyHost = connectProxyUrl.Hostname()
+		clientProvidedProxy = connectProxyUrl.Hostname()
 	}
 
-	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, connectProxyHost)
+	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, clientProvidedProxy)
 	decision.Project = ACLDecision.Project
 	decision.Reason = ACLDecision.Reason
 	decision.MitmConfig = ACLDecision.MitmConfig
