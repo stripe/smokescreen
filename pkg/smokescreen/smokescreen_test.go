@@ -100,6 +100,25 @@ func TestClassifyAddr(t *testing.T) {
 		// Broadcast addresses
 		testCase{"255.255.255.255", 1, ipDenyNotGlobalUnicast},
 		testCase{"ff02:0:0:0:0:0:0:2", 1, ipDenyNotGlobalUnicast},
+
+		// IPv6 embedding schemes (RFC 6052, RFC 3056, RFC 4380, RFC 4291)
+		// NAT64 well-known prefix (64:ff9b::/96) - embeds IPv4 in last 32 bits
+		testCase{"64:ff9b::ac1c:5", 1, ipDenyIPv6Embedding},    // 172.28.0.5
+		testCase{"64:ff9b::c000:201", 1, ipDenyIPv6Embedding},  // 192.0.2.1
+		testCase{"64:ff9b::a00:1", 1, ipDenyIPv6Embedding},     // 10.0.0.1
+		testCase{"64:ff9b::808:808", 1, ipDenyIPv6Embedding},   // 8.8.8.8 (public IP in NAT64)
+		testCase{"64:ff9b::ffff:ffff", 1, ipDenyIPv6Embedding}, // 255.255.255.255 in NAT64
+		// 6to4 prefix (2002::/16) - embeds IPv4 in bits 16-47
+		testCase{"2002:c000:201::1", 1, ipDenyIPv6Embedding}, // 192.0.2.1
+		testCase{"2002:a00:1::1", 1, ipDenyIPv6Embedding},    // 10.0.0.1
+		testCase{"2002:808:808::1", 1, ipDenyIPv6Embedding},  // 8.8.8.8
+		// Teredo prefix (2001::/32) - embeds IPv4 addresses
+		testCase{"2001:0:4136:e378:8000:63bf:3fff:fdd2", 1, ipDenyIPv6Embedding},
+		testCase{"2001:0:1234:5678:9abc:def0:1234:5678", 1, ipDenyIPv6Embedding},
+
+		testCase{"2001:4860:4860::8888", 1, ipAllowDefault}, // Google DNS (not embedding)
+		testCase{"2606:4700:4700::1111", 1, ipAllowDefault}, // Cloudflare DNS
+		testCase{"64:ff9c::1", 1, ipAllowDefault},           // Outside NAT64 /96 prefix
 	}
 
 	for _, test := range testIPs {
@@ -206,10 +225,10 @@ func TestSelectTargetAddr(t *testing.T) {
 			errorContains: "no valid IP found among resolved addresses",
 		},
 		{
-			name:        "Empty IP list",
-			ips:         []string{},
-			port:        80,
-			expectError: true,
+			name:          "Empty IP list",
+			ips:           []string{},
+			port:          80,
+			expectError:   true,
 			errorContains: "no IP addresses to evaluate",
 		},
 		{
@@ -245,17 +264,17 @@ func TestSelectTargetAddr(t *testing.T) {
 			config := NewConfig()
 			config.Log = logrus.New()
 			config.Log.SetLevel(logrus.DebugLevel)
-			
+
 			if len(tt.allowRanges) > 0 {
 				err := config.SetAllowRanges(tt.allowRanges)
 				require.NoError(t, err)
 			}
-			
+
 			if len(tt.denyRanges) > 0 {
 				err := config.SetDenyRanges(tt.denyRanges)
 				require.NoError(t, err)
 			}
-			
+
 			config.TemporarilyDeferredIPs = tt.temporarilyDeferredIPs
 
 			// Convert string IPs to net.IP
@@ -297,23 +316,23 @@ func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 
 	// All IPs are deferred, should select based on priority in deferred list
 	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
-	
+
 	selectedAddr, err := selectTargetAddr(config, ips, 80)
-	
+
 	require.NoError(t, err)
 	// Should select 8.8.4.4 because it's first in the TemporarilyDeferredIPs list
 	assert.Equal(t, "8.8.4.4", selectedAddr.IP.String())
 
 	// Check that we have the fallback log entry
 	entries := hook.AllEntries()
-	
+
 	var foundFallbackLog bool
 	for _, entry := range entries {
 		if entry.Data["reason"] == "all lookup IPs are in deferred list" && entry.Data["ip"] == "8.8.4.4" {
 			foundFallbackLog = true
 		}
 	}
-	
+
 	assert.True(t, foundFallbackLog, "Should log fallback selection when all IPs are deferred")
 }
 
