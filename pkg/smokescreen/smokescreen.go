@@ -33,6 +33,7 @@ const (
 	ipDenyPrivateRange
 	ipDenyUserConfigured
 	ipDenyCGNAT
+	ipDenyIPv6Embedding
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 
@@ -134,6 +135,8 @@ func (t ipType) String() string {
 		return "Deny: User Configured"
 	case ipDenyCGNAT:
 		return "Deny: CGNAT Range"
+	case ipDenyIPv6Embedding:
+		return "Deny: IPv6 Embedding"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -153,6 +156,8 @@ func (t ipType) statsdString() string {
 		return "resolver.deny.user_configured"
 	case ipDenyCGNAT:
 		return "resolver.deny.cgnat_range"
+	case ipDenyIPv6Embedding:
+		return "resolver.deny.ipv6_embedding"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -178,6 +183,9 @@ func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 }
 
 var cgnatRange *net.IPNet
+var nat64WellKnownPrefix *net.IPNet
+var sixToFourPrefix *net.IPNet
+var teredoPrefix *net.IPNet
 
 func init() {
 	var err error
@@ -186,11 +194,67 @@ func init() {
 	if err != nil {
 		panic(fmt.Sprintf("smokescreen internal error: could not parse CGNAT range: %v", err))
 	}
+
+	// RFC 6052 NAT64 well-known prefix
+	_, nat64WellKnownPrefix, err = net.ParseCIDR("64:ff9b::/96")
+	if err != nil {
+		panic(fmt.Sprintf("smokescreen internal error: could not parse NAT64 prefix: %v", err))
+	}
+
+	// RFC 3056 6to4 prefix (embeds IPv4 address)
+	_, sixToFourPrefix, err = net.ParseCIDR("2002::/16")
+	if err != nil {
+		panic(fmt.Sprintf("smokescreen internal error: could not parse 6to4 prefix: %v", err))
+	}
+
+	// RFC 4380 Teredo prefix (embeds IPv4 addresses)
+	_, teredoPrefix, err = net.ParseCIDR("2001::/32")
+	if err != nil {
+		panic(fmt.Sprintf("smokescreen internal error: could not parse Teredo prefix: %v", err))
+	}
 }
 
 // addrIsCGNAT checks if an address is within the Carrier-Grade NAT range.
 func addrIsCGNAT(addr *net.TCPAddr) bool {
 	return cgnatRange.Contains(addr.IP)
+}
+
+// addrIsNAT64 checks if an IPv6 address is within the NAT64 well-known prefix.
+// These addresses embed IPv4 addresses and can bypass IPv4 safety checks.
+func addrIsNAT64(addr *net.TCPAddr) bool {
+	// Only check IPv6 addresses (skip IPv4)
+	if addr.IP.To4() != nil {
+		return false
+	}
+	return nat64WellKnownPrefix.Contains(addr.IP)
+}
+
+// addrIs6to4 checks if an IPv6 address is within the 6to4 prefix.
+// These addresses embed IPv4 addresses in bits 16-47.
+func addrIs6to4(addr *net.TCPAddr) bool {
+	// Only check IPv6 addresses (skip IPv4)
+	if addr.IP.To4() != nil {
+		return false
+	}
+	return sixToFourPrefix.Contains(addr.IP)
+}
+
+// addrIsTeredo checks if an IPv6 address is within the Teredo prefix.
+// These addresses embed IPv4 addresses (both client and server).
+func addrIsTeredo(addr *net.TCPAddr) bool {
+	// Only check IPv6 addresses (skip IPv4)
+	if addr.IP.To4() != nil {
+		return false
+	}
+	return teredoPrefix.Contains(addr.IP)
+}
+
+// addrHasIPv6Embedding checks if an IPv6 address uses any IPv4 embedding scheme.
+// Note: IPv4-mapped IPv6 addresses (::ffff:0:0/96) are automatically converted to IPv4
+// by Go's net.ParseIP and are handled by regular IPv4 safety checks, so we don't
+// need to check for them explicitly.
+func addrHasIPv6Embedding(addr *net.TCPAddr) bool {
+	return addrIsNAT64(addr) || addrIs6to4(addr) || addrIsTeredo(addr)
 }
 
 func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAddr) bool {
@@ -217,6 +281,10 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 		return ipAllowUserConfigured
 	} else if addrIsInRuleRange(config.DenyRanges, addr) {
 		return ipDenyUserConfigured
+	} else if addrHasIPv6Embedding(addr) {
+		// Block IPv6 addresses that embed IPv4 addresses (NAT64, 6to4, Teredo, IPv4-mapped)
+		// These can bypass IPv4 safety checks and enable SSRF attacks
+		return ipDenyIPv6Embedding
 	} else if addr.IP.IsPrivate() && !config.UnsafeAllowPrivateRanges {
 		return ipDenyPrivateRange
 	} else if addrIsCGNAT(addr) {
