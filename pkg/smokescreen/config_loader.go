@@ -109,6 +109,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		c.ExitTimeout = *yc.ExitTimeout
 	}
 
+	c.TransportMaxIdleConns = yc.TransportMaxIdleConns
+	c.TransportMaxIdleConnsPerHost = yc.TransportMaxIdleConnsPerHost
+
 	// Apply HTTP server timeouts if configured, otherwise keep defaults
 	if yc.ReadHeaderTimeout != 0 {
 		c.ReadHeaderTimeout = yc.ReadHeaderTimeout
