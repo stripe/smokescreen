@@ -603,7 +603,7 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 	}
 
 	if cfg.TransportMaxIdleConnsPerHost != 0 {
-		tr.MaxIdleConnsPerHost = cfg.TransportMaxIdleConns
+		tr.MaxIdleConnsPerHost = cfg.TransportMaxIdleConnsPerHost
 	}
 
 	if cfg.IdleTimeout != 0 {
