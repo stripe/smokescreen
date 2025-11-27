@@ -1770,8 +1770,8 @@ func TestMitm(t *testing.T) {
 		serverCh <- true
 		<-clientCh
 
-		// Metrics should show one successful connection and a corresponding successful
-		// DNS request along with its timing metric.
+		// Metrics should show one successful connection and two DNS requests:
+		// one for CONNECT and one for the MITM GET request (ACL check on new destination)
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
@@ -1779,10 +1779,10 @@ func TestMitm(t *testing.T) {
 		r.Equal(i, uint64(1))
 		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
-		r.Equal(lookups, uint64(1))
+		r.Equal(lookups, uint64(2))
 		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
-		r.Equal(ltime, uint64(1))
+		r.Equal(ltime, uint64(2))
 
 		proxyDecision := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(proxyDecision)
