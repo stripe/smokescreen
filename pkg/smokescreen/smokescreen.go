@@ -443,14 +443,6 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		return nil, fmt.Errorf("dialContext missing required *SmokescreenContext")
 	}
 	d := sctx.Decision
-	
-	// DEBUG: Log the destination being dialed
-	sctx.cfg.Log.WithFields(logrus.Fields{
-		"network": network,
-		"addr": addr,
-		"original_outbound_host": d.OutboundHost,
-		"connect_action": fmt.Sprintf("%+v", pctx.ConnectAction),
-	}).Println("dialContext called")
 
 	// If an address hasn't been resolved, does not match the original OutboundHost,
 	// or is not tcp we must re-resolve it before establishing the connection.
@@ -696,11 +688,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// but perform ACL check on the new destination
 		if pctx.ConnectAction == goproxy.ConnectMitm {
 			if existingSctx, ok := pctx.UserData.(*SmokescreenContext); ok {
-				config.Log.WithFields(logrus.Fields{
-					"role": existingSctx.Decision.Role,
-					"original_outbound_host": existingSctx.Decision.OutboundHost,
-					"new_url": req.URL.String(),
-				}).Info("MITM request, reusing role from CONNECT but checking new destination")
+				config.Log.Info("MITM request, reusing role from CONNECT but checking new destination")
 				sctx = existingSctx
 			} else {
 				config.Log.Error("MITM request but UserData is not SmokescreenContext!")
@@ -883,11 +871,6 @@ func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) l
 func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string, error) {
 	sctx := pctx.UserData.(*SmokescreenContext)
 
-	config.Log.WithFields(logrus.Fields{
-		"host": pctx.Req.Host,
-		"has_tls": pctx.Req.TLS != nil,
-	}).Info("handleConnect() - Processing CONNECT request")
-
 	// Check if requesting Role is allowed to talk to remote
 	destination, err := hostport.New(pctx.Req.Host, false)
 	if err != nil {
@@ -899,13 +882,6 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	// or if there is a DNS resolution failure, or if the subsequent proxy host (specified by the
 	// X-Https-Upstream-Proxy header in the CONNECT request to _this_ proxy) is disallowed.
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, sctx, pctx.Req, destination)
-	
-	config.Log.WithFields(logrus.Fields{
-		"role": sctx.Decision.Role,
-		"allow": sctx.Decision.allow,
-		"reason": sctx.Decision.Reason,
-		"outbound_host": sctx.Decision.OutboundHost,
-	}).Info("handleConnect() - ACL decision made")
 	setUpstreamProxyHeader(pctx.Req, sctx.Decision.SelectedUpstreamProxy)
 
 	// add context fields to all future log messages sent using this smokescreen context's Logger
@@ -980,7 +956,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	if err = config.Validate(); err != nil {
 		config.Log.Fatal("invalid config", err)
 	}
-	config.Log.Println("building proxy")
 	proxy := BuildProxy(config)
 	listener := config.Listener
 
@@ -1163,24 +1138,11 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	var role string
 	var err error
 	
-	config.Log.WithFields(logrus.Fields{
-		"has_tls": req.TLS != nil,
-		"has_peer_certs": req.TLS != nil && len(req.TLS.PeerCertificates) > 0,
-		"method": req.Method,
-		"url": req.URL.String(),
-	}).Info("getRole() - Extracting role from request")
-	
 	if config.RoleFromRequest != nil {
 		role, err = config.RoleFromRequest(req)
 	} else {
 		err = MissingRoleError("RoleFromRequest is not configured")
 	}
-	
-	config.Log.WithFields(logrus.Fields{
-		"role": role,
-		"error": err,
-		"is_missing_role_error": IsMissingRoleError(err),
-	}).Info("getRole() - Role extraction result")
 
 	switch {
 	case err == nil:
