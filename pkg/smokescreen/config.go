@@ -135,6 +135,14 @@ type Config struct {
 	// as it will be called concurrently for multiple requests.
 	UpstreamProxySelector func(sctx *SmokescreenContext, decision *ACLDecision) (proxyURL string)
 
+	// MaxConcurrentRequests limits the number of requests that can be processed simultaneously.
+	// Set to 0 to disable concurrency limiting.
+	MaxConcurrentRequests int
+
+	// MaxRequestRate limits the number of requests per second.
+	// Set to 0 to disable rate limiting.
+	MaxRequestRate float64
+
 	// UpstreamProxyTLSConfigHandler allows customization of TLS config for upstream proxy connections.
 	// This is passed through to goproxy's UpstreamProxyTLSConfigHandler.
 	//
@@ -278,6 +286,22 @@ func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 		},
 	}
 	config.Resolver = &r
+	return nil
+}
+
+// SetRateLimits configures the rate and concurrency limits for the proxy.
+// maxConcurrent limits simultaneous requests (0 = unlimited).
+// maxRate limits requests per second (0 = unlimited).
+func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64) error {
+	if maxConcurrent < 0 {
+		return fmt.Errorf("maxConcurrent must be >= 0, got %d", maxConcurrent)
+	}
+	if maxRate < 0 {
+		return fmt.Errorf("maxRate must be >= 0, got %.2f", maxRate)
+	}
+	
+	config.MaxConcurrentRequests = maxConcurrent
+	config.MaxRequestRate = maxRate
 	return nil
 }
 

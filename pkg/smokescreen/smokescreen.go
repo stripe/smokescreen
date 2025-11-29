@@ -67,6 +67,9 @@ const (
 	LogMitmReqHeaders        = "mitm_req_headers"
 )
 
+// Global counter for tracking concurrent requests (for analysis)
+var currentConcurrentRequests int64
+
 type ipType int
 
 type ACLDecision struct {
@@ -303,7 +306,8 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
 	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
 		return nil, err
@@ -964,6 +968,13 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	var handler http.Handler = proxy
+
+	// Apply rate and concurrency limiting if configured
+	if config.MaxConcurrentRequests > 0 || config.MaxRequestRate > 0 {
+		handler = NewRateLimitedHandler(handler, config)
+		config.Log.Printf("Rate and concurrency limiting enabled (max_concurrent=%d, max_rate=%.0f req/s)",
+			config.MaxConcurrentRequests, config.MaxRequestRate)
+	}
 
 	if config.Healthcheck != nil {
 		handler = &HealthcheckMiddleware{

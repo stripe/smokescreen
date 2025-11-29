@@ -184,7 +184,7 @@ func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 	mc.mu.RUnlock()
 
 	if ok {
-		gauge.With(tags).Add(value)
+		gauge.With(tags).Set(value)
 		return
 	}
 
@@ -198,7 +198,7 @@ func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 	}
 	mc.mu.Unlock()
 
-	gauge.With(tags).Add(value)
+	gauge.With(tags).Set(value)
 }
 
 func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(

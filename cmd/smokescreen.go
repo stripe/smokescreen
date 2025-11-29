@@ -156,6 +156,16 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Value: "",
 			Usage: "Set Smokescreen's upstream HTTPS proxy address",
 		},
+		cli.IntFlag{
+			Name:  "max-concurrent-requests",
+			Value: 0,
+			Usage: "Maximum number of requests that can be processed simultaneously.\n\t\t0 = unlimited (default).",
+		},
+		cli.Float64Flag{
+			Name:  "max-request-rate",
+			Value: 0,
+			Usage: "Maximum number of requests per second.\n\t\t0 = unlimited (default).",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -303,6 +313,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("upstream-https-proxy-addr") {
 			conf.UpstreamHttpsProxyAddr = c.String("upstream-https-proxy-addr")
+		}
+
+		if c.IsSet("max-concurrent-requests") || c.IsSet("max-request-rate") {
+			maxConcurrent := c.Int("max-concurrent-requests")
+			maxRate := c.Float64("max-request-rate")
+			if err := conf.SetRateLimits(maxConcurrent, maxRate); err != nil {
+				return err
+			}
 		}
 
 		// Setup the connection tracker if there is not yet one in the config
