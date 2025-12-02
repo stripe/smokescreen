@@ -166,6 +166,16 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Value: 0,
 			Usage: "Maximum number of requests per second.\n\t\t0 = unlimited (default).",
 		},
+		cli.IntFlag{
+			Name:  "max-request-burst",
+			Value: 0,
+			Usage: "Maximum burst capacity for rate limiting.\n\t\t0 = use default (2x max-request-rate).",
+		},
+		cli.DurationFlag{
+			Name:  "dns-timeout",
+			Value: 5 * time.Second,
+			Usage: "Maximum time to wait for DNS resolution.",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -318,9 +328,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		if c.IsSet("max-concurrent-requests") || c.IsSet("max-request-rate") {
 			maxConcurrent := c.Int("max-concurrent-requests")
 			maxRate := c.Float64("max-request-rate")
-			if err := conf.SetRateLimits(maxConcurrent, maxRate); err != nil {
+			maxBurst := c.Int("max-request-burst")
+			if err := conf.SetRateLimits(maxConcurrent, maxRate, maxBurst); err != nil {
 				return err
 			}
+		}
+
+		if c.IsSet("dns-timeout") {
+			conf.DNSTimeout = c.Duration("dns-timeout")
 		}
 
 		// Setup the connection tracker if there is not yet one in the config

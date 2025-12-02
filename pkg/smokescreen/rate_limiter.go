@@ -21,13 +21,14 @@ type RateLimitedHandler struct {
 	concurrencyLimiter chan struct{}
 	rateLimiter        *rateLimiter
 	config             *Config
-	maxConcurrent      int
-	maxRate            float64
 }
 
-func newRateLimiter(tokensPerSecond float64) *rateLimiter {
-	// Burst capacity is 2x the per-second rate
-	burst := tokensPerSecond * 2
+func newRateLimiter(tokensPerSecond float64, burstCapacity int) *rateLimiter {
+	// Use configured burst, or default to 2x rate
+	burst := float64(burstCapacity)
+	if burstCapacity <= 0 {
+		burst = tokensPerSecond * 2
+	}
 	return &rateLimiter{
 		tokens:     burst,
 		maxTokens:  burst,
@@ -64,7 +65,7 @@ func NewRateLimitedHandler(handler http.Handler, config *Config) *RateLimitedHan
 
 	var rateLim *rateLimiter
 	if config.MaxRequestRate > 0 {
-		rateLim = newRateLimiter(config.MaxRequestRate)
+		rateLim = newRateLimiter(config.MaxRequestRate, config.MaxRequestBurst)
 	}
 
 	return &RateLimitedHandler{
@@ -72,14 +73,13 @@ func NewRateLimitedHandler(handler http.Handler, config *Config) *RateLimitedHan
 		concurrencyLimiter: concurrencyLimiter,
 		rateLimiter:        rateLim,
 		config:             config,
-		maxConcurrent:      config.MaxConcurrentRequests,
-		maxRate:            config.MaxRequestRate,
 	}
 }
 
 func (r *RateLimitedHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if r.rateLimiter != nil && !r.rateLimiter.Allow() {
 		r.config.MetricsClient.Incr("requests.rate_limited", 1)
+		w.Header().Set("Retry-After", "1")
 		http.Error(w, "Proxy rate limit exceeded. Please retry later.", http.StatusTooManyRequests)
 		return
 	}
@@ -90,6 +90,7 @@ func (r *RateLimitedHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			defer func() { <-r.concurrencyLimiter }()
 		default:
 			r.config.MetricsClient.Incr("requests.concurrency_limited", 1)
+			w.Header().Set("Retry-After", "1")
 			http.Error(w, "Proxy overloaded. Please retry later.", http.StatusServiceUnavailable)
 			return
 		}

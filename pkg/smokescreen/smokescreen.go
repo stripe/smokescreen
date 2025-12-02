@@ -306,7 +306,11 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	dnsTimeout := config.DNSTimeout
+	if dnsTimeout == 0 {
+		dnsTimeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
 	defer cancel()
 	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
@@ -972,8 +976,8 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	// Apply rate and concurrency limiting if configured
 	if config.MaxConcurrentRequests > 0 || config.MaxRequestRate > 0 {
 		handler = NewRateLimitedHandler(handler, config)
-		config.Log.Printf("Rate and concurrency limiting enabled (max_concurrent=%d, max_rate=%.0f req/s)",
-			config.MaxConcurrentRequests, config.MaxRequestRate)
+		config.Log.Printf("Rate and concurrency limiting enabled (max_concurrent=%d, max_rate=%.0f req/s, max_request_burst=%d)",
+			config.MaxConcurrentRequests, config.MaxRequestRate, config.MaxRequestBurst)
 	}
 
 	if config.Healthcheck != nil {

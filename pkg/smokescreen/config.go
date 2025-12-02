@@ -143,6 +143,14 @@ type Config struct {
 	// Set to 0 to disable rate limiting.
 	MaxRequestRate float64
 
+	// MaxRequestBurst is the maximum number of requests allowed in a burst.
+	// Set to 0 to use default (2x MaxRequestRate).
+	MaxRequestBurst int
+
+	// DNSTimeout is the maximum time to wait for DNS resolution.
+	// Set to 0 to use default (5 seconds).
+	DNSTimeout time.Duration
+
 	// UpstreamProxyTLSConfigHandler allows customization of TLS config for upstream proxy connections.
 	// This is passed through to goproxy's UpstreamProxyTLSConfigHandler.
 	//
@@ -292,7 +300,7 @@ func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 // SetRateLimits configures the rate and concurrency limits for the proxy.
 // maxConcurrent limits simultaneous requests (0 = unlimited).
 // maxRate limits requests per second (0 = unlimited).
-func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64) error {
+func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64, maxRequestBurst int) error {
 	if maxConcurrent < 0 {
 		return fmt.Errorf("maxConcurrent must be >= 0, got %d", maxConcurrent)
 	}
@@ -302,6 +310,7 @@ func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64) error {
 	
 	config.MaxConcurrentRequests = maxConcurrent
 	config.MaxRequestRate = maxRate
+	config.MaxRequestBurst = maxRequestBurst
 	return nil
 }
 
@@ -330,6 +339,7 @@ func NewConfig() *Config {
 		ReadHeaderTimeout: 300 * time.Second,
 		ReadTimeout:       300 * time.Second,
 		WriteTimeout:      300 * time.Second,
+		DNSTimeout:        5 * time.Second,
 	}
 }
 
