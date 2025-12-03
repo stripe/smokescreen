@@ -66,7 +66,6 @@ const (
 	LogMitmReqMethod         = "mitm_req_method"
 	LogMitmReqHeaders        = "mitm_req_headers"
 )
-
 type ipType int
 
 type ACLDecision struct {
@@ -303,7 +302,12 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 		return nil, err
 	}
 
-	ctx := context.Background()
+	dnsTimeout := config.DNSTimeout
+	if dnsTimeout == 0 {
+		dnsTimeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
+	defer cancel()
 	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
 		return nil, err
@@ -964,6 +968,13 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	var handler http.Handler = proxy
+
+	// Apply rate and concurrency limiting if configured
+	if config.MaxConcurrentRequests > 0 || config.MaxRequestRate > 0 {
+		handler = NewRateLimitedHandler(handler, config)
+		config.Log.Printf("Rate and concurrency limiting enabled (max_concurrent=%d, max_rate=%.0f req/s, max_request_burst=%d)",
+			config.MaxConcurrentRequests, config.MaxRequestRate, config.MaxRequestBurst)
+	}
 
 	if config.Healthcheck != nil {
 		handler = &HealthcheckMiddleware{

@@ -26,6 +26,37 @@ import (
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
+// Configuration defaults
+const (
+	// Server defaults
+	DefaultPort              uint16        = 4750
+	DefaultConnectTimeout                  = 10 * time.Second
+	DefaultExitTimeout                     = 500 * time.Minute
+	DefaultNetwork             = "ip"
+	DefaultStatsSocketFileMode = 0700
+
+	// HTTP server timeouts
+	DefaultReadHeaderTimeout = 300 * time.Second
+	DefaultReadTimeout       = 300 * time.Second
+	DefaultWriteTimeout      = 300 * time.Second
+
+	// DNS
+	DefaultDNSTimeout = 5 * time.Second
+
+	// Prometheus defaults
+	DefaultPrometheusEndpoint = "/metrics"
+	DefaultPrometheusListenIP = "0.0.0.0"
+	DefaultPrometheusPort     = "9810"
+
+	// Statsd defaults
+	DefaultStatsdAddress = "127.0.0.1:8200"
+
+	// Rate limiting defaults
+	DefaultMaxConcurrentRequests = 0    // 0 = unlimited
+	DefaultMaxRequestRate        = 0.0  // 0 = unlimited
+	DefaultMaxRequestBurst       = -1   // -1 = use 2x rate
+)
+
 type RuleRange struct {
 	Net  net.IPNet
 	Port int
@@ -134,6 +165,22 @@ type Config struct {
 	// implementation returns only safe, verified proxy URLs. The function must be thread-safe
 	// as it will be called concurrently for multiple requests.
 	UpstreamProxySelector func(sctx *SmokescreenContext, decision *ACLDecision) (proxyURL string)
+
+	// MaxConcurrentRequests limits the number of requests that can be processed simultaneously.
+	// Set to 0 to disable concurrency limiting.
+	MaxConcurrentRequests int
+
+	// MaxRequestRate limits the number of requests per second.
+	// Set to 0 to disable rate limiting.
+	MaxRequestRate float64
+
+	// MaxRequestBurst is the maximum number of requests allowed in a burst.
+	// Set to 0 to use default (2x MaxRequestRate).
+	MaxRequestBurst int
+
+	// DNSTimeout is the maximum time to wait for DNS resolution.
+	// Set to 0 to use default (5 seconds).
+	DNSTimeout time.Duration
 
 	// UpstreamProxyTLSConfigHandler allows customization of TLS config for upstream proxy connections.
 	// This is passed through to goproxy's UpstreamProxyTLSConfigHandler.
@@ -281,6 +328,33 @@ func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 	return nil
 }
 
+// SetRateLimits configures the rate and concurrency limits for the proxy.
+// maxConcurrent limits simultaneous requests (0 = unlimited).
+// maxRate limits requests per second (0 = unlimited).
+// maxRequestBurst: -1 = use default (2x rate), >=0 = must be greater than maxRate.
+func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64, maxRequestBurst int) error {
+	if maxConcurrent < 0 {
+		return fmt.Errorf("maxConcurrent must be >= 0, got %d", maxConcurrent)
+	}
+	if maxRate < 0 {
+		return fmt.Errorf("maxRate must be >= 0, got %.2f", maxRate)
+	}
+	
+	if maxRequestBurst >= 0 && maxRate > 0 && float64(maxRequestBurst) <= maxRate {
+		return fmt.Errorf("maxRequestBurst (%d) must be greater than maxRequestRate (%.2f); omit to use default (2x rate)", maxRequestBurst, maxRate)
+	}
+	
+	// Apply default: 2x rate when not explicitly configured or configured negative
+	if maxRequestBurst < 0 {
+		maxRequestBurst = int(maxRate * 2)
+	}
+	
+	config.MaxConcurrentRequests = maxConcurrent
+	config.MaxRequestRate = maxRate
+	config.MaxRequestBurst = maxRequestBurst
+	return nil
+}
+
 // RFC 5280,  4.2.1.1
 type authKeyId struct {
 	Id []byte `asn1:"optional,tag:0"`
@@ -296,16 +370,17 @@ func NewConfig() *Config {
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log:                     log.New(),
-		Port:                    4750,
-		ExitTimeout:             500 * time.Minute,
-		StatsSocketFileMode:     os.FileMode(0700),
+		Port:                    DefaultPort,
+		ExitTimeout:             DefaultExitTimeout,
+		StatsSocketFileMode:     os.FileMode(DefaultStatsSocketFileMode),
 		ShuttingDown:            atomic.Value{},
 		MetricsClient:           metrics.NewNoOpMetricsClient(),
-		Network:                 "ip",
+		Network:                 DefaultNetwork,
 		// Set secure defaults to prevent DoS attacks
-		ReadHeaderTimeout: 300 * time.Second,
-		ReadTimeout:       300 * time.Second,
-		WriteTimeout:      300 * time.Second,
+		ReadHeaderTimeout: DefaultReadHeaderTimeout,
+		ReadTimeout:       DefaultReadTimeout,
+		WriteTimeout:      DefaultWriteTimeout,
+		DNSTimeout:        DefaultDNSTimeout,
 	}
 }
 

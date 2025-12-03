@@ -61,6 +61,13 @@ type yamlConfig struct {
 	UnsafeAllowPrivateRanges bool   `yaml:"unsafe_allow_private_ranges"`
 	MitmCaCertFile           string `yaml:"mitm_ca_cert_file"`
 	MitmCaKeyFile            string `yaml:"mitm_ca_key_file"`
+
+	// Rate and concurrency limiting
+	MaxConcurrentRequests int     `yaml:"max_concurrent_requests"`
+	MaxRequestRate        float64 `yaml:"max_request_rate"`
+	MaxRequestBurst       *int    `yaml:"max_request_burst"`
+
+	DNSTimeout            time.Duration `yaml:"dns_timeout"`
 }
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -206,6 +213,21 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return fmt.Errorf("could not populate x509 Leaf value: %w", err)
 		}
 		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
+	}
+
+	// Set rate and concurrency limits
+	if yc.MaxConcurrentRequests > 0 || yc.MaxRequestRate > 0 {
+		maxBurst := DefaultMaxRequestBurst
+		if yc.MaxRequestBurst != nil {
+			maxBurst = *yc.MaxRequestBurst
+		}
+		if err := c.SetRateLimits(yc.MaxConcurrentRequests, yc.MaxRequestRate, maxBurst); err != nil {
+			return err
+		}
+	}
+
+	if yc.DNSTimeout > 0 {
+		c.DNSTimeout = yc.DNSTimeout
 	}
 
 	return nil
