@@ -76,6 +76,11 @@ Here are the options you can give Smokescreen:
    --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
                                                  This should be an absolute path with all symlinks, if any, resolved.
    --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
+   --max-concurrent-requests value             Maximum simultaneous requests. 0 = unlimited (default: 0)
+   --max-request-rate value                    Maximum requests per second. 0 = unlimited (default: 0)
+   --max-request-burst value                   Maximum burst capacity. Must be > max-request-rate when specified.
+                                                 Omit to use default (2x max-request-rate).
+   --dns-timeout DURATION                      Maximum time to wait for DNS resolution (default: 5s)
    --version, -v                               print the version
 ```
 
@@ -123,6 +128,28 @@ func main() {
 ### IP Filtering
 
 To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config. 
+
+### Rate Limiting
+
+Smokescreen supports rate and concurrency limiting to protect against overload:
+
+| Option | Description |
+| ------ | ----------- |
+| `max-concurrent-requests` | Limits simultaneous in-flight requests. Excess requests receive `503 Service Unavailable`. |
+| `max-request-rate` | Limits requests per second using a token bucket algorithm. Excess requests receive `429 Too Many Requests`. |
+| `max-request-burst` | Sets token bucket capacity. Must be greater than `max-request-rate`. Defaults to 2x the rate if omitted. |
+
+**Example (CLI):**
+```bash
+smokescreen --max-concurrent-requests=100 --max-request-rate=50
+```
+
+**Example (YAML):**
+```yaml
+max_concurrent_requests: 100
+max_request_rate: 50
+max_request_burst: 150  # optional, defaults to 2x rate
+```
 
 ### Hostname ACLs
 
