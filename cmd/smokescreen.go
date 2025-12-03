@@ -6,7 +6,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/carlmjohnson/versioninfo"
 	log "github.com/sirupsen/logrus"
