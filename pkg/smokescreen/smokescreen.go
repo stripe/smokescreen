@@ -66,10 +66,6 @@ const (
 	LogMitmReqMethod         = "mitm_req_method"
 	LogMitmReqHeaders        = "mitm_req_headers"
 )
-
-// Global counter for tracking concurrent requests (for analysis)
-var currentConcurrentRequests int64
-
 type ipType int
 
 type ACLDecision struct {

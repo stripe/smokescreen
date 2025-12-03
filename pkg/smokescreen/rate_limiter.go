@@ -17,10 +17,11 @@ type rateLimiter struct {
 }
 
 type RateLimitedHandler struct {
-	handler            http.Handler
-	concurrencyLimiter chan struct{}
-	rateLimiter        *rateLimiter
-	config             *Config
+	handler                   http.Handler
+	concurrencyLimiter        chan struct{}
+	rateLimiter               *rateLimiter
+	config                    *Config
+	currentConcurrentRequests int64
 }
 
 func newRateLimiter(tokensPerSecond float64, burstCapacity int) *rateLimiter {
@@ -93,8 +94,8 @@ func (r *RateLimitedHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	}
 
 	// Track concurrent requests for monitoring
-	concurrent := atomic.AddInt64(&currentConcurrentRequests, 1)
-	defer atomic.AddInt64(&currentConcurrentRequests, -1)
+	concurrent := atomic.AddInt64(&r.currentConcurrentRequests, 1)
+	defer atomic.AddInt64(&r.currentConcurrentRequests, -1)
 	if r.config.MetricsClient != nil && concurrent%10 == 0 {
 		r.config.MetricsClient.Gauge("requests.concurrent", float64(concurrent), 1)
 	}
