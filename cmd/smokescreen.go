@@ -168,8 +168,8 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.IntFlag{
 			Name:  "max-request-burst",
-			Value: 0,
-			Usage: "Maximum burst capacity for rate limiting.\n\t\t0 = use default (2x max-request-rate).",
+			Value: -1,
+			Usage: "Maximum burst capacity for rate limiting.\n\t\tMust be greater than max-request-rate when specified.\n\t\tOmit to use default (2x max-request-rate).",
 		},
 		cli.DurationFlag{
 			Name:  "dns-timeout",

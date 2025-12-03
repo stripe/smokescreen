@@ -65,7 +65,7 @@ type yamlConfig struct {
 	// Rate and concurrency limiting
 	MaxConcurrentRequests int     `yaml:"max_concurrent_requests"`
 	MaxRequestRate        float64 `yaml:"max_request_rate"`
-	MaxRequestBurst       int     `yaml:"max_request_burst"`
+	MaxRequestBurst       *int    `yaml:"max_request_burst"`
 
 	DNSTimeout            time.Duration `yaml:"dns_timeout"`
 }
@@ -217,11 +217,11 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Set rate and concurrency limits
 	if yc.MaxConcurrentRequests > 0 || yc.MaxRequestRate > 0 {
-		MaxRequestBurst := 0
-		if yc.MaxRequestBurst > 0 {
-			MaxRequestBurst = yc.MaxRequestBurst
+		maxBurst := -1 // default: use 2x rate
+		if yc.MaxRequestBurst != nil {
+			maxBurst = *yc.MaxRequestBurst
 		}
-		if err := c.SetRateLimits(yc.MaxConcurrentRequests, yc.MaxRequestRate, MaxRequestBurst); err != nil {
+		if err := c.SetRateLimits(yc.MaxConcurrentRequests, yc.MaxRequestRate, maxBurst); err != nil {
 			return err
 		}
 	}

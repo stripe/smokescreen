@@ -24,11 +24,7 @@ type RateLimitedHandler struct {
 }
 
 func newRateLimiter(tokensPerSecond float64, burstCapacity int) *rateLimiter {
-	// Use configured burst, or default to 2x rate
 	burst := float64(burstCapacity)
-	if burstCapacity <= 0 {
-		burst = tokensPerSecond * 2
-	}
 	return &rateLimiter{
 		tokens:     burst,
 		maxTokens:  burst,
