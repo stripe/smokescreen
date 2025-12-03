@@ -53,12 +53,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.UintFlag{
 			Name:  "listen-port",
-			Value: 4750,
+			Value: uint(smokescreen.DefaultPort),
 			Usage: "Listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
 		},
 		cli.DurationFlag{
 			Name:  "timeout",
-			Value: time.Duration(10) * time.Second,
+			Value: smokescreen.DefaultConnectTimeout,
 			Usage: "Time out after `DURATION` when connecting.",
 		},
 		cli.BoolFlag{
@@ -91,18 +91,18 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.StringFlag{
 			Name:  "prometheus-endpoint",
-			Value: "/metrics",
-			Usage: "Expose prometheus metrics on `ENDPOINT`. Requires --expose-prometheus-metrics to be set. Defaults to \"/metrics\"",
+			Value: smokescreen.DefaultPrometheusEndpoint,
+			Usage: "Expose prometheus metrics on `ENDPOINT`. Requires --expose-prometheus-metrics to be set.",
 		},
 		cli.StringFlag{
-			Name: "prometheus-listen-ip",
-			Value: "0.0.0.0",
-			Usage: "Listen for prometheus metrics on interface with address IP. Requires --expose-prometheus-metrics to be set. Defaults to \"0.0.0.0\"",
+			Name:  "prometheus-listen-ip",
+			Value: smokescreen.DefaultPrometheusListenIP,
+			Usage: "Listen for prometheus metrics on interface with address IP. Requires --expose-prometheus-metrics to be set.",
 		},
 		cli.StringFlag{
 			Name:  "prometheus-port",
-			Value: "9810",
-			Usage: "Expose prometheus metrics on `PORT`. Requires --expose-prometheus-metrics to be set. Defaults to \"9810\"",
+			Value: smokescreen.DefaultPrometheusPort,
+			Usage: "Expose prometheus metrics on `PORT`. Requires --expose-prometheus-metrics to be set.",
 		},
 		cli.StringSliceFlag{
 			Name:  "resolver-address",
@@ -110,7 +110,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.StringFlag{
 			Name:  "statsd-address",
-			Value: "127.0.0.1:8200",
+			Value: smokescreen.DefaultStatsdAddress,
 			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
 		},
 		cli.StringFlag{
@@ -158,22 +158,22 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.IntFlag{
 			Name:  "max-concurrent-requests",
-			Value: 0,
+			Value: smokescreen.DefaultMaxConcurrentRequests,
 			Usage: "Maximum number of requests that can be processed simultaneously.\n\t\t0 = unlimited (default).",
 		},
 		cli.Float64Flag{
 			Name:  "max-request-rate",
-			Value: 0,
+			Value: smokescreen.DefaultMaxRequestRate,
 			Usage: "Maximum number of requests per second.\n\t\t0 = unlimited (default).",
 		},
 		cli.IntFlag{
 			Name:  "max-request-burst",
-			Value: -1,
+			Value: smokescreen.DefaultMaxRequestBurst,
 			Usage: "Maximum burst capacity for rate limiting.\n\t\tMust be greater than max-request-rate when specified.\n\t\tOmit to use default (2x max-request-rate).",
 		},
 		cli.DurationFlag{
 			Name:  "dns-timeout",
-			Value: 5 * time.Second,
+			Value: smokescreen.DefaultDNSTimeout,
 			Usage: "Maximum time to wait for DNS resolution.",
 		},
 	}

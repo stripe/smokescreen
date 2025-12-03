@@ -217,7 +217,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Set rate and concurrency limits
 	if yc.MaxConcurrentRequests > 0 || yc.MaxRequestRate > 0 {
-		maxBurst := -1 // default: use 2x rate
+		maxBurst := DefaultMaxRequestBurst
 		if yc.MaxRequestBurst != nil {
 			maxBurst = *yc.MaxRequestBurst
 		}

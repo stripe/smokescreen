@@ -26,6 +26,37 @@ import (
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
+// Configuration defaults
+const (
+	// Server defaults
+	DefaultPort              uint16        = 4750
+	DefaultConnectTimeout                  = 10 * time.Second
+	DefaultExitTimeout                     = 500 * time.Minute
+	DefaultNetwork             = "ip"
+	DefaultStatsSocketFileMode = 0700
+
+	// HTTP server timeouts
+	DefaultReadHeaderTimeout = 300 * time.Second
+	DefaultReadTimeout       = 300 * time.Second
+	DefaultWriteTimeout      = 300 * time.Second
+
+	// DNS
+	DefaultDNSTimeout = 5 * time.Second
+
+	// Prometheus defaults
+	DefaultPrometheusEndpoint = "/metrics"
+	DefaultPrometheusListenIP = "0.0.0.0"
+	DefaultPrometheusPort     = "9810"
+
+	// Statsd defaults
+	DefaultStatsdAddress = "127.0.0.1:8200"
+
+	// Rate limiting defaults
+	DefaultMaxConcurrentRequests = 0    // 0 = unlimited
+	DefaultMaxRequestRate        = 0.0  // 0 = unlimited
+	DefaultMaxRequestBurst       = -1   // -1 = use 2x rate
+)
+
 type RuleRange struct {
 	Net  net.IPNet
 	Port int
@@ -339,17 +370,17 @@ func NewConfig() *Config {
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log:                     log.New(),
-		Port:                    4750,
-		ExitTimeout:             500 * time.Minute,
-		StatsSocketFileMode:     os.FileMode(0700),
+		Port:                    DefaultPort,
+		ExitTimeout:             DefaultExitTimeout,
+		StatsSocketFileMode:     os.FileMode(DefaultStatsSocketFileMode),
 		ShuttingDown:            atomic.Value{},
 		MetricsClient:           metrics.NewNoOpMetricsClient(),
-		Network:                 "ip",
+		Network:                 DefaultNetwork,
 		// Set secure defaults to prevent DoS attacks
-		ReadHeaderTimeout: 300 * time.Second,
-		ReadTimeout:       300 * time.Second,
-		WriteTimeout:      300 * time.Second,
-		DNSTimeout:        5 * time.Second,
+		ReadHeaderTimeout: DefaultReadHeaderTimeout,
+		ReadTimeout:       DefaultReadTimeout,
+		WriteTimeout:      DefaultWriteTimeout,
+		DNSTimeout:        DefaultDNSTimeout,
 	}
 }
 
