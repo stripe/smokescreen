@@ -11,7 +11,7 @@ import (
 )
 
 func TestRateLimiter(t *testing.T) {
-	rl := newRateLimiter(10, 0) // 10 req/sec, burst 20
+	rl := newRateLimiter(10, 20) // 10 req/sec, burst 20
 
 	// First 20 requests should be allowed (burst)
 	for i := 0; i < 20; i++ {
@@ -40,8 +40,9 @@ func TestRateLimiter_CustomBurst(t *testing.T) {
 
 func TestRateLimitedHandler_RateLimit(t *testing.T) {
 	config := &Config{
-		MaxConcurrentRequests: 0, // disabled
-		MaxRequestRate:        5, // burst = 10
+		MaxConcurrentRequests: 0,  // disabled
+		MaxRequestRate:        5,  // 5 req/sec
+		MaxRequestBurst:       10, // burst = 10
 		MetricsClient:         metrics.NewNoOpMetricsClient(),
 	}
 
