@@ -61,7 +61,7 @@ github.com/prometheus/procfs/internal/util
 # github.com/rs/xid v1.2.1
 ## explicit
 github.com/rs/xid
-# github.com/sirupsen/logrus v1.9.0
+# github.com/sirupsen/logrus v1.9.1
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/test
