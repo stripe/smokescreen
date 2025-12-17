@@ -89,6 +89,8 @@ type SmokescreenContext struct {
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
+	// This is an explicit flag that ensures role reuse only for CONNECT MITM requests
+	// and prevents attacks that try to reuse the role for traditional HTTP proxy requests.
 	isConnectMitm bool
 }
 
@@ -687,13 +689,17 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// In the context of MITM request, reuse the existing SmokescreenContext (which has the role from CONNECT)
 		// but perform ACL check on the new destination
 		if pctx.ConnectAction == goproxy.ConnectMitm {
-			if existingSctx, ok := pctx.UserData.(*SmokescreenContext); ok {
-				config.Log.Info("MITM request, reusing role from CONNECT but checking new destination")
-				sctx = existingSctx
-			} else {
-				config.Log.Error("MITM request but UserData is not SmokescreenContext!")
-				sctx = newContext(config, httpProxy, req)
+			existingSctx, ok := pctx.UserData.(*SmokescreenContext)
+			if !ok || existingSctx.Decision == nil {
+				config.Log.Error("MITM request but UserData is not SmokescreenContext or missing Decision - rejecting request")
+				err := errors.New("MITM request missing context from CONNECT phase")
+				pctx.Error = denyError{err}
+				return req, rejectResponse(pctx, pctx.Error)
 			}
+			role := existingSctx.Decision.Role
+			config.Log.WithField("role", role).Info("MITM request, reusing role from CONNECT but checking new destination")
+			sctx = newContext(config, connectProxy, req)
+			sctx.Decision = &ACLDecision{Role: role}
 			sctx.isConnectMitm = true
 		} else {
 			// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
