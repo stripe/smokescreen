@@ -1233,7 +1233,16 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 	var roleErr error
 	
 	// Check if role is already populated in SmokescreenContext (e.g., from CONNECT in MITM mode)
-	if sctx.Decision != nil && sctx.Decision.Role != "" && sctx.isConnectMitm {
+	if sctx.isConnectMitm {
+		if sctx.Decision == nil || sctx.Decision.Role == "" {
+			config.Log.WithFields(logrus.Fields{
+				"decision_nil":  sctx.Decision == nil,
+				"role_empty":    sctx.Decision != nil && sctx.Decision.Role == "",
+			}).Error("MITM request missing required role from CONNECT phase")
+			config.MetricsClient.Incr("acl.role_not_determined", 1)
+			decision.Reason = "Client role cannot be determined"
+			return decision
+		}
 		role = sctx.Decision.Role
 		config.Log.WithFields(logrus.Fields{
 			"role": role,
