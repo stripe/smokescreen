@@ -1770,8 +1770,8 @@ func TestMitm(t *testing.T) {
 		serverCh <- true
 		<-clientCh
 
-		// Metrics should show one successful connection and a corresponding successful
-		// DNS request along with its timing metric.
+		// Metrics should show one successful connection and two DNS requests:
+		// one for CONNECT and one for the MITM GET request (ACL check on new destination)
 		tmc, ok := cfg.MetricsClient.(*metrics.MockMetricsClient)
 		r.True(ok)
 		i, err := tmc.GetCount("cn.atpt.total", map[string]string{"success": "true"})
@@ -1779,10 +1779,10 @@ func TestMitm(t *testing.T) {
 		r.Equal(i, uint64(1))
 		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
-		r.Equal(lookups, uint64(1))
+		r.Equal(lookups, uint64(2))
 		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
-		r.Equal(ltime, uint64(1))
+		r.Equal(ltime, uint64(2))
 
 		proxyDecision := findCanonicalProxyDecision(logHook.AllEntries())
 		r.NotNil(proxyDecision)
@@ -1798,6 +1798,59 @@ func TestMitm(t *testing.T) {
 		r.True(ok)
 		r.Equal("[REDACTED]", mitmReqHeaders.Get("Accept-Language"))
 		r.Equal("Go-http-client/1.1", mitmReqHeaders.Get("User-Agent"))
+	})
+
+	t.Run("CONNECT proxy ACL bypass via Host header in MITM mode", func(t *testing.T) {
+		a := assert.New(t)
+		r := require.New(t)
+
+		cfg, err := testConfig("test-mitm")
+		r.NoError(err)
+
+		// Enable MITM mode
+		mitmCa, err := tls.X509KeyPair(goproxy.CA_CERT, goproxy.CA_KEY)
+		r.NoError(err)
+		mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0])
+		r.NoError(err)
+		cfg.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
+
+		// Allow 127.0.0.1 where test server runs
+		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
+		r.NoError(err)
+
+		// Set up smokescreen proxy
+		l, err := net.Listen("tcp", "localhost:0")
+		r.NoError(err)
+		cfg.Listener = l
+
+		proxy := BuildProxy(cfg)
+		httpProxy := httptest.NewServer(proxy)
+		defer httpProxy.Close()
+
+		// Create a test server that will respond to requests
+		remote := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			io.WriteString(w, "Response from test server")
+		}))
+		defer remote.Close()
+
+		// Create HTTP client configured to use the proxy
+		client, err := proxyClient(httpProxy.URL)
+		r.NoError(err)
+
+		req, err := http.NewRequest("GET", remote.URL, nil)
+		r.NoError(err)
+
+		// Attempt ACL bypass by setting Host header to a disallowed IP
+		// The request URL is 127.0.0.1 (allowed), so initial CONNECT succeeds
+		// But the Host header points to 10.0.0.1 (disallowed)
+		req.Host = "10.0.0.1:443"
+
+		// Send the request through the proxy
+		resp, err := client.Do(req)
+
+		r.NoError(err)
+		a.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
 	})
 }
 

@@ -88,6 +88,9 @@ type SmokescreenContext struct {
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
+	// This is an explicit flag that ensures role reuse only for CONNECT MITM requests
+	// and prevents attacks that try to reuse the role for traditional HTTP proxy requests.
+	isConnectMitm bool
 }
 
 // ExitStatus is used to log Smokescreen's connection status at shutdown time
@@ -686,16 +689,30 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		// Set this on every request as every request mints a new goproxy.ProxyCtx
 		pctx.RoundTripper = rtFn
 
-		// In the context of MITM request. Once the originating request (client - smokescreen) has been allowed
-		// goproxy/https.go calls proxy.filterRequest on the outgoing request (smokescreen - remote host) which calls this function
-		// in this case we ony want to configure the RoundTripper
+		var sctx *SmokescreenContext
+		// In the context of MITM request, reuse the existing SmokescreenContext (which has the role from CONNECT)
+		// but perform ACL check on the new destination
 		if pctx.ConnectAction == goproxy.ConnectMitm {
-			return req, nil
+			existingSctx, ok := pctx.UserData.(*SmokescreenContext)
+			if !ok || existingSctx.Decision == nil {
+				config.Log.WithFields(logrus.Fields{
+					"context_valid": ok,
+					"decision_present": existingSctx != nil && existingSctx.Decision != nil,
+				}).Error("MITM request missing required context or decision from CONNECT phase - rejecting request")
+				err := errors.New("MITM request missing context from CONNECT phase")
+				pctx.Error = denyError{err}
+				return req, rejectResponse(pctx, pctx.Error)
+			}
+			role := existingSctx.Decision.Role
+			config.Log.WithField("role", role).Info("MITM request, reusing role from CONNECT but checking new destination")
+			sctx = newContext(config, connectProxy, req)
+			sctx.Decision = &ACLDecision{Role: role}
+			sctx.isConnectMitm = true
+		} else {
+			// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
+			// proxy requests we are able to specify the request during the call to OnResponse().
+			sctx = newContext(config, httpProxy, req)
 		}
-
-		// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
-		// proxy requests we are able to specify the request during the call to OnResponse().
-		sctx := newContext(config, httpProxy, req)
 
 		// Attach SmokescreenContext to goproxy.ProxyCtx
 		pctx.UserData = sctx
@@ -952,7 +969,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	if err = config.Validate(); err != nil {
 		config.Log.Fatal("invalid config", err)
 	}
-
 	proxy := BuildProxy(config)
 	listener := config.Listener
 
@@ -1141,7 +1157,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 func getRole(config *Config, req *http.Request) (string, error) {
 	var role string
 	var err error
-
+	
 	if config.RoleFromRequest != nil {
 		role, err = config.RoleFromRequest(req)
 	} else {
@@ -1183,7 +1199,7 @@ func selectUpstreamProxy(config *Config, sctx *SmokescreenContext, decision *ACL
 }
 
 func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req *http.Request, destination hostport.HostPort) (*ACLDecision, time.Duration, error) {
-	decision := checkACLsForRequest(config, req, destination)
+	decision := checkACLsForRequest(config, sctx, req, destination)
 
 	var lookupTime time.Duration
 	if decision.allow {
@@ -1207,7 +1223,7 @@ func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req
 	return decision, lookupTime, nil
 }
 
-func checkACLsForRequest(config *Config, req *http.Request, destination hostport.HostPort) *ACLDecision {
+func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Request, destination hostport.HostPort) *ACLDecision {
 	decision := &ACLDecision{
 		OutboundHost: destination.String(),
 	}
@@ -1227,11 +1243,32 @@ func checkACLsForRequest(config *Config, req *http.Request, destination hostport
 		return decision
 	}
 
-	role, roleErr := getRole(config, req)
-	if roleErr != nil {
-		config.MetricsClient.Incr("acl.role_not_determined", 1)
-		decision.Reason = "Client role cannot be determined"
-		return decision
+	var role string
+	var roleErr error
+	
+	// Check if role is already populated in SmokescreenContext (e.g., from CONNECT in MITM mode)
+	if sctx.isConnectMitm {
+		if sctx.Decision == nil || sctx.Decision.Role == "" {
+			config.Log.WithFields(logrus.Fields{
+				"decision_nil":  sctx.Decision == nil,
+				"role_empty":    sctx.Decision != nil && sctx.Decision.Role == "",
+			}).Error("MITM request missing required role from CONNECT phase")
+			config.MetricsClient.Incr("acl.role_not_determined", 1)
+			decision.Reason = "Client role cannot be determined"
+			return decision
+		}
+		role = sctx.Decision.Role
+		config.Log.WithFields(logrus.Fields{
+			"role": role,
+			"destination": destination.String(),
+		}).Info("Reusing existing role from context (MITM)")
+	} else {
+		role, roleErr = getRole(config, req)
+		if roleErr != nil {
+			config.MetricsClient.Incr("acl.role_not_determined", 1)
+			decision.Reason = "Client role cannot be determined"
+			return decision
+		}
 	}
 
 	decision.Role = role
