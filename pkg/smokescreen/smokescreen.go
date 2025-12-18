@@ -691,7 +691,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		if pctx.ConnectAction == goproxy.ConnectMitm {
 			existingSctx, ok := pctx.UserData.(*SmokescreenContext)
 			if !ok || existingSctx.Decision == nil {
-				config.Log.Error("MITM request but UserData is not SmokescreenContext or missing Decision - rejecting request")
+				config.Log.WithFields(logrus.Fields{
+					"context_valid": ok,
+					"decision_present": existingSctx != nil && existingSctx.Decision != nil,
+				}).Error("MITM request missing required context or decision from CONNECT phase - rejecting request")
 				err := errors.New("MITM request missing context from CONNECT phase")
 				pctx.Error = denyError{err}
 				return req, rejectResponse(pctx, pctx.Error)
