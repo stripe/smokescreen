@@ -34,6 +34,7 @@ const (
 	ipDenyUserConfigured
 	ipDenyCGNAT
 	ipDenyIPv6Embedding
+	ipDenySelfConnection
 
 	denyMsgTmpl = "Egress proxying is denied to host '%s': %s."
 
@@ -139,6 +140,8 @@ func (t ipType) String() string {
 		return "Deny: CGNAT Range"
 	case ipDenyIPv6Embedding:
 		return "Deny: IPv6 Embedding"
+	case ipDenySelfConnection:
+		return "Deny: Self Connection"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -160,6 +163,8 @@ func (t ipType) statsdString() string {
 		return "resolver.deny.cgnat_range"
 	case ipDenyIPv6Embedding:
 		return "resolver.deny.ipv6_embedding"
+	case ipDenySelfConnection:
+		return "resolver.deny.self_connection"
 	default:
 		panic(fmt.Errorf("unknown ip type %d", t))
 	}
@@ -270,7 +275,25 @@ func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAdd
 	return false
 }
 
+// Check for self-connection: prevent proxy from connecting to itself
+// This blocks recursive proxy attacks where destination resolves to proxy's own IP
+func addrIsLocalIp(config *Config, addr *net.TCPAddr) bool {
+	if addr.Port == int(config.Port) {
+		for _, localIP := range config.LocalIPs {
+			if addr.IP.Equal(localIP) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
+
+	if addrIsLocalIp(config, addr) {
+		return ipDenySelfConnection
+	}
+
 	if !addr.IP.IsGlobalUnicast() || addr.IP.IsLoopback() {
 		if addrIsInRuleRange(config.AllowRanges, addr) {
 			return ipAllowUserConfigured
@@ -969,6 +992,12 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	if err = config.Validate(); err != nil {
 		config.Log.Fatal("invalid config", err)
 	}
+
+	// Initialize self-connection detection to prevent recursive proxy attacks
+	if err = config.InitializeSelfConnectionDetection(); err != nil {
+		config.Log.WithError(err).Warn("Failed to initialize self-connection detection - continuing with reduced protection")
+	}
+
 	proxy := BuildProxy(config)
 	listener := config.Listener
 
@@ -1157,7 +1186,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 func getRole(config *Config, req *http.Request) (string, error) {
 	var role string
 	var err error
-	
+
 	if config.RoleFromRequest != nil {
 		role, err = config.RoleFromRequest(req)
 	} else {

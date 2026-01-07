@@ -195,6 +195,10 @@ type Config struct {
 	// If this handler returns an error, the connection is closed and the error is returned to the client.
 	// The function must be thread-safe as it will be called concurrently for multiple requests.
 	UpstreamProxyConnectReqHandler func(ctx *goproxy.ProxyCtx, req *http.Request) error
+
+	// Self-connection detection field to prevent recursive proxy attacks
+	// LocalIPs contains all IP addresses assigned to network interfaces on this host
+	LocalIPs []net.IP
 }
 
 type missingRoleError struct {
@@ -382,6 +386,61 @@ func NewConfig() *Config {
 		WriteTimeout:      DefaultWriteTimeout,
 		DNSTimeout:        DefaultDNSTimeout,
 	}
+}
+
+// Gathers all local IP addresses to prevent recursive proxy attacks.
+func (config *Config) InitializeSelfConnectionDetection() error {
+	localIPs, err := getAllLocalIPs()
+	if err != nil {
+		return fmt.Errorf("failed to get local IPs for self-connection detection: %w", err)
+	}
+	config.LocalIPs = localIPs
+
+	ipStrings := make([]string, len(config.LocalIPs))
+	for i, ip := range config.LocalIPs {
+		ipStrings[i] = ip.String()
+	}
+	config.Log.WithFields(log.Fields{
+		"listening_ip":   config.Ip,
+		"listening_port": config.Port,
+		"local_ips":      ipStrings,
+	}).Info("Self-connection detection initialized")
+
+	return nil
+}
+
+// getAllLocalIPs returns all IP addresses assigned to network interfaces on this host.
+// This includes loopback, private, public, and any other IPs.
+func getAllLocalIPs() ([]net.IP, error) {
+	var localIPs []net.IP
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
+	}
+
+	for _, iface := range interfaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil {
+				continue
+			}
+			localIPs = append(localIPs, ip)
+		}
+	}
+
+	return localIPs, nil
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
