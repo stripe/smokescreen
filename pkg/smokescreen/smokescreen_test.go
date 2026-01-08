@@ -64,6 +64,12 @@ func TestClassifyAddr(t *testing.T) {
 	conf.ConnectTimeout = 10 * time.Second
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+	conf.Port = 4750
+	conf.LocalIPs = []net.IP{
+		net.ParseIP("127.0.0.1"),
+		net.ParseIP("192.168.1.100"),
+		net.ParseIP("::1"),
+	}
 
 	testIPs := []testCase{
 		testCase{"8.8.8.8", 1, ipAllowDefault},
@@ -119,6 +125,13 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"2001:4860:4860::8888", 1, ipAllowDefault}, // Google DNS (not embedding)
 		testCase{"2606:4700:4700::1111", 1, ipAllowDefault}, // Cloudflare DNS
 		testCase{"64:ff9c::1", 1, ipAllowDefault},           // Outside NAT64 /96 prefix
+
+		// Self-connection detection
+		testCase{"127.0.0.1", 4750, ipDenySelfConnection},
+		testCase{"192.168.1.100", 4750, ipDenySelfConnection},
+		testCase{"::1", 4750, ipDenySelfConnection},
+		testCase{"127.0.0.1", 8080, ipDenyNotGlobalUnicast}, // Different port
+		testCase{"8.8.8.8", 4750, ipAllowDefault},           // Different IP
 	}
 
 	for _, test := range testIPs {
@@ -134,7 +147,7 @@ func TestClassifyAddr(t *testing.T) {
 
 		got := classifyAddr(conf, &localAddr)
 		if got != test.expected {
-			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
+			t.Errorf("Misclassified IP (%s:%d): should be %s, but is instead %s.", localIP, test.port, test.expected, got)
 		}
 	}
 }
