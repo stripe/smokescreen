@@ -64,6 +64,12 @@ func TestClassifyAddr(t *testing.T) {
 	conf.ConnectTimeout = 10 * time.Second
 	conf.ExitTimeout = 10 * time.Second
 	conf.AdditionalErrorMessageOnDeny = "Proxy denied"
+	conf.Port = 4750
+	conf.LocalIPs = []net.IP{
+		net.ParseIP("127.0.0.1"),
+		net.ParseIP("192.168.1.100"),
+		net.ParseIP("::1"),
+	}
 
 	testIPs := []testCase{
 		testCase{"8.8.8.8", 1, ipAllowDefault},
@@ -119,6 +125,13 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"2001:4860:4860::8888", 1, ipAllowDefault}, // Google DNS (not embedding)
 		testCase{"2606:4700:4700::1111", 1, ipAllowDefault}, // Cloudflare DNS
 		testCase{"64:ff9c::1", 1, ipAllowDefault},           // Outside NAT64 /96 prefix
+
+		// Self-connection detection
+		testCase{"127.0.0.1", 4750, ipDenySelfConnection},
+		testCase{"192.168.1.100", 4750, ipDenySelfConnection},
+		testCase{"::1", 4750, ipDenySelfConnection},
+		testCase{"127.0.0.1", 8080, ipDenyNotGlobalUnicast}, // Different port
+		testCase{"8.8.8.8", 4750, ipAllowDefault},           // Different IP
 	}
 
 	for _, test := range testIPs {
@@ -134,9 +147,60 @@ func TestClassifyAddr(t *testing.T) {
 
 		got := classifyAddr(conf, &localAddr)
 		if got != test.expected {
-			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
+			t.Errorf("Misclassified IP (%s:%d): should be %s, but is instead %s.", localIP, test.port, test.expected, got)
 		}
 	}
+}
+
+func TestInitializeSelfConnectionDetection(t *testing.T) {
+	r := require.New(t)
+
+	// Save original function and restore after test
+	originalGetNetInterfaces := getNetInterfaces
+	defer func() {
+		getNetInterfaces = originalGetNetInterfaces
+	}()
+
+	// Test 1: Empty interfaces - should not error but config.LocalIPs should be empty
+	getNetInterfaces = func() ([]net.Interface, error) {
+		return []net.Interface{}, nil
+	}
+
+	config, err := testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.NoError(err, "should not error even with no interfaces")
+	r.NotNil(config.LocalIPs)
+	r.Empty(config.LocalIPs, "should have empty LocalIPs when no interfaces")
+
+	// Test 2: Error getting interfaces - should return error
+	getNetInterfaces = func() ([]net.Interface, error) {
+		return nil, errors.New("mock error getting interfaces")
+	}
+
+	config, err = testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.Error(err, "should error when getNetInterfaces fails")
+	r.Contains(err.Error(), "failed to get local IPs for self-connection detection")
+	r.Nil(config.LocalIPs)
+
+	// Test 3: Normal operation - restore real function
+	getNetInterfaces = originalGetNetInterfaces
+	config, err = testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.NoError(err)
+	r.NotEmpty(config.LocalIPs)
+
+	hasLoopback := false
+	for _, ip := range config.LocalIPs {
+		if ip.IsLoopback() {
+			hasLoopback = true
+			break
+		}
+	}
+	r.True(hasLoopback, "should have at least one loopback IP")
 }
 
 func TestAddrIsTemporarilyDeferred(t *testing.T) {
