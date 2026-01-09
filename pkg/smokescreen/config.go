@@ -409,12 +409,15 @@ func (config *Config) InitializeSelfConnectionDetection() error {
 	return nil
 }
 
+// getNetInterfaces is a var that can be overridden in tests
+var getNetInterfaces = net.Interfaces
+
 // getAllLocalIPs returns all IP addresses assigned to network interfaces on this host.
 // This includes loopback, private, public, and any other IPs.
 func getAllLocalIPs() ([]net.IP, error) {
-	var localIPs []net.IP
+	localIPs := []net.IP{}
 
-	interfaces, err := net.Interfaces()
+	interfaces, err := getNetInterfaces()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
 	}
@@ -422,6 +425,10 @@ func getAllLocalIPs() ([]net.IP, error) {
 	for _, iface := range interfaces {
 		addrs, err := iface.Addrs()
 		if err != nil {
+			log.WithFields(log.Fields{
+				"interface": iface.Name,
+				"error":     err,
+			}).Warn("Failed to get addresses for network interface, skipping")
 			continue
 		}
 
@@ -438,6 +445,10 @@ func getAllLocalIPs() ([]net.IP, error) {
 			}
 			localIPs = append(localIPs, ip)
 		}
+	}
+
+	if len(localIPs) == 0 {
+		log.Warn("No local IPs detected for self-connection detection")
 	}
 
 	return localIPs, nil

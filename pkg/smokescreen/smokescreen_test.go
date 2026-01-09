@@ -152,6 +152,57 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+func TestInitializeSelfConnectionDetection(t *testing.T) {
+	r := require.New(t)
+
+	// Save original function and restore after test
+	originalGetNetInterfaces := getNetInterfaces
+	defer func() {
+		getNetInterfaces = originalGetNetInterfaces
+	}()
+
+	// Test 1: Empty interfaces - should not error but config.LocalIPs should be empty
+	getNetInterfaces = func() ([]net.Interface, error) {
+		return []net.Interface{}, nil
+	}
+
+	config, err := testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.NoError(err, "should not error even with no interfaces")
+	r.NotNil(config.LocalIPs)
+	r.Empty(config.LocalIPs, "should have empty LocalIPs when no interfaces")
+
+	// Test 2: Error getting interfaces - should return error
+	getNetInterfaces = func() ([]net.Interface, error) {
+		return nil, errors.New("mock error getting interfaces")
+	}
+
+	config, err = testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.Error(err, "should error when getNetInterfaces fails")
+	r.Contains(err.Error(), "failed to get local IPs for self-connection detection")
+	r.Nil(config.LocalIPs)
+
+	// Test 3: Normal operation - restore real function
+	getNetInterfaces = originalGetNetInterfaces
+	config, err = testConfig("allow-all")
+	r.NoError(err)
+	err = config.InitializeSelfConnectionDetection()
+	r.NoError(err)
+	r.NotEmpty(config.LocalIPs)
+
+	hasLoopback := false
+	for _, ip := range config.LocalIPs {
+		if ip.IsLoopback() {
+			hasLoopback = true
+			break
+		}
+	}
+	r.True(hasLoopback, "should have at least one loopback IP")
+}
+
 func TestAddrIsTemporarilyDeferred(t *testing.T) {
 	tests := []struct {
 		name                   string
