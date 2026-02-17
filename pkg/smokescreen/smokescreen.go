@@ -123,6 +123,10 @@ type denyError struct {
 	error
 }
 
+type tunnelLimitError struct {
+	error
+}
+
 func (t ipType) IsAllowed() bool {
 	return t == ipAllowDefault || t == ipAllowUserConfigured
 }
@@ -502,7 +506,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// Unlike the rate limiter, this tracks actual long-lived tunnel connections.
 	if sctx.ProxyType == connectProxy && sctx.cfg.TunnelLimiter != nil {
 		if !sctx.cfg.TunnelLimiter.Acquire() {
-			return nil, denyError{ErrTunnelLimitExceeded}
+			return nil, tunnelLimitError{ErrTunnelLimitExceeded}
 		}
 		sctx.tunnelSlotAcquired = true
 	}
@@ -625,6 +629,10 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		status = "Request rejected by proxy"
 		code = http.StatusProxyAuthRequired
 		msg = fmt.Sprintf(denyMsgTmpl, pctx.Req.Host, e.Error())
+	} else if e, ok := err.(tunnelLimitError); ok {
+		status = "Too Many Requests"
+		code = http.StatusTooManyRequests
+		msg = e.Error()
 	} else {
 		status = "Internal server error"
 		code = http.StatusInternalServerError
@@ -647,6 +655,11 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	resp.ProtoMajor = pctx.Req.ProtoMajor
 	resp.ProtoMinor = pctx.Req.ProtoMinor
 	resp.Header.Set(errorHeader, msg)
+	
+	// Add Retry-After header for tunnel limit errors
+	if _, ok := err.(tunnelLimitError); ok {
+		resp.Header.Set("Retry-After", "1")
+	}
 	if sctx.cfg.RejectResponseHandler != nil {
 		sctx.cfg.RejectResponseHandler(resp)
 	}

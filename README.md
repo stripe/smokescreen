@@ -80,6 +80,9 @@ Here are the options you can give Smokescreen:
    --max-request-rate value                    Maximum requests per second. 0 = unlimited (default: 0)
    --max-request-burst value                   Maximum burst capacity. Must be > max-request-rate when specified.
                                                  Omit to use default (2x max-request-rate).
+   --max-concurrent-connect-tunnels value      Maximum number of concurrent CONNECT tunnels.
+                                                 Unlike max-concurrent-requests, this limits actual long-lived connections.
+                                                 0 = unlimited (default: 0)
    --dns-timeout DURATION                      Maximum time to wait for DNS resolution (default: 5s)
    --version, -v                               print the version
 ```
@@ -138,10 +141,13 @@ Smokescreen supports rate and concurrency limiting to protect against overload:
 | `max-concurrent-requests` | Limits simultaneous in-flight requests. Excess requests receive `503 Service Unavailable`. |
 | `max-request-rate` | Limits requests per second using a token bucket algorithm. Excess requests receive `429 Too Many Requests`. |
 | `max-request-burst` | Sets token bucket capacity. Must be greater than `max-request-rate`. Defaults to 2x the rate if omitted. |
+| `max-concurrent-connect-tunnels` | Limits the number of active CONNECT tunnels (long-lived connections). Unlike `max-concurrent-requests` which only tracks request processing time, this limits actual tunnel connections and prevents resource exhaustion from unbounded CONNECT tunnels. Excess requests receive `429 Too Many Requests`. |
+
+> **Note:** `max-concurrent-requests` limits the number of requests being *processed*, while `max-concurrent-connect-tunnels` limits the number of active *tunnel connections*. For CONNECT requests, the request processing completes quickly but the tunnel connection remains open. Use both settings together for complete protection against resource exhaustion.
 
 **Example (CLI):**
 ```bash
-smokescreen --max-concurrent-requests=100 --max-request-rate=50
+smokescreen --max-concurrent-requests=100 --max-request-rate=50 --max-concurrent-connect-tunnels=50
 ```
 
 **Example (YAML):**
@@ -149,6 +155,7 @@ smokescreen --max-concurrent-requests=100 --max-request-rate=50
 max_concurrent_requests: 100
 max_request_rate: 50
 max_request_burst: 150  # optional, defaults to 2x rate
+max_concurrent_connect_tunnels: 50  # limits active CONNECT tunnel connections
 ```
 
 ### Hostname ACLs
