@@ -2099,8 +2099,6 @@ func TestRoleLoggingInCanonicalProxyDecision(t *testing.T) {
 }
 
 func TestMaxConcurrentConnectTunnels(t *testing.T) {
-	r := require.New(t)
-
 	// Create a slow backend that holds connections open
 	slowBackend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Hold the connection open for a bit
@@ -2111,6 +2109,7 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 	defer slowBackend.Close()
 
 	t.Run("tunnel limit enforced", func(t *testing.T) {
+		r := require.New(t)
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
@@ -2147,7 +2146,7 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 				resp, err := client.Get(slowBackend.URL)
 				if err != nil {
 					// Check if it's a tunnel limit error or rejection
-					if strings.Contains(err.Error(), "Service Unavailable") ||
+					if strings.Contains(err.Error(), "Too Many Requests") ||
 						strings.Contains(err.Error(), "maximum concurrent connect tunnels") ||
 						strings.Contains(err.Error(), "Request rejected by proxy") {
 						atomic.AddInt32(&rejectCount, 1)
@@ -2160,7 +2159,7 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 
 				if resp.StatusCode == 200 {
 					atomic.AddInt32(&successCount, 1)
-				} else if resp.StatusCode == 503 || resp.StatusCode == 407 {
+				} else if resp.StatusCode == 429 || resp.StatusCode == 407 {
 					atomic.AddInt32(&rejectCount, 1)
 				}
 			}()
@@ -2176,6 +2175,7 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 	})
 
 	t.Run("tunnel slots released on close", func(t *testing.T) {
+		r := require.New(t)
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
@@ -2217,6 +2217,7 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 	})
 
 	t.Run("zero limit means unlimited", func(t *testing.T) {
+		r := require.New(t)
 		cfg, err := testConfig("test-local-srv")
 		r.NoError(err)
 		err = cfg.SetAllowAddresses([]string{"127.0.0.1"})
