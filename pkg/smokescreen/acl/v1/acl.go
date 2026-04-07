@@ -2,14 +2,26 @@ package acl
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 )
 
+// DecideArgs holds the arguments for an ACL decision. Using a struct keeps the
+// Decider interface stable as new fields are added (e.g. Req for request-aware
+// authorization in custom Decider implementations). ACL.Decide does not
+// inspect Req; it is provided solely for use by custom implementations.
+type DecideArgs struct {
+	Req              *http.Request
+	Service          string
+	Host             string
+	ConnectProxyHost string
+}
+
 type Decider interface {
-	Decide(service, host, connectProxyHost string) (Decision, error)
+	Decide(args DecideArgs) (Decision, error)
 }
 
 type ACL struct {
@@ -101,10 +113,10 @@ func (acl *ACL) Add(svc string, r Rule) error {
 //  3. The host has been globally denied
 //  4. The host has been globally allowed
 //  5. There is a default rule for the ACL
-func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error) {
+func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 	var d Decision
 
-	rule := acl.Rule(service)
+	rule := acl.Rule(args.Service)
 	if rule == nil {
 		d.Result = Deny
 		d.Reason = "no rule matched"
@@ -114,10 +126,10 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 	d.Project = rule.Project
 	d.Default = rule == acl.DefaultRule
 
-	if connectProxyHost != "" {
+	if args.ConnectProxyHost != "" {
 		shouldDeny := true
 		for _, dg := range rule.ExternalProxyGlobs {
-			if HostMatchesGlob(connectProxyHost, dg) {
+			if HostMatchesGlob(args.ConnectProxyHost, dg) {
 				shouldDeny = false
 				break
 			}
@@ -135,11 +147,11 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 
 	// if the host matches any of the rule's allowed domains, allow
 	for _, dg := range rule.DomainGlobs {
-		if HostMatchesGlob(host, dg) {
+		if HostMatchesGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
 			// Check if we can find a matching MITM config
 			for _, dg := range rule.MitmDomains {
-				if HostMatchesGlob(host, dg.Domain) {
+				if HostMatchesGlob(args.Host, dg.Domain) {
 					d.MitmConfig = &MitmConfig{
 						AddHeaders:                  dg.AddHeaders,
 						DetailedHttpLogs:            dg.DetailedHttpLogs,
@@ -154,7 +166,7 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 
 	// if the host matches any of the global deny list, deny
 	for _, dg := range acl.GlobalDenyList {
-		if HostMatchesGlob(host, dg) {
+		if HostMatchesGlob(args.Host, dg) {
 			d.Result, d.Reason = Deny, "host matched rule in global deny list"
 			return d, nil
 		}
@@ -162,7 +174,7 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 
 	// if the host matches any of the global allow list, allow
 	for _, dg := range acl.GlobalAllowList {
-		if HostMatchesGlob(host, dg) {
+		if HostMatchesGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched rule in global allow list"
 			return d, nil
 		}
@@ -178,7 +190,7 @@ func (acl *ACL) Decide(service, host, connectProxyHost string) (Decision, error)
 		d.Result, d.Reason = Allow, "rule has open enforcement policy"
 	default:
 		d.Result, d.Reason = Deny, "unexpected policy value"
-		err = fmt.Errorf("unexpected policy value for (%s -> %s): %d", service, host, rule.Policy)
+		err = fmt.Errorf("unexpected policy value for (%s -> %s): %d", args.Service, args.Host, rule.Policy)
 	}
 
 	if d.Default {
