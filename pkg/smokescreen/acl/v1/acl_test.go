@@ -4,6 +4,7 @@
 package acl
 
 import (
+	"net/http"
 	"path"
 	"testing"
 
@@ -186,7 +187,7 @@ func TestACLDecision(t *testing.T) {
 			a.NoError(err)
 			a.Equal(testCase.expectProject, proj)
 
-			d, err := acl.Decide(testCase.service, testCase.host, "")
+			d, err := acl.Decide(DecideArgs{Service: testCase.service, Host: testCase.host})
 			a.NoError(err)
 			a.Equal(testCase.expectDecision, d.Result)
 			a.Equal(testCase.expectDecisionReason, d.Reason)
@@ -207,7 +208,7 @@ func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a.Equal("no rule for service: unk", err.Error())
 	a.Empty(proj)
 
-	d, err := acl.Decide("unk", "example.com", "")
+	d, err := acl.Decide(DecideArgs{Service: "unk", Host: "example.com"})
 	a.Equal(Deny, d.Result)
 	a.False(d.Default)
 	a.Nil(err)
@@ -375,7 +376,7 @@ func TestMitmComfig(t *testing.T) {
 	a.NoError(err)
 	a.Equal("usersec", proj)
 
-	d, err := acl.Decide(mitmService, "example-mitm.com", "")
+	d, err := acl.Decide(DecideArgs{Service: mitmService, Host: "example-mitm.com"})
 	a.NoError(err)
 	a.Equal(Allow, d.Result)
 	a.Equal("host matched allowed domain in rule", d.Reason)
@@ -478,15 +479,48 @@ func TestDecisionWithProxyHost(t *testing.T) {
 	}
 	
 	// Allowed proxy and target
-	decision, err := acl.Decide("proxy-service", "example.com", "proxy.example.com")
+	decision, err := acl.Decide(DecideArgs{Service: "proxy-service", Host: "example.com", ConnectProxyHost: "proxy.example.com"})
 	assert.NoError(t, err)
 	assert.Equal(t, Allow, decision.Result)
-	
-	// Disallowed proxy
-	decision, err = acl.Decide("proxy-service", "example.com", "bad.proxy.com")
+
+	// Disallowed proxy host → deny regardless of target
+	decision, err = acl.Decide(DecideArgs{Service: "proxy-service", Host: "example.com", ConnectProxyHost: "bad.proxy.com"})
 	assert.NoError(t, err)
 	assert.Equal(t, Deny, decision.Result)
 	assert.Equal(t, "connect proxy host not allowed in rule", decision.Reason)
+
+	// Allowed proxy but disallowed target → deny
+	decision, err = acl.Decide(DecideArgs{Service: "proxy-service", Host: "notallowed.com", ConnectProxyHost: "proxy.example.com"})
+	assert.NoError(t, err)
+	assert.Equal(t, Deny, decision.Result)
+}
+
+// TestDecideReqIgnored verifies that ACL.Decide produces identical results
+// regardless of whether Req is nil or a real *http.Request. ACL.Decide does
+// not inspect Req; it exists solely for use by custom Decider implementations.
+func TestDecideReqIgnored(t *testing.T) {
+	a := assert.New(t)
+
+	testACL := &ACL{
+		Rules: map[string]Rule{
+			"svc": {
+				Policy:      Enforce,
+				DomainGlobs: []string{"allowed.com"},
+			},
+		},
+	}
+
+	dNil, err := testACL.Decide(DecideArgs{Service: "svc", Host: "allowed.com"})
+	a.NoError(err)
+
+	req, _ := http.NewRequest("GET", "http://allowed.com", nil)
+	req.Header.Set("X-Custom-Header", "should-be-ignored")
+	dWithReq, err := testACL.Decide(DecideArgs{Req: req, Service: "svc", Host: "allowed.com"})
+	a.NoError(err)
+
+	a.Equal(dNil.Result, dWithReq.Result)
+	a.Equal(dNil.Reason, dWithReq.Reason)
+	a.Equal(dNil.Project, dWithReq.Project)
 }
 
 func TestDefaultRuleValidationWithDisableActions(t *testing.T) {

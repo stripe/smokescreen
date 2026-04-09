@@ -1381,7 +1381,12 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 		clientProvidedProxy = connectProxyUrl.Hostname()
 	}
 
-	ACLDecision, err := config.EgressACL.Decide(role, destination.Host, clientProvidedProxy)
+	ACLDecision, err := config.EgressACL.Decide(acl.DecideArgs{
+		Req:              req,
+		Service:          role,
+		Host:             destination.Host,
+		ConnectProxyHost: clientProvidedProxy,
+	})
 	decision.Project = ACLDecision.Project
 	decision.Reason = ACLDecision.Reason
 	decision.MitmConfig = ACLDecision.MitmConfig

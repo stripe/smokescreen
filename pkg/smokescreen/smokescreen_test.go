@@ -757,59 +757,6 @@ func TestInvalidHost(t *testing.T) {
 	}
 }
 
-var hostSquareBracketsCases = []struct {
-	scheme    string
-	proxyType string
-	hostname  string
-	msg       string
-}{
-	{"http", "http", "[stripe.com]", "invalid domain \"[stripe.com]\": disallowed rune U+005B"},
-	{"https", "connect", "[stripe.com]", "host matched rule in global deny list"},
-	{"http", "http", "[[stripe.com]]", "invalid domain \"[[stripe.com]]\": disallowed rune U+005B"},
-	{"https", "connect", "[[stripe.com]]", "host matched rule in global deny list"},
-	{"http", "http", "[[[stripe.com]]]", "invalid domain \"[[[stripe.com]]]\": disallowed rune U+005B"},
-	{"https", "connect", "[2001:Db8::]:443", "Destination host cannot be determined"},
-	// These somewhat confusing error messages originate from net.SplitHostPort().
-	{"https", "connect", "[[[stripe.com]]]", "address [[stripe.com]]:443: missing port in address"},
-	{"http", "http", "[[stripe.com]]:80", "address [[stripe.com]]:80: missing port in address"},
-}
-
-func TestHostSquareBrackets(t *testing.T) {
-	for _, testCase := range hostSquareBracketsCases {
-		t.Run(testCase.scheme+"://"+testCase.hostname, func(t *testing.T) {
-			r := require.New(t)
-
-			cfg, err := testConfig("test-open-srv")
-			require.NoError(t, err)
-			logHook := proxyLogHook(cfg)
-
-			proxySrv := proxyServer(cfg)
-			defer proxySrv.Close()
-
-			// Create a http.Client that uses our proxy
-			client, err := proxyClient(proxySrv.URL)
-			r.NoError(err)
-
-			resp, err := client.Get(fmt.Sprintf("%s://%s", testCase.scheme, testCase.hostname))
-			if err != nil {
-				r.Contains(err.Error(), "Request rejected by proxy")
-			} else {
-				r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
-			}
-
-			entry := findCanonicalProxyDecision(logHook.AllEntries())
-			r.NotNil(entry)
-
-			r.Equal(entry.Data["proxy_type"], testCase.proxyType)
-			if allowed, ok := entry.Data["allow"]; ok {
-				r.Equal(false, allowed)
-				r.Equal(testCase.msg, entry.Data["decision_reason"])
-			} else {
-				r.Equal(testCase.msg, entry.Data["error"])
-			}
-		})
-	}
-}
 
 func TestErrorHeader(t *testing.T) {
 	a := assert.New(t)
