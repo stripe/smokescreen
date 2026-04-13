@@ -16,6 +16,84 @@ services:
     project: test
     action: open
 
+  - name: service-wildcard-mitm
+    project: test-wildcard
+    action: enforce
+    allowed_domains:
+      - "*.wildcard.test"
+      - "specific.wildcard.test"
+      - "another.specific.wildcard.test"
+    mitm_domains:
+      - domain: "specific.wildcard.test"
+        add_headers: {"X-Mitm-Test": "Value1"}
+        detailed_http_logs: true
+      - domain: "another.specific.wildcard.test"
+        add_headers: {"X-Another-Mitm": "Value2"}
+        detailed_http_logs: false
+
+  - name: service-ext-proxy
+    project: test-extproxy
+    action: enforce
+    allowed_domains:
+      - "proxied.target.test"
+    external_proxy_globs:
+      - "*.externalproxy.com"
+
+  - name: service-global-deny-test
+    project: test-globaldeny
+    action: open
+    allowed_domains:
+      - "globally.denied.com"
+      - "normal.allowed.here"
+
+  - name: service-global-allow-test
+    project: test-globalallow
+    action: enforce
+    allowed_domains:
+      - "onlythis.specificdomain.com"
+
+global_deny_list:
+  - "globally.denied.com"
+  - "*.sub.denied.com"
+
+global_allow_list:
+  - "globally.allowed.com"
+  - "*.sub.allowed.com"
+
+  - name: role-redirect-allow-all
+    project: test-redirects
+    action: open # Allows both redirecting and final servers
+
+  - name: role-redirect-allow-deny
+    project: test-redirects
+    action: enforce
+    # Intentionally allow only redirecting.localhost (or 127.0.0.1:port1)
+    # final.localhost (or 127.0.0.1:port2) will be denied by this role's restrictive allowed_domains.
+    # We'll use 127.0.0.1 with specific ports for test servers.
+    # allowed_domains: will be set dynamically in the test if needed, or use specific ports.
+    # For now, assume redirecting_server_port is allowed, final_server_port is not.
+    # This will be made concrete by how target URLs and ACLs are set up for the specific test case.
+    # Example if redirecting server is on 50001, final on 50002:
+    allowed_domains:
+      - "127.0.0.1:50001" # Placeholder, will match targetServerRedirecting
+      # - "redirecting.localhost" # Alternative if using hostnames
+
+  - name: role-redirect-deny-initial
+    project: test-redirects
+    action: enforce
+    # Intentionally does not allow redirecting.localhost (or 127.0.0.1:port1)
+    allowed_domains:
+      - "final.localhost" # Or 127.0.0.1:port_of_final_server
+      - "127.0.0.1:50002" # Placeholder for final server if using ports
+
+  - name: role-redirect-post-allow
+    project: test-redirects-post
+    action: open # Allows POST to the redirecting server
+
+  - name: role-echo-test
+    project: test-forwarding
+    action: open
+
 default:
   name: unknown-role
   project: security
