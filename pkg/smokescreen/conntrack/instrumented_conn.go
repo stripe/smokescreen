@@ -172,7 +172,7 @@ func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Idle returns true when the connection's last activity occured before the
+// Idle returns true when the connection's last activity occurred before the
 // configured idle threshold.
 //
 // Idle should be called with the connection's lock held.
