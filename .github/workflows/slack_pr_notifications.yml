@@ -1,0 +1,22 @@
+name: Notify Slack on New PR
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  slack-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send PR Data to Slack Workflow
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "pr_title": ${{ toJson(github.event.pull_request.title) }},
+              "pr_url": ${{ toJson(github.event.pull_request.html_url) }},
+              "pr_author": ${{ toJson(github.event.pull_request.user.login) }},
+              "pr_description": ${{ toJson(github.event.pull_request.body) }}
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
