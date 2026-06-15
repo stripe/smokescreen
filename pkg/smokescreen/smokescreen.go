@@ -67,6 +67,7 @@ const (
 	LogMitmReqMethod         = "mitm_req_method"
 	LogMitmReqHeaders        = "mitm_req_headers"
 )
+
 type ipType int
 
 type ACLDecision struct {
@@ -623,7 +624,11 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		} else {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			msg = "Failed to connect to remote host: " + e.Error()
+			errMsg := e.Error()
+			if errMsg == "<nil>" {
+				errMsg = fmt.Sprintf("<nil> (%T)", err)
+			}
+			msg = "Failed to connect to remote host: " + errMsg
 		}
 	} else if e, ok := err.(denyError); ok {
 		status = "Request rejected by proxy"
@@ -655,7 +660,7 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 	resp.ProtoMajor = pctx.Req.ProtoMajor
 	resp.ProtoMinor = pctx.Req.ProtoMinor
 	resp.Header.Set(errorHeader, msg)
-	
+
 	// Add Retry-After header for tunnel limit errors
 	if _, ok := err.(tunnelLimitError); ok {
 		resp.Header.Set("Retry-After", "1")
