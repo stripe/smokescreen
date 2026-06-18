@@ -626,6 +626,32 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   clientAuth,
 		ClientCAs:    clientCAs,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(config.CrlByAuthorityKeyId) == 0 {
+				return nil
+			}
+
+			for _, chain := range cs.VerifiedChains {
+				for _, cert := range chain {
+					if cert.IsCA {
+						continue
+					}
+
+					issuerKeyId := string(cert.AuthorityKeyId)
+					crl, ok := config.CrlByAuthorityKeyId[issuerKeyId]
+					if !ok {
+						continue
+					}
+
+					for _, revoked := range crl.TBSCertList.RevokedCertificates {
+						if cert.SerialNumber.Cmp(revoked.SerialNumber) == 0 {
+							return fmt.Errorf("certificate with serial %s has been revoked", cert.SerialNumber.String())
+						}
+					}
+				}
+			}
+			return nil
+		},
 	}
 
 	return nil

@@ -294,12 +294,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			}
 		}
 
-		if c.IsSet("tls-crl-file") {
-			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
-				return err
-			}
-		}
-
 		if c.IsSet("unsafe-allow-private-ranges") {
 			conf.UnsafeAllowPrivateRanges = c.Bool("unsafe-allow-private-ranges")
 		}
@@ -317,6 +311,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				bundleFile,
 				bundleFile,
 				c.StringSlice("tls-client-ca-file")); err != nil {
+				return err
+			}
+		}
+
+		// SetupCrls must be called after SetupTls because it needs the CA map
+		// populated by SetupTls to verify CRL signatures.
+		if c.IsSet("tls-crl-file") {
+			if err := conf.SetupCrls(c.StringSlice("tls-crl-file")); err != nil {
 				return err
 			}
 		}

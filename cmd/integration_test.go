@@ -683,3 +683,52 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 
 	return conf, server, nil
 }
+
+func TestCRLEnforcement(t *testing.T) {
+	var logHook logrustest.Hook
+
+	_, proxyServer, err := startSmokescreen(t, true, &logHook, "")
+	require.NoError(t, err)
+	defer proxyServer.Close()
+
+	targetServer := httptest.NewServer(ProxyTargetHandler)
+	defer targetServer.Close()
+
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+
+	connectWithCert := func(certFile, keyFile string) error {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: true,
+		}
+
+		conn, err := tls.Dial("tcp", proxyURL.Host, tlsConfig)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		req, _ := http.NewRequest("CONNECT", targetServer.URL, nil)
+		req.Write(conn)
+
+		br := bufio.NewReader(conn)
+		_, err = http.ReadResponse(br, req)
+		return err
+	}
+
+	t.Run("valid certificate is accepted", func(t *testing.T) {
+		err := connectWithCert("testdata/pki/enforce-client.pem", "testdata/pki/enforce-client-key.pem")
+		assert.NoError(t, err)
+	})
+
+	t.Run("revoked certificate is rejected", func(t *testing.T) {
+		err := connectWithCert("testdata/pki/revoked-client.pem", "testdata/pki/revoked-client-key.pem")
+		assert.Error(t, err)
+	})
+}
