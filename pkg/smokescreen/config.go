@@ -84,6 +84,7 @@ type Config struct {
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
 	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
+	revokedCertSerials           map[string]map[string]bool
 	RoleFromRequest              func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId      map[string]*x509.Certificate
 	AdditionalErrorMessageOnDeny string
@@ -390,6 +391,7 @@ func NewConfig() *Config {
 	return &Config{
 		Resolver:                &net.Resolver{},
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
+		revokedCertSerials:      make(map[string]map[string]bool),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log:                     log.New(),
 		Port:                    DefaultPort,
@@ -523,6 +525,13 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 
 		// At this point, we have a new CRL which we trust. Let's evict the old one.
 		config.CrlByAuthorityKeyId[crlIssuerId] = certList
+
+		serialSet := make(map[string]bool, len(certList.TBSCertList.RevokedCertificates))
+		for _, revoked := range certList.TBSCertList.RevokedCertificates {
+			serialSet[revoked.SerialNumber.String()] = true
+		}
+		config.revokedCertSerials[crlIssuerId] = serialSet
+
 		fmt.Printf("info: Loaded CRL for Authority ID '%s'\n", hex.EncodeToString([]byte(crlIssuerId)))
 	}
 
@@ -627,7 +636,7 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		ClientAuth:   clientAuth,
 		ClientCAs:    clientCAs,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			if len(config.CrlByAuthorityKeyId) == 0 {
+			if len(config.revokedCertSerials) == 0 {
 				return nil
 			}
 
@@ -638,15 +647,13 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 					}
 
 					issuerKeyId := string(cert.AuthorityKeyId)
-					crl, ok := config.CrlByAuthorityKeyId[issuerKeyId]
+					serials, ok := config.revokedCertSerials[issuerKeyId]
 					if !ok {
 						continue
 					}
 
-					for _, revoked := range crl.TBSCertList.RevokedCertificates {
-						if cert.SerialNumber.Cmp(revoked.SerialNumber) == 0 {
-							return fmt.Errorf("certificate with serial %s has been revoked", cert.SerialNumber.String())
-						}
+					if serials[cert.SerialNumber.String()] {
+						return fmt.Errorf("certificate with serial %s has been revoked", cert.SerialNumber.String())
 					}
 				}
 			}
