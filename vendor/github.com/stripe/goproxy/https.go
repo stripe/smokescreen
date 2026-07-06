@@ -599,7 +599,11 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		}
 	}
 
-	connectReq.Write(c)
+	if err := connectReq.Write(c); err != nil {
+		c.Close()
+		return nil, fmt.Errorf("connectDialProxyWithContext: write CONNECT request: %w", err)
+	}
+
 	// Read response.
 	// Okay to use and discard buffered reader here, because
 	// TLS server will not speak until spoken to.
