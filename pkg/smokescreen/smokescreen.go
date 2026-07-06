@@ -1300,7 +1300,32 @@ func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req
 			decision.enforceWouldDeny = true
 		} else {
 			decision.ResolvedAddr = resolved
-			selectUpstreamProxy(config, sctx, decision)
+
+			// If the resolved address is different from the requested host,
+			// check the ACL again to prevent bypasses via alternative IP representations (e.g., Octal, Hex).
+			// This covers the case where "8.8.8.8" is in GlobalDenyList, but user requested "010.010.010.010".
+			resolvedIPStr := resolved.IP.String()
+			if resolvedIPStr != destination.Host && config.EgressACL != nil {
+				ipDecision, err := config.EgressACL.Decide(decision.Role, resolvedIPStr, decision.ClientRequestedProxy)
+				if err != nil {
+					config.Log.WithFields(logrus.Fields{
+						"error": err,
+						"role":  decision.Role,
+						"ip":    resolvedIPStr,
+					}).Warn("EgressAcl.Decide returned an error for resolved IP.")
+				} else if ipDecision.Result == acl.Deny {
+					decision.allow = false
+					// Update reason to reflect the IP block
+					decision.Reason = fmt.Sprintf("resolved host %s matched rule in global deny list", resolvedIPStr)
+					decision.enforceWouldDeny = true
+					decision.Project = ipDecision.Project
+				}
+			}
+
+			if decision.allow {
+				selectUpstreamProxy(config, sctx, decision)
+			}
+
 		}
 	}
 
