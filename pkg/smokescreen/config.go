@@ -484,6 +484,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 		certList, err := x509.ParseCRL(crlBytes)
 		if err != nil {
 			log.Printf("Failed to parse CRL in '%s': %#v\n", crlFile, err)
+			continue
 		}
 
 		// find the X509v3 Authority Key Identifier in the extensions (2.5.29.35)
