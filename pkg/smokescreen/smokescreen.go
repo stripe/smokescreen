@@ -183,13 +183,23 @@ const roleHeader = "X-Smokescreen-Role"
 const traceHeader = "X-Smokescreen-Trace-ID"
 
 func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
+	addrIsV4 := addr.IP.To4() != nil
 	for _, rng := range ranges {
 		// If the range specifies a port and the port doesn't match,
 		// then this range doesn't match
 		if rng.Port != 0 && addr.Port != rng.Port {
 			continue
 		}
-
+		// Match only within the same address family. The range's declared
+		// family is determined from its parsed mask length rather than To4(),
+		// because IPv4-mapped IPv6 ranges (e.g. "::ffff:0:0/96") would otherwise
+		// collapse to "0.0.0.0/0" via net.IPNet.Contains -> To4() and match every
+		// IPv4 address. IPv4-mapped destinations are converted to IPv4 elsewhere,
+		// so an IPv6-written range should never match an IPv4 address.
+		rangeIsV4 := len(rng.Net.Mask) == net.IPv4len
+		if rangeIsV4 != addrIsV4 {
+			continue
+		}
 		if rng.Net.Contains(addr.IP) {
 			return true
 		}

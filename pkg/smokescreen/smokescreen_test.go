@@ -2200,3 +2200,46 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 		}
 	})
 }
+
+func TestAddrIsInRuleRange(t *testing.T) {
+	mustParseCIDR := func(s string) net.IPNet {
+		_, n, err := net.ParseCIDR(s)
+		require.NoError(t, err)
+		return *n
+	}
+
+	tests := []struct {
+		name     string
+		ranges   []RuleRange
+		addr     *net.TCPAddr
+		expected bool
+	}{
+		{
+			name:     "IPv4 within range",
+			ranges:   []RuleRange{{Net: mustParseCIDR("10.0.0.0/8")}},
+			addr:     &net.TCPAddr{IP: net.ParseIP("10.1.2.3"), Port: 80},
+			expected: true,
+		},
+		{
+			name:     "non-matching port",
+			ranges:   []RuleRange{{Net: mustParseCIDR("10.0.0.0/8"), Port: 443}},
+			addr:     &net.TCPAddr{IP: net.ParseIP("10.1.2.3"), Port: 80},
+			expected: false,
+		},
+		{
+			// The address-family guard: an IPv4-mapped IPv6 range collapses to
+			// "0.0.0.0/0" via net.IPNet.Contains, so without the guard this would
+			// wrongly match every IPv4 address.
+			name:     "IPv4-mapped IPv6 range does not match IPv4 address",
+			ranges:   []RuleRange{{Net: mustParseCIDR("::ffff:0:0/96")}},
+			addr:     &net.TCPAddr{IP: net.ParseIP("8.8.8.8"), Port: 80},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, addrIsInRuleRange(tt.ranges, tt.addr))
+		})
+	}
+}
