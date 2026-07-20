@@ -310,10 +310,10 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 		}
 	}
 
-	if addrIsInRuleRange(config.AllowRanges, addr) {
-		return ipAllowUserConfigured
-	} else if addrIsInRuleRange(config.DenyRanges, addr) {
+	if addrIsInRuleRange(config.DenyRanges, addr) {
 		return ipDenyUserConfigured
+	} else if addrIsInRuleRange(config.AllowRanges, addr) {
+		return ipAllowUserConfigured
 	} else if addrHasIPv6Embedding(addr) {
 		// Block IPv6 addresses that embed IPv4 addresses (NAT64, 6to4, Teredo, IPv4-mapped)
 		// These can bypass IPv4 safety checks and enable SSRF attacks
