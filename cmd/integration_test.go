@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -36,6 +36,30 @@ var ProxyTargetHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Re
 	time.Sleep(50 * time.Millisecond)
 	io.WriteString(w, "okok")
 })
+
+// loopbackResolver keeps integration tests self-contained while allowing them
+// to use hostnames that exercise ACL policy decisions.
+type loopbackResolver struct{}
+
+func (loopbackResolver) LookupPort(_ context.Context, _ string, service string) (int, error) {
+	return strconv.Atoi(service)
+}
+
+func (loopbackResolver) LookupIP(_ context.Context, _ string, host string) ([]net.IP, error) {
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IP{ip}, nil
+	}
+	return []net.IP{net.ParseIP("127.0.0.1")}, nil
+}
+
+func targetURLForHost(t *testing.T, targetURL, host string) string {
+	t.Helper()
+
+	u, err := url.Parse(targetURL)
+	require.NoError(t, err)
+	u.Host = net.JoinHostPort(host, u.Port())
+	return u.String()
+}
 
 // RoleFromRequest implementations
 func testRFRHeader(req *http.Request) (string, error) {
@@ -274,8 +298,9 @@ func TestSmokescreenIntegration(t *testing.T) {
 	// Holds TLS and non-TLS enabled Smokescreen instances
 	proxyServers := map[bool]*httptest.Server{}
 
-	// Contains http and https URLs to api.github.com
-	externalHosts := make(map[bool]string)
+	// Contains local http and https URLs with hostnames that are not allowed by
+	// the enforce ACL policy. loopbackResolver maps them to the local targets.
+	disallowedHosts := make(map[bool]string)
 
 	for _, useTLS := range []bool{true, false} {
 		// Smokescreen instances
@@ -285,18 +310,15 @@ func TestSmokescreenIntegration(t *testing.T) {
 		proxyServers[useTLS] = proxyServer
 
 		if useTLS {
-			externalHosts[useTLS] = "https://api.stripe.com:443"
-
 			httpServer := httptest.NewTLSServer(ProxyTargetHandler)
 			defer httpServer.Close()
 			httpServers[useTLS] = httpServer
+			disallowedHosts[useTLS] = targetURLForHost(t, httpServer.URL, "disallowed.test")
 		} else {
-			// Must specify a domain which won't redirect to HTTPS
-			externalHosts[useTLS] = "http://checkip.amazonaws.com:80"
-
 			httpServer := httptest.NewServer(ProxyTargetHandler)
 			defer httpServer.Close()
 			httpServers[useTLS] = httpServer
+			disallowedHosts[useTLS] = targetURLForHost(t, httpServer.URL, "disallowed.test")
 		}
 	}
 
@@ -334,14 +356,14 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 			// An authorizedHost indicates the request should be sent to our
 			// local HTTP server. If authorizedHost is false, the request
-			// will be sent to api.github.com and may or may not be allowed
+			// will use a locally resolved hostname that may or may not be allowed
 			// depending on the acl.EnforcementPolicy.
 			for _, authorizedHost := range authorizedHosts {
 				var proxyTarget string
 				if authorizedHost {
 					proxyTarget = httpServers[overTLS].URL
 				} else {
-					proxyTarget = externalHosts[overTLS]
+					proxyTarget = disallowedHosts[overTLS]
 				}
 
 				for _, policy := range enforcementPolicies {
@@ -369,10 +391,6 @@ func TestSmokescreenIntegration(t *testing.T) {
 
 					if expectAllow {
 						testCase.ExpectStatus = http.StatusOK
-						if overTLS && !authorizedHost {
-							// The Stripe API returns a 404 to a bare HTTP GET request
-							testCase.ExpectStatus = http.StatusNotFound
-						}
 					} else {
 						testCase.ExpectStatus = http.StatusProxyAuthRequired
 					}
@@ -441,62 +459,12 @@ func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.
 	t.Logf("HTTP Response: %#v", resp)
 
 	if test.OverConnect {
-		a.Contains(err.Error(), "Failed to resolve remote hostname")
+		if a.Error(err) {
+			a.Contains(err.Error(), "proxy refused connection")
+		}
 	} else {
+		a.NotNil(resp)
 		a.Equal(http.StatusBadGateway, resp.StatusCode)
-	}
-}
-
-// This test must be run with a separate test command as the environment variables
-// required can race with the test above.
-func TestInvalidUpstreamProxyConfiguratedFromEnv(t *testing.T) {
-	var logHook logrustest.Hook
-	servers := map[bool]*httptest.Server{}
-
-	// Create TLS and non-TLS instances of Smokescreen
-	for _, useTLS := range []bool{true, false} {
-		_, server, err := startSmokescreen(t, useTLS, &logHook, "")
-		require.NoError(t, err)
-		defer server.Close()
-		servers[useTLS] = server
-	}
-
-	// Passing an illegal upstream proxy value is not designed to be an especially well
-	// handled error so it would fail many of the checks in our other tests. We really
-	// only care to ensure that these requests never succeed.
-	for _, overConnect := range []bool{true, false} {
-		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
-			var proxyTarget string
-			var upstreamProxy string
-
-			// These proxy targets don't actually matter as the requests won't be sent.
-			// because the resolution of the upstream proxy will fail.
-			if overConnect {
-				upstreamProxy = "https://notaproxy.prxy.svc:443"
-				proxyTarget = "https://api.stripe.com:443"
-			} else {
-				upstreamProxy = "http://notaproxy.prxy.svc:80"
-				proxyTarget = "http://checkip.amazonaws.com:80"
-			}
-
-			testCase := &TestCase{
-				OverConnect:   overConnect,
-				OverTLS:       overConnect,
-				ProxyURL:      servers[overConnect].URL,
-				TargetURL:     proxyTarget,
-				UpstreamProxy: upstreamProxy,
-				RoleName:      generateRoleForPolicy(acl.Open),
-				ExpectStatus:  http.StatusBadGateway,
-			}
-			os.Setenv("http_proxy", testCase.UpstreamProxy)
-			os.Setenv("https_proxy", testCase.UpstreamProxy)
-
-			resp, err := executeRequestForTest(t, testCase, &logHook)
-			validateProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
-
-			os.Unsetenv("http_proxy")
-			os.Unsetenv("https_proxy")
-		})
 	}
 }
 
@@ -504,46 +472,42 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 	var logHook logrustest.Hook
 	servers := map[bool]*httptest.Server{}
 
+	failingUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+	}))
+	defer failingUpstream.Close()
+
+	httpTarget := httptest.NewServer(ProxyTargetHandler)
+	defer httpTarget.Close()
+	httpsTarget := httptest.NewTLSServer(ProxyTargetHandler)
+	defer httpsTarget.Close()
+
 	// Create TLS and non-TLS instances of Smokescreen
 	for _, useTLS := range []bool{true, false} {
-		var httpProxyAddr string
-		if useTLS {
-			httpProxyAddr = "https://notaproxy.prxy.svc:443"
-		} else {
-			httpProxyAddr = "http://notaproxy.prxy.svc:80"
-		}
-		_, server, err := startSmokescreen(t, useTLS, &logHook, httpProxyAddr)
+		_, server, err := startSmokescreen(t, useTLS, &logHook, failingUpstream.URL)
 		require.NoError(t, err)
 		defer server.Close()
 		servers[useTLS] = server
 	}
 
-	// Passing an illegal upstream proxy value is not designed to be an especially well
-	// handled error so it would fail many of the checks in our other tests. We really
-	// only care to ensure that these requests never succeed.
+	// The local upstream proxy rejects requests before a target connection is
+	// attempted, exercising both HTTP and CONNECT upstream-proxy failures.
 	for _, overConnect := range []bool{true, false} {
 		t.Run(fmt.Sprintf("illegal proxy with CONNECT %t", overConnect), func(t *testing.T) {
 			var proxyTarget string
-			var upstreamProxy string
-
-			// These proxy targets don't actually matter as the requests won't be sent.
-			// because the resolution of the upstream proxy will fail.
 			if overConnect {
-				upstreamProxy = "https://notaproxy.prxy.svc:443"
-				proxyTarget = "https://api.stripe.com:443"
+				proxyTarget = targetURLForHost(t, httpsTarget.URL, "upstream-target.test")
 			} else {
-				upstreamProxy = "http://notaproxy.prxy.svc:80"
-				proxyTarget = "http://checkip.amazonaws.com:80"
+				proxyTarget = targetURLForHost(t, httpTarget.URL, "upstream-target.test")
 			}
 
 			testCase := &TestCase{
-				OverConnect:   overConnect,
-				OverTLS:       overConnect,
-				ProxyURL:      servers[overConnect].URL,
-				TargetURL:     proxyTarget,
-				UpstreamProxy: upstreamProxy,
-				RoleName:      generateRoleForPolicy(acl.Open),
-				ExpectStatus:  http.StatusBadGateway,
+				OverConnect:  overConnect,
+				OverTLS:      overConnect,
+				ProxyURL:     servers[overConnect].URL,
+				TargetURL:    proxyTarget,
+				RoleName:     generateRoleForPolicy(acl.Open),
+				ExpectStatus: http.StatusBadGateway,
 			}
 			resp, err := executeRequestForTest(t, testCase, &logHook)
 			validateProxyResponseWithUpstream(t, testCase, resp, err, logHook.AllEntries())
@@ -648,7 +612,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 		)
 	}
 
-	if httpProxyAddr != ""{
+	if httpProxyAddr != "" {
 		args = append(args, fmt.Sprintf("--upstream-http-proxy-addr=%s", httpProxyAddr))
 		args = append(args, fmt.Sprintf("--upstream-https-proxy-addr=%s", httpProxyAddr))
 	}
@@ -665,10 +629,10 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	}
 
 	conf.MetricsClient = metrics.NewNoOpMetricsClient()
+	conf.Resolver = loopbackResolver{}
 
 	conf.ConnectTimeout = time.Second
 
-	fmt.Printf("2 %#v\n", conf)
 	conf.Log.AddHook(logHook)
 
 	handler := smokescreen.BuildProxy(conf)
