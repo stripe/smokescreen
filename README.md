@@ -152,6 +152,7 @@ smokescreen --max-concurrent-requests=100 --max-request-rate=50 --max-concurrent
 
 **Example (YAML):**
 ```yaml
+connect_timeout: 10s  # defaults to 10s; set to 0 to disable the timeout
 max_concurrent_requests: 100
 max_request_rate: 50
 max_request_burst: 150  # optional, defaults to 2x rate
