@@ -1,5 +1,5 @@
-//go:build !nointegration
-// +build !nointegration
+//go:build integration
+// +build integration
 
 package cmd
 
