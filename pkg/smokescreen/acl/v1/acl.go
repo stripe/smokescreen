@@ -12,9 +12,12 @@ import (
 // DecideArgs holds the arguments for an ACL decision. Using a struct keeps the
 // Decider interface stable as new fields are added (e.g. Req for request-aware
 // authorization in custom Decider implementations). ACL.Decide does not
-// inspect Req; it is provided solely for use by custom implementations.
+// inspect Req or ConnectReq; they are provided solely for use by custom implementations.
 type DecideArgs struct {
-	Req              *http.Request
+	Req *http.Request
+	// ConnectReq is the edge CONNECT request from the client when Decide is
+	// evaluating a MITM inner HTTP request.
+	ConnectReq       *http.Request
 	Service          string
 	Host             string
 	ConnectProxyHost string
