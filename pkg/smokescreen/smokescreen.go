@@ -93,6 +93,9 @@ type SmokescreenContext struct {
 	// This is an explicit flag that ensures role reuse only for CONNECT MITM requests
 	// and prevents attacks that try to reuse the role for traditional HTTP proxy requests.
 	isConnectMitm bool
+	// req is the edge CONNECT request from the client. Populated for MITM inner
+	// evaluations for custom EgressACL deciders
+	req *http.Request
 	// tunnelSlotAcquired indicates whether a tunnel limiter slot was acquired for this connection.
 	// If true, the slot must be released when the connection closes.
 	tunnelSlotAcquired bool
@@ -716,6 +719,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 		ProxyType:     proxyType,
 		start:         start,
 		RequestedHost: req.Host,
+		req:    req,
 	}
 }
 
@@ -778,6 +782,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			sctx = newContext(config, connectProxy, req)
 			sctx.Decision = &ACLDecision{Role: role}
 			sctx.isConnectMitm = true
+			sctx.req = existingSctx.req
 		} else {
 			// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
 			// proxy requests we are able to specify the request during the call to OnResponse().
@@ -1386,8 +1391,14 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 		clientProvidedProxy = connectProxyUrl.Hostname()
 	}
 
+	var connectReq *http.Request
+	if sctx.isConnectMitm {
+		connectReq = sctx.req
+	}
+
 	ACLDecision, err := config.EgressACL.Decide(acl.DecideArgs{
 		Req:              req,
+		ConnectReq:       connectReq,
 		Service:          role,
 		Host:             destination.Host,
 		ConnectProxyHost: clientProvidedProxy,

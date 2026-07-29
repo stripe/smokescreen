@@ -523,6 +523,38 @@ func TestDecideReqIgnored(t *testing.T) {
 	a.Equal(dNil.Project, dWithReq.Project)
 }
 
+// TestDecideConnectReqIgnored verifies that ACL.Decide produces identical results
+// regardless of whether ConnectReq is set. ACL.Decide does not inspect ConnectReq;
+// it exists solely for use by custom Decider implementations (e.g. MITM inner requests).
+func TestDecideConnectReqIgnored(t *testing.T) {
+	a := assert.New(t)
+
+	testACL := &ACL{
+		Rules: map[string]Rule{
+			"svc": {
+				Policy:      Enforce,
+				DomainGlobs: []string{"allowed.com"},
+			},
+		},
+	}
+
+	dWithout, err := testACL.Decide(DecideArgs{Service: "svc", Host: "allowed.com"})
+	a.NoError(err)
+
+	connectReq, _ := http.NewRequest(http.MethodConnect, "https://allowed.com:443", nil)
+	connectReq.Header.Set("X-Custom-Header", "should-be-ignored")
+	dWith, err := testACL.Decide(DecideArgs{
+		Service:    "svc",
+		Host:       "allowed.com",
+		ConnectReq: connectReq,
+	})
+	a.NoError(err)
+
+	a.Equal(dWithout.Result, dWith.Result)
+	a.Equal(dWithout.Reason, dWith.Reason)
+	a.Equal(dWithout.Project, dWith.Project)
+}
+
 func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 	a := assert.New(t)
 	logger := logrus.New()
