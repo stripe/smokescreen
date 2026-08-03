@@ -38,7 +38,7 @@ type yamlConfig struct {
 	AllowMissingRole     bool     `yaml:"allow_missing_role"`
 	Network              string   `yaml:"network"`
 
-	ConnectTimeout time.Duration  `yaml:"connect_timeout"`
+	ConnectTimeout *time.Duration `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
 	ExitTimeout    *time.Duration `yaml:"exit_timeout"`
 
@@ -114,7 +114,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	c.IdleTimeout = yc.IdleTimeout
-	c.ConnectTimeout = yc.ConnectTimeout
+	if yc.ConnectTimeout != nil {
+		c.ConnectTimeout = *yc.ConnectTimeout
+	}
 	if yc.ExitTimeout != nil {
 		c.ExitTimeout = *yc.ExitTimeout
 	}

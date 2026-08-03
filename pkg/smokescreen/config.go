@@ -395,6 +395,7 @@ func NewConfig() *Config {
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
 		Log:                     log.New(),
 		Port:                    DefaultPort,
+		ConnectTimeout:          DefaultConnectTimeout,
 		ExitTimeout:             DefaultExitTimeout,
 		StatsSocketFileMode:     os.FileMode(DefaultStatsSocketFileMode),
 		ShuttingDown:            atomic.Value{},
