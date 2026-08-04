@@ -65,7 +65,7 @@ type ConnSuccessRateStats struct {
 // - cleanupInterval is how often expired items (e.g., items older than the calculationWindow) will be deleted from memory.
 func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculationWindow time.Duration, cleanupInterval time.Duration, statsc metrics.MetricsClientInterface) *ConnSuccessRateTracker {
 	newSuccessTracker := &ConnSuccessRateTracker{
-		ConnAttempts: cache.New(calculationWindow, time.Second*cleanupInterval),
+		ConnAttempts: cache.New(calculationWindow, cleanupInterval),
 	}
 	newSuccessTracker.ConnSuccessRateStats.Store(ConnSuccessRateStats{CalculatedAt: time.Now(), ConnSuccessRate: 100, TotalConns: 0})
 

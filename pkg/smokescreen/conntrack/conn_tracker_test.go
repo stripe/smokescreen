@@ -113,6 +113,29 @@ func TestConnSuccessRateTracker(t *testing.T) {
 	}
 }
 
+func TestConnSuccessRateTrackerDeletesExpiredAttempts(t *testing.T) {
+	sd := atomic.Value{}
+	sd.Store(false)
+	tracker := NewTracker(
+		time.Second,
+		metrics.NewNoOpMetricsClient(),
+		logrus.New(),
+		sd,
+		StartNewConnSuccessRateTracker(
+			time.Hour,
+			50*time.Millisecond,
+			10*time.Millisecond,
+			metrics.NewNoOpMetricsClient(),
+		),
+	)
+
+	tracker.RecordAttempt("example.com", true)
+	assert.Equal(t, 1, tracker.SuccessRateTracker.ConnAttempts.ItemCount())
+	assert.Eventually(t, func() bool {
+		return tracker.SuccessRateTracker.ConnAttempts.ItemCount() == 0
+	}, time.Second, 10*time.Millisecond)
+}
+
 func TestNoConnSuccessRateTracker(t *testing.T) {
 	assert := assert.New(t)
 	tracker := NewTestTracker(time.Second)
