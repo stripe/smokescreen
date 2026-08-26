@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2199,4 +2200,19 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 			r.Equal(200, resp.StatusCode)
 		}
 	})
+}
+
+func TestSetupCrlsMalformedFile(t *testing.T) {
+	r := require.New(t)
+
+	f, err := ioutil.TempFile("", "smokescreen-crl-*.pem")
+	r.NoError(err)
+	defer os.Remove(f.Name())
+	_, err = f.WriteString("not a valid CRL")
+	r.NoError(err)
+	r.NoError(f.Close())
+
+	conf := NewConfig()
+	err = conf.SetupCrls([]string{f.Name()})
+	r.Error(err, "malformed CRL should return a config error instead of panicking")
 }
