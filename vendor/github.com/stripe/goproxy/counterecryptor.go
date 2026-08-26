@@ -25,13 +25,14 @@ func NewCounterEncryptorRandFromKey(key interface{}, seed []byte) (r CounterEncr
 		err = errors.New("only RSA keys supported")
 		return
 	}
-	h := sha256.New()
-	if r.cipher, err = aes.NewCipher(h.Sum(keyBytes)[:aes.BlockSize]); err != nil {
+	keyDigest := sha256.Sum256(keyBytes)
+	if r.cipher, err = aes.NewCipher(keyDigest[:aes.BlockSize]); err != nil {
 		return
 	}
 	r.counter = make([]byte, r.cipher.BlockSize())
 	if seed != nil {
-		copy(r.counter, h.Sum(seed)[:r.cipher.BlockSize()])
+		seedDigest := sha256.Sum256(seed)
+		copy(r.counter, seedDigest[:r.cipher.BlockSize()])
 	}
 	r.rand = make([]byte, r.cipher.BlockSize())
 	r.ix = len(r.rand)
