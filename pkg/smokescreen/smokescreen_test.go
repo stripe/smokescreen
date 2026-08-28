@@ -255,6 +255,7 @@ func TestSelectTargetAddr(t *testing.T) {
 		temporarilyDeferredIPs []string
 		allowRanges            []string
 		denyRanges             []string
+		denyAddresses          []string
 		expectedIP             string
 		expectError            bool
 		errorContains          string
@@ -313,6 +314,23 @@ func TestSelectTargetAddr(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:          "Deny address takes precedence over allow range",
+			ips:           []string{"192.168.1.5", "192.168.1.6"},
+			port:          80,
+			allowRanges:   []string{"192.168.0.0/16"},
+			denyAddresses: []string{"192.168.1.5"},
+			expectedIP:    "192.168.1.6",
+			expectError:   false,
+		},
+		{
+			name:          "Deny address blocks all IPs even inside allow range",
+			ips:           []string{"192.168.1.5"},
+			port:          80,
+			allowRanges:   []string{"192.168.0.0/16"},
+			denyAddresses: []string{"192.168.1.5"},
+			expectError:   true,
+		},
+		{
 			name:                   "Deny range forces fallback to deferred IP",
 			ips:                    []string{"1.1.1.1", "8.8.8.8"},
 			port:                   80,
@@ -337,6 +355,11 @@ func TestSelectTargetAddr(t *testing.T) {
 
 			if len(tt.denyRanges) > 0 {
 				err := config.SetDenyRanges(tt.denyRanges)
+				require.NoError(t, err)
+			}
+
+			if len(tt.denyAddresses) > 0 {
+				err := config.SetDenyAddresses(tt.denyAddresses)
 				require.NoError(t, err)
 			}
 
