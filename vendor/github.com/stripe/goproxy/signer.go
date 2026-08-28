@@ -1,36 +1,15 @@
 package goproxy
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
-	"runtime"
-	"sort"
 	"time"
 )
-
-func hashSorted(lst []string) []byte {
-	c := make([]string, len(lst))
-	copy(c, lst)
-	sort.Strings(c)
-	h := sha1.New()
-	for _, s := range c {
-		h.Write([]byte(s + ","))
-	}
-	return h.Sum(nil)
-}
-
-func hashSortedBigInt(lst []string) *big.Int {
-	rv := new(big.Int)
-	rv.SetBytes(hashSorted(lst))
-	return rv
-}
-
-var goproxySignerVersion = ":goroxy1"
 
 func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
@@ -44,11 +23,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	if err != nil {
 		panic(err)
 	}
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
-	serial := new(big.Int)
-	serial.SetBytes(hash)
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return
+	}
+	serial.Add(serial, big.NewInt(1))
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
@@ -69,16 +50,12 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 			template.Subject.CommonName = h
 		}
 	}
-	var csprng CounterEncryptorRand
-	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
-		return
-	}
 	var certpriv *rsa.PrivateKey
-	if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
+	if certpriv, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		return
 	}
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
 	return tls.Certificate{
