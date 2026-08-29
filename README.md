@@ -61,11 +61,10 @@ Here are the options you can give Smokescreen:
    --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
    --allow-address value                       Add IP[:PORT] to list of allowed IPs.  Repeatable.
    --egress-acl-file FILE                      Validate egress traffic against FILE
-   --expose-prometheus-metrics                 Exposes metrics via a Prometheus scrapable endpoint.
-   --prometheus-endpoint ENDPOINT              Specify endpoint to host Prometheus metrics on. (default: "/metrics")
-                                                 Requires `--expose-prometheus-metrics` to be set.
-   --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default "9810")
-                                                 Requires `--expose-prometheus-metrics` to be set.
+   --expose-prometheus-metrics                 Expose metrics via prometheus.
+   --prometheus-endpoint ENDPOINT              Expose prometheus metrics on ENDPOINT. Requires --expose-prometheus-metrics to be set. (default: "/metrics")
+   --prometheus-listen-ip value                Listen for prometheus metrics on interface with address IP. Requires --expose-prometheus-metrics to be set. (default: "0.0.0.0")
+   --prometheus-port PORT                      Expose prometheus metrics on PORT. Requires --expose-prometheus-metrics to be set. (default: "9810")
    --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
    --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
@@ -76,14 +75,20 @@ Here are the options you can give Smokescreen:
    --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
                                                  This should be an absolute path with all symlinks, if any, resolved.
    --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
-   --max-concurrent-requests value             Maximum simultaneous requests. 0 = unlimited (default: 0)
-   --max-request-rate value                    Maximum requests per second. 0 = unlimited (default: 0)
-   --max-request-burst value                   Maximum burst capacity. Must be > max-request-rate when specified.
-                                                 Omit to use default (2x max-request-rate).
+   --unsafe-allow-private-ranges               Allow private ip ranges by default
+   --upstream-http-proxy-addr value            Set Smokescreen's upstream HTTP proxy address
+   --upstream-https-proxy-addr value           Set Smokescreen's upstream HTTPS proxy address
+   --max-concurrent-requests value             Maximum number of requests that can be processed simultaneously.
+                                                 0 = unlimited (default). (default: 0)
+   --max-request-rate value                    Maximum number of requests per second.
+                                                 0 = unlimited (default). (default: 0)
+   --max-request-burst value                   Maximum burst capacity for rate limiting.
+                                                 Must be greater than max-request-rate when specified.
+                                                 Omit to use default (2x max-request-rate). (default: -1)
    --max-concurrent-connect-tunnels value      Maximum number of concurrent CONNECT tunnels.
                                                  Unlike max-concurrent-requests, this limits actual long-lived connections.
-                                                 0 = unlimited (default: 0)
-   --dns-timeout DURATION                      Maximum time to wait for DNS resolution (default: 5s)
+                                                 0 = unlimited (default). (default: 0)
+   --dns-timeout value                         Maximum time to wait for DNS resolution. (default: 5s)
    --version, -v                               print the version
 ```
 
