@@ -81,6 +81,7 @@ type Config struct {
 	ExitTimeout                  time.Duration
 	MetricsClient                metrics.MetricsClientInterface
 	EgressACL                    acl.Decider
+	EgressACLFile                string
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
 	CrlByAuthorityKeyId          map[string]*pkix.CertificateList
@@ -577,6 +578,7 @@ func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr s
 func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
 		config.EgressACL = nil
+		config.EgressACLFile = ""
 		return nil
 	}
 
@@ -588,6 +590,7 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 		return err
 	}
 	config.EgressACL = egressACL
+	config.EgressACLFile = aclFile
 
 	return nil
 }
