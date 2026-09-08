@@ -2158,7 +2158,10 @@ func TestMaxConcurrentConnectTunnels(t *testing.T) {
 			resp.Body.Close()
 			r.Equal(200, resp.StatusCode, "Request %d should return 200", i)
 
-			// Wait for connection to fully close
+			// Go 1.27 may keep the CONNECT tunnel alive after closing the response
+			// body; close idle connections before waiting for the proxy connection
+			// tracker. See https://github.com/golang/go/issues/77370.
+			client.CloseIdleConnections()
 			cfg.ConnTracker.Wg().Wait()
 		}
 	})
