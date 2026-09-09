@@ -1,53 +1,95 @@
-on: [push, pull_request]
 name: Test
+
+on:
+  push:
+  pull_request:
+
 permissions:
   contents: read
-# Workaround for coveralls error "Can't add a job to a build that is already closed"
-# See https://github.com/lemurheavy/coveralls-public/issues/1716
-env:
-  COVERALLS_SERVICE_NUMBER: ${{ github.run_id }}-${{ github.run_attempt }}
-  COVERALLS_PARALLEL: true
+
 jobs:
-  test:
-    strategy:
-      matrix:
-        go-version: ['1.21', '1.22', '1.23']
+  unit:
+    name: Unit (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.25", "1.26", "1.27"]
+    env:
+      GOFLAGS: -mod=vendor
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-    - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-      with:
-        go-version: ${{ matrix.go-version }}
-    - name: Setup env
-      run: |
-        echo "{GOFLAGS}={-mod=vendor}" >> $GITHUB_ENV
-    - name: Vet
-      run: |
-        go vet -v ./...
-    - name: Test
-      run: |
-        go mod verify
-        go test -race -v -timeout 2m -failfast -covermode atomic -coverprofile=.covprofile ./... -tags=nointegration
-        # Run integration tests hermetically to avoid nondeterministic races on environment variables
-        go test -race -v -timeout 2m -failfast ./cmd/... -run TestSmokescreenIntegration
-        go test -race -v -timeout 2m -failfast ./cmd/... -run TestInvalidUpstreamProxyConfiguratedFromEnv
-        go test -race -v -timeout 2m -failfast ./cmd/... -run TestInvalidUpstreamProxyConfiguration
-        go test -race -v -timeout 2m -failfast ./cmd/... -run TestClientHalfCloseConnection
-    - name: Install goveralls
-      run: go install github.com/mattn/goveralls@latest
-    - name: Send coverage
-      env:
-        COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: goveralls -coverprofile=.covprofile -service=github
-  finish:
-    needs: test
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet -v ./...
+      - name: Unit tests
+        run: go test -v -timeout 2m -failfast ./...
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=vendor
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27"
+          cache: true
+      - name: Race tests
+        run: go test -race -v -timeout 2m -failfast ./...
+
+  integration:
+    name: Hermetic integration tests
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=vendor
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27"
+          cache: true
+      - name: Integration tests
+        run: go test -race -v -timeout 2m -failfast -tags=integration ./cmd/...
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=vendor
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27"
+          cache: true
+      - name: Generate coverage
+        run: go test -v -timeout 2m -failfast -covermode atomic -coverprofile=.covprofile ./...
+      - name: Install goveralls
+        env:
+          GOFLAGS: ""
+        run: go install github.com/mattn/goveralls@v0.0.12
+      - name: Send coverage
+        env:
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goveralls -coverprofile=.covprofile -service=github
+
+  vendor:
+    name: Verify vendored dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-      - name: Install goveralls 
-        run: go install github.com/mattn/goveralls@latest
-      - name: Close goveralls parallel build 
-        env:
-          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: goveralls -coverprofile=.covprofile -service=github -parallel-finish=true
+        with:
+          go-version: "1.27"
+          cache: true
+      - name: Check vendor tree
+        run: |
+          go mod vendor
+          git diff --exit-code -- go.mod go.sum vendor/
