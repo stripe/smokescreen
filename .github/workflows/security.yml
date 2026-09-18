@@ -1,6 +1,15 @@
 name: Security
 
 on:
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "vendor/**"
+      - ".github/workflows/security.yml"
+  push:
+    branches: [master]
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:
