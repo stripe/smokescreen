@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/DataDog/datadog-go v4.5.1+incompatible
 	github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
-	github.com/hashicorp/go-cleanhttp v0.0.0-20171218145408-d5fe4b57a186
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/xid v1.2.1
