@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -11,7 +12,7 @@ import (
 	"time"
 
 	"github.com/stripe/goproxy"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v3"
 )
 
 type yamlConfigTls struct {
@@ -244,13 +245,15 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 func LoadConfig(filePath string) (*Config, error) {
-	bytes, err := ioutil.ReadFile(filePath)
+	yamlBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
 
 	config := &Config{}
-	if err := yaml.UnmarshalStrict(bytes, config); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(yamlBytes))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(config); err != nil {
 		return nil, err
 	}
 

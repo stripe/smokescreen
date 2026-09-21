@@ -172,8 +172,12 @@ smokescreen --max-concurrent-requests=100 --max-request-rate=50 --max-concurrent
 ```
 
 **Example (YAML):**
+
+YAML duration values must include a unit accepted by Go (for example, `0s`,
+`500ms`, or `10s`). Bare numbers are not valid duration values.
+
 ```yaml
-connect_timeout: 10s  # defaults to 10s; set to 0 to disable the timeout
+connect_timeout: 10s  # defaults to 10s; set to 0s to disable the timeout
 max_concurrent_requests: 100
 max_request_rate: 50
 max_request_burst: 150  # optional, defaults to 2x rate
