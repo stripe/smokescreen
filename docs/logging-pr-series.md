@@ -63,9 +63,11 @@ Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged 
   and vendor regeneration remain deferred. The existing vendor check remains
   enabled and is expected to report the pending cleanup.
 
-Review PR 2 as three independently tested commits: instance defaults/redaction,
-configuration loading, then the atomic API migration with usage examples. Its
-PR description includes a before/after API table and usage patterns.
+Review PR 2 in four focused commits: instance defaults/redaction, configuration
+loading, the atomic API migration, then caller redaction through standard slog
+hooks. The last commit documents `ReplaceAttr` and `slog.Handler` wrapping,
+removes the regex secret-name list, and verifies baseline protection before
+handler dispatch. There is no separate redactor API.
 
 ## PR 3 — Carry request context and correlation
 

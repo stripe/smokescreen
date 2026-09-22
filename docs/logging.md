@@ -87,9 +87,15 @@ floating-point seconds. Byte counters are detached integer snapshots.
 
 Smokescreen redacts before dispatch to any backend. MITM detailed logging still
 requires opt-in and retains the header allowlist and `[REDACTED]` markers; retained
-header slices are copied. URL userinfo and sensitive query values in URLs/errors,
-including upstream-proxy diagnostics, are now redacted as an intentional logging
-security correction. Proxy decisions and client responses are unchanged.
+header slices are copied. Logged URLs omit userinfo, the whole query, and the
+fragment; malformed URLs and potentially unsafe unstructured diagnostics use
+redaction markers. These are intentional logging security corrections, including
+for upstream-proxy diagnostics. Proxy decisions and client responses are unchanged.
+
+For additional application-specific redaction, use `slog.HandlerOptions.ReplaceAttr`
+with the stock JSON/text handlers or wrap a standard `slog.Handler`. See
+[redaction examples and baseline behavior](logging-redaction.md); there is no
+separate redactor API. Smokescreen's baseline runs before these caller hooks.
 
 Structured observers are deferred. Existing built-in metrics remain unchanged.
 The unused logging dependency and vendor entries are deliberately retained for a

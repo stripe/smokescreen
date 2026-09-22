@@ -3,14 +3,15 @@
 ## Reproduction
 
 Benchmark code and the saved measurements below are grouped in PR 4. PR 1
-contains correctness tests only. Moving the benchmarks between review branches
-does not change these previously recorded results.
+contains correctness tests only. Candidate measurements were refreshed after the
+standard slog redaction follow-up in PR 2.
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
-code is the review stack ending at `e90aeec`. A subsequent standalone stats-server
-nil-logger correction does not affect these benchmark paths. The same benchmark fixtures run on
-both, with only logger/tracker API setup adapted for the baseline.
+code is the review stack ending at `166f543`, including the redaction change
+`cbdc589`. Baseline samples are retained from the earlier run on the same machine;
+these measurements were not interleaved. The same benchmark fixtures run on both,
+with only logger/tracker API setup adapted for the baseline.
 
 ```sh
 go test ./pkg/smokescreen/... -run '^$' -bench . -benchmem -count=10
@@ -19,9 +20,9 @@ go run golang.org/x/perf/cmd/benchstat@latest docs/benchmarks/baseline.txt docs/
 
 [Baseline samples](benchmarks/baseline.txt) and
 [candidate samples](benchmarks/candidate.txt) contain the measured benchmark
-records. The full suite ran first; traffic and redaction measurements were
-repeated separately after removing startup diagnostics from the benchmark
-harness. The files retain those repeated samples for those cases.
+records. Each fixture has ten samples. Baseline traffic and header-redaction
+samples come from the earlier rerun that removed startup diagnostics from the
+harness. The refreshed candidate ran the full benchmark command above.
 
 ## Performance
 
@@ -29,33 +30,34 @@ Medians, baseline → candidate:
 
 | Fixture | ns/op | B/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| CanonicalLogging/disabled | 325.1 → 3.7 | 808 → 0 | 7 → 0 |
-| CanonicalLogging/json | 3,306.5 → 511.1 | 2,833 → 160 | 54 → 1 |
-| CanonicalLogging/text | 2,803.0 → 526.4 | 2,954 → 160 | 34 → 1 |
-| RedactHeaders | 228.8 → 232.0 | 464 → 496 | 6 → 7 |
-| ProxyTraffic/HTTP | 50,976.5 → 49,173.0 | 37,128 → 32,600 | 281 → 238 |
-| ProxyTraffic/CONNECT | 42,375.0 → 42,980.5 | 5,548 → 5,536 | 62 → 62 |
+| CanonicalLogging/disabled | 325.1 → 3.6 | 808 → 0 | 7 → 0 |
+| CanonicalLogging/json | 3,306.5 → 493.8 | 2,833 → 160 | 54 → 1 |
+| CanonicalLogging/text | 2,803.0 → 515.9 | 2,954 → 160 | 34 → 1 |
+| RedactHeaders | 228.8 → 235.6 | 464 → 496 | 6 → 7 |
+| ProxyTraffic/HTTP | 50,976.5 → 48,711.5 | 37,128 → 32,364 | 281 → 239 |
+| ProxyTraffic/CONNECT | 42,375.0 → 42,440.0 | 5,548 → 5,534 | 62 → 62 |
 
 The caller-handler fixture (an atomic counter delegating to stock JSONHandler)
-measured 576.4 ns/op, 160 B/op, and 1 alloc/op. It has no equivalent standard slog
+measured 549.0 ns/op, 160 B/op, and 1 alloc/op. It has no equivalent standard slog
 handler baseline before the migration.
 
 | Parallel traffic | requests/s | p50 latency, µs/request | p99 latency, µs/request |
 | --- | ---: | ---: | ---: |
-| ProxyTraffic/HTTP | 19,618 → 20,336 | 673.0 → 640.7 | 1,179.5 → 1,114.6 |
-| ProxyTraffic/CONNECT | 23,598 → 23,266 | 577.9 → 587.6 | 781.9 → 796.9 |
+| ProxyTraffic/HTTP | 19,618 → 20,529 | 673.0 → 632.4 | 1,179.5 → 1,097.2 |
+| ProxyTraffic/CONNECT | 23,598 → 23,563 | 577.9 → 581.3 | 781.9 → 779.5 |
 
-Canonical JSON time decreased 84.5%; disabled canonical logging allocates nothing.
+Canonical JSON time decreased 85.1%; disabled canonical logging allocates nothing.
 Header redaction adds 32 bytes and one allocation to copy the two allowlisted
 values in this fixture. That is the intentional cost of detaching retained
-headers; its timing difference was not statistically significant (p=0.271).
+headers; its timing difference was not statistically significant (p=0.148).
 
-HTTP throughput increased 3.7%. CONNECT throughput decreased 1.4% in this run
-(p=0.002), with unchanged allocations. Inspection confirms no changes to the
-connection Read/Write loops: CONNECT admission/close logging runs at tunnel
-boundaries, outside the measured pooled request loop. The small measured delta
-remains recorded rather than being claimed as zero overhead. These local results
-do not establish production throughput or tail-latency behavior.
+HTTP throughput increased 4.7%. CONNECT throughput changed by -0.2%, which
+was not statistically significant (p=0.542), with unchanged allocations. The
+refreshed HTTP candidate measures 239 allocations/request, one more than the
+earlier candidate's 238 following the URL-redaction changes, and 42 fewer than
+baseline. No connection Read/Write loops changed: CONNECT admission/close logging
+runs at tunnel boundaries, outside the measured pooled request loop. These local
+results do not establish production throughput or tail-latency behavior.
 
 Traffic uses bounded pools of 128 idle connections per host on both versions.
 This avoids local ephemeral-port exhaustion from the default two-idle-connection
@@ -75,6 +77,9 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 | BuildProxy | 24 | 24 |
 | dialContext | 19 | 19 |
 | runServer | 13 | 13 |
+| logging.URL | — | 6 |
+| logging.Error | — | 4 |
+| logging.Diagnostic | — | 3 |
 
 Dependency preservation initially raised UnmarshalYAML to 44. Separating reset,
 TLS, and MITM setup reduced the main function to 31; the helpers score 4, 6, and

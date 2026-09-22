@@ -25,14 +25,6 @@ By default, Smokescreen will identify clients by the "common name" in the TLS
 certificate they present, if any. The client identification function can also
 be easily replaced; more on this in the usage section.
 
-## Logging
-
-Smokescreen uses standard `log/slog` with instance-local JSON logging by default.
-See the [logging migration guide](docs/logging.md) for backend configuration,
-breaking API changes, context propagation, and caller-owned cleanup.
-The [validation report](docs/logging-validation.md) includes benchmark and
-cyclomatic-complexity comparisons.
-
 ## Dependencies
 
 Smokescreen uses [go modules][mod] to manage dependencies. The
@@ -172,8 +164,8 @@ For stock text output, use `slog.New(slog.NewTextHandler(w, nil))` instead.
 For YAML loading, use `smokescreen.LoadConfigWithLogger(path, logger)` or
 `cmd.NewConfiguration(args, logger)` to capture loading diagnostics.
 Callers own handler flushing and cleanup. Use `ReplaceAttr` or a handler wrapper
-for additional [redaction](docs/logging-redaction.md). See the
-[migration notes](docs/logging-changes.md) for operator-visible changes.
+for additional [redaction](docs/logging-redaction.md). See the [migration guide](docs/logging.md),
+[operator notes](docs/logging-changes.md), and [validation results](docs/logging-validation.md).
 
 ### IP Filtering
 
