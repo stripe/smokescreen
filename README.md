@@ -25,6 +25,14 @@ By default, Smokescreen will identify clients by the "common name" in the TLS
 certificate they present, if any. The client identification function can also
 be easily replaced; more on this in the usage section.
 
+## Logging
+
+Smokescreen uses standard `log/slog` with instance-local JSON logging by default.
+See the [logging migration guide](docs/logging.md) for backend configuration,
+breaking API changes, context propagation, and caller-owned cleanup.
+The [validation report](docs/logging-validation.md) includes benchmark and
+cyclomatic-complexity comparisons.
+
 ## Dependencies
 
 Smokescreen uses [go modules][mod] to manage dependencies. The
