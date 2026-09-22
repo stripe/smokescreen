@@ -51,7 +51,7 @@ Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged 
 - Migrate public logging types, implementation, and existing tests to `*slog.Logger`.
 - Use instance-local stock JSON defaults and consistent nil-logger resolution.
 - Install supplied dependencies before configuration diagnostics and preserve
-  them through YAML loading; decompose initialization into focused helpers.
+  them through YAML loading; apply only supplied keys without resetting the config.
 - Replace ACL logger embedding with a private field, remove the unused
   `NewTracker` logger parameter, and replace the legacy writer with instance
   standard-log bridges.
@@ -65,7 +65,9 @@ Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged 
 
 Review PR 2 commit by commit. Caller redaction uses `ReplaceAttr` or a standard
 `slog.Handler`; built-in protection targets URL fields, typed URL errors, and
-MITM headers. Ordinary diagnostics retain their text.
+MITM headers. Ordinary diagnostics retain their text. Review fixes add typed dial
+attributes, restored diagnostic fields, error-tree redaction, and timestamp coverage;
+invalid YAML socket modes now return errors.
 
 ## PR 3 — Carry request context and correlation
 

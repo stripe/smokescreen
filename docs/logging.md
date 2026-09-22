@@ -20,8 +20,8 @@ backpressure. Handlers must support concurrent calls as required by slog.
 
 Set `cfg.Log` before `cfg.LoadFile(path)`, or pass your logger to
 `cmd.NewConfiguration(args, logger)`, to capture configuration and ACL-loading
-diagnostics. YAML loading preserves injected dependencies unless the file
-explicitly configures their replacement.
+diagnostics. YAML loading applies only supplied settings, preserving omitted values
+and injected dependencies. Invalid socket modes return errors to the caller.
 
 ## API changes
 
@@ -79,8 +79,9 @@ to:
 {"time":"2026-09-22T10:00:00Z","level":"INFO","msg":"CANONICAL-PROXY-DECISION","allow":true}
 ```
 
-WARN replaces `warning`; fatal paths emit ERROR before the existing exit(1).
-Timestamp formatting, escaping, and key order follow the standard handler.
+WARN replaces `warning`; remaining fatal paths emit ERROR before exit(1), without
+flushing caller buffers. Stock JSON preserves nanoseconds; stock text uses milliseconds.
+Escaping and key order follow the standard handler. See [operator notes](logging-changes.md).
 Update parsers that depended on legacy formatting, or supply your own handler.
 DNS/connect timings remain integer milliseconds and connection duration remains
 floating-point seconds. Byte counters are detached integer snapshots.
@@ -88,8 +89,8 @@ floating-point seconds. Byte counters are detached integer snapshots.
 Smokescreen redacts before dispatch to any backend. MITM detailed logging still
 requires opt-in and retains the header allowlist and `[REDACTED]` markers; retained
 header slices are copied. Logged URLs omit userinfo, the whole query, and the
-fragment. Typed URL errors are sanitized while retaining wrapper text. Ordinary
-diagnostics are unchanged. These URL security corrections do not change proxy
+fragment. URL-bearing error chains log sanitized causes rather than wrapper text.
+Ordinary diagnostics are unchanged. These URL security corrections do not change proxy
 decisions or client responses.
 
 For additional application-specific redaction, use `slog.HandlerOptions.ReplaceAttr`
