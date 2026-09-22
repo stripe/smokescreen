@@ -45,6 +45,7 @@ const (
 
 const (
 	LogFieldID               = "id"
+	LogFieldParentID         = "parent_id"
 	LogFieldOutLocalAddr     = "outbound_local_addr"
 	LogFieldOutRemoteAddr    = "outbound_remote_addr"
 	LogFieldInRemoteAddr     = "inbound_remote_addr"
@@ -91,6 +92,8 @@ type SmokescreenContext struct {
 	dialAttrs     []slog.Attr
 	statusCode    int
 	ctx           context.Context
+	id            string
+	traceID       string
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
@@ -706,18 +709,26 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 	}
 }
 
-func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenContext {
+func newContext(cfg *Config, proxyType string, req *http.Request, parent *SmokescreenContext) *SmokescreenContext {
 	start := time.Now()
+	id := xid.New().String()
+	traceID := req.Header.Get(traceHeader)
+	if traceID == "" && parent != nil {
+		traceID = parent.traceID
+	}
 
 	fields := []any{
-		slog.String(LogFieldID, xid.New().String()),
+		slog.String(LogFieldID, id),
 		slog.String(LogFieldInRemoteAddr, req.RemoteAddr),
 		slog.String(LogFieldProxyType, proxyType),
 		slog.String(LogFieldRequestedHost, logging.URL(req.Host)),
 		slog.Time(LogFieldStartTime, start.UTC()),
-		slog.String(LogFieldTraceID, req.Header.Get(traceHeader)),
+		slog.String(LogFieldTraceID, traceID),
 	}
 
+	if parent != nil {
+		fields = append(fields, slog.String(LogFieldParentID, parent.id))
+	}
 	// Add TLS fields immediately if available
 	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
 		fields = append(fields, slog.String(LogFieldInRemoteX509CN, req.TLS.PeerCertificates[0].Subject.CommonName))
@@ -732,6 +743,8 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 		cfg:           cfg,
 		Logger:        logger,
 		ctx:           req.Context(),
+		id:            id,
+		traceID:       traceID,
 		ProxyType:     proxyType,
 		start:         start,
 		RequestedHost: req.Host,
@@ -795,14 +808,14 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			}
 			role := existingSctx.Decision.Role
 			existingSctx.Logger.InfoContext(req.Context(), "MITM request, reusing role from CONNECT but checking new destination")
-			sctx = newContext(config, connectProxy, req)
+			sctx = newContext(config, connectProxy, req, existingSctx)
 			sctx.Decision = &ACLDecision{Role: role}
 			sctx.isConnectMitm = true
 			sctx.req = existingSctx.req
 		} else {
 			// We are intentionally *not* setting pctx.HTTPErrorHandler because with traditional HTTP
 			// proxy requests we are able to specify the request during the call to OnResponse().
-			sctx = newContext(config, httpProxy, req)
+			sctx = newContext(config, httpProxy, req, nil)
 		}
 
 		// Attach SmokescreenContext to goproxy.ProxyCtx
@@ -853,7 +866,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 
 	// Handle CONNECT proxy to TLS & other TCP protocols destination
 	proxy.OnRequest().HandleConnectFunc(func(_ string, pctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		pctx.UserData = newContext(config, connectProxy, pctx.Req)
+		pctx.UserData = newContext(config, connectProxy, pctx.Req, nil)
 		pctx.HTTPErrorHandler = HTTPErrorHandler
 
 		// Defer logging the proxy event here because logProxy relies
