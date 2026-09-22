@@ -1,7 +1,6 @@
 package statsd
 
 import (
-	"errors"
 	"net"
 	"time"
 )
@@ -12,7 +11,7 @@ type udpWriter struct {
 }
 
 // New returns a pointer to a new udpWriter given an addr in the format "hostname:port".
-func newUDPWriter(addr string) (*udpWriter, error) {
+func newUDPWriter(addr string, _ time.Duration) (*udpWriter, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -25,11 +24,6 @@ func newUDPWriter(addr string) (*udpWriter, error) {
 	return writer, nil
 }
 
-// SetWriteTimeout is not needed for UDP, returns error
-func (w *udpWriter) SetWriteTimeout(d time.Duration) error {
-	return errors.New("SetWriteTimeout: not supported for UDP connections")
-}
-
 // Write data to the UDP connection with no error handling
 func (w *udpWriter) Write(data []byte) (int, error) {
 	return w.conn.Write(data)
@@ -37,4 +31,9 @@ func (w *udpWriter) Write(data []byte) (int, error) {
 
 func (w *udpWriter) Close() error {
 	return w.conn.Close()
+}
+
+// GetTransportName returns the transport used by the sender
+func (w *udpWriter) GetTransportName() string {
+	return writerNameUDP
 }

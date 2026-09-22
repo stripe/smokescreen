@@ -11,8 +11,18 @@ func (n *NoOpClient) Gauge(name string, value float64, tags []string, rate float
 	return nil
 }
 
+// GaugeWithTimestamp does nothing and returns nil
+func (n *NoOpClient) GaugeWithTimestamp(name string, value float64, tags []string, rate float64, timestamp time.Time) error {
+	return nil
+}
+
 // Count does nothing and returns nil
 func (n *NoOpClient) Count(name string, value int64, tags []string, rate float64) error {
+	return nil
+}
+
+// CountWithTimestamp does nothing and returns nil
+func (n *NoOpClient) CountWithTimestamp(name string, value int64, tags []string, rate float64, timestamp time.Time) error {
 	return nil
 }
 
@@ -81,11 +91,28 @@ func (n *NoOpClient) Flush() error {
 	return nil
 }
 
-// SetWriteTimeout does nothing and returns nil
-func (n *NoOpClient) SetWriteTimeout(d time.Duration) error {
-	return nil
+// IsClosed does nothing and return false
+func (n *NoOpClient) IsClosed() bool {
+	return false
+}
+
+// GetTelemetry does nothing and returns an empty Telemetry
+func (n *NoOpClient) GetTelemetry() Telemetry {
+	return Telemetry{}
 }
 
 // Verify that NoOpClient implements the ClientInterface.
 // https://golang.org/doc/faq#guarantee_satisfies_interface
 var _ ClientInterface = &NoOpClient{}
+
+// NoOpClientDirect implements ClientDirectInterface and does nothing.
+type NoOpClientDirect struct {
+	NoOpClient
+}
+
+// DistributionSamples does nothing and returns nil
+func (n *NoOpClientDirect) DistributionSamples(name string, values []float64, tags []string, rate float64) error {
+	return nil
+}
+
+var _ ClientDirectInterface = &NoOpClientDirect{}
