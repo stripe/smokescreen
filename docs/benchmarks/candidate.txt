@@ -1,0 +1,74 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/stripe/smokescreen/pkg/smokescreen
+cpu: Apple M4 Pro
+BenchmarkCallerHandler-14       	 2095938	       571.8 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2049812	       577.9 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2130801	       586.4 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2045192	       600.1 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2087810	       573.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2074862	       568.0 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2074718	       579.8 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2113484	       572.5 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2104192	       584.9 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCallerHandler-14       	 2083038	       574.9 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	319974224	         3.653 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	326628970	         3.689 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	327654891	         4.394 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	236853870	         4.605 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	310288273	         3.814 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	317563755	         3.722 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	323446210	         3.619 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	332901446	         3.623 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	322604782	         3.710 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/disabled-14         	331116614	         3.808 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2315546	       514.0 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2349036	       522.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2363388	       507.2 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2372847	       510.3 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2335908	       512.8 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2340402	       514.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2369152	       511.1 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2353437	       506.2 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2390772	       511.1 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/json-14             	 2372706	       507.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2309386	       526.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2224749	       526.2 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2307884	       535.7 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2250888	       538.7 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2262547	       524.0 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2272179	       529.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2262028	       535.2 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2281652	       526.0 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2298210	       523.6 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCanonicalLogging/text-14             	 2322250	       518.9 ns/op	     160 B/op	       1 allocs/op
+BenchmarkRedactHeaders-14    	 5080525	       229.2 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5216804	       235.7 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5224804	       229.7 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5230167	       238.3 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5153210	       231.8 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5107353	       231.7 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5074190	       232.2 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5237713	       232.6 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5000036	       230.6 ns/op	     496 B/op	       7 allocs/op
+BenchmarkRedactHeaders-14    	 5208410	       239.5 ns/op	     496 B/op	       7 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   22827	     49458 ns/op	    641917 p50-ns/request	   1136041 p99-ns/request	     20219 requests/s	   33862 B/op	     239 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   23797	     49175 ns/op	    644292 p50-ns/request	   1109417 p99-ns/request	     20335 requests/s	   32215 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24043	     48640 ns/op	    634792 p50-ns/request	   1101625 p99-ns/request	     20559 requests/s	   31978 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24266	     49233 ns/op	    644250 p50-ns/request	   1119167 p99-ns/request	     20311 requests/s	   32662 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24378	     48900 ns/op	    636833 p50-ns/request	   1110000 p99-ns/request	     20450 requests/s	   32592 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24160	     49171 ns/op	    641667 p50-ns/request	   1131917 p99-ns/request	     20337 requests/s	   33242 B/op	     239 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24453	     48664 ns/op	    630334 p50-ns/request	   1088500 p99-ns/request	     20549 requests/s	   32607 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24615	     50002 ns/op	    639667 p50-ns/request	   1329834 p99-ns/request	     19999 requests/s	   32443 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   24222	     48637 ns/op	    629459 p50-ns/request	   1085083 p99-ns/request	     20560 requests/s	   31731 B/op	     238 allocs/op
+BenchmarkProxyTraffic/HTTP-14         	   23998	     50209 ns/op	    657333 p50-ns/request	   1183291 p99-ns/request	     19917 requests/s	   33032 B/op	     239 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   26712	     43628 ns/op	    592208 p50-ns/request	    832667 p99-ns/request	     22921 requests/s	    5536 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   27434	     42693 ns/op	    583917 p50-ns/request	    789083 p99-ns/request	     23423 requests/s	    5541 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   23689	     44123 ns/op	    585958 p50-ns/request	    992667 p99-ns/request	     22664 requests/s	    5693 B/op	      63 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   26728	     42535 ns/op	    582083 p50-ns/request	    790708 p99-ns/request	     23510 requests/s	    5559 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   27304	     43017 ns/op	    587875 p50-ns/request	    796459 p99-ns/request	     23247 requests/s	    5518 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   26779	     42886 ns/op	    587292 p50-ns/request	    790458 p99-ns/request	     23318 requests/s	    5537 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   27241	     42944 ns/op	    588291 p50-ns/request	    796917 p99-ns/request	     23286 requests/s	    5511 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   27048	     42794 ns/op	    585666 p50-ns/request	    796833 p99-ns/request	     23368 requests/s	    5536 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   27429	     43538 ns/op	    589958 p50-ns/request	    905666 p99-ns/request	     22968 requests/s	    5525 B/op	      62 allocs/op
+BenchmarkProxyTraffic/CONNECT-14      	   25836	     44071 ns/op	    604750 p50-ns/request	    863208 p99-ns/request	     22691 requests/s	    5557 B/op	      62 allocs/op
