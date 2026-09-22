@@ -565,15 +565,6 @@ func (config *Config) SetupStatsd(addr string) error {
 	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
-func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr string) error {
-	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port, listenAddr)
-	if err != nil {
-		return err
-	}
-	config.MetricsClient = metricsClient
-	return nil
-}
-
 func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
 		config.EgressACL = nil

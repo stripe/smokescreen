@@ -1,3 +1,5 @@
+//go:build !smokescreen_no_prometheus
+
 package metrics
 
 import (
