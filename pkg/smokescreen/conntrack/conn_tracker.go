@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"strings"
@@ -17,8 +18,8 @@ type TrackerInterface interface {
 	ReportConnectionSuccessRate() *ConnSuccessRateStats
 	RecordAttempt(string, bool)
 	MaybeIdleIn(time.Duration) time.Duration
-	NewInstrumentedConn(net.Conn, *slog.Logger, string, string, string, string) *InstrumentedConn
-	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *slog.Logger, string, string, string, string) *InstrumentedConn
+	NewInstrumentedConn(context.Context, net.Conn, *slog.Logger, string, string, string, string) *InstrumentedConn
+	NewInstrumentedConnWithTimeout(context.Context, net.Conn, time.Duration, *slog.Logger, string, string, string, string) *InstrumentedConn
 	Wg() *sync.WaitGroup
 	Range(f func(interface{}, interface{}) bool)
 }

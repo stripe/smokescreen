@@ -2,6 +2,7 @@ package conntrack
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -11,11 +12,33 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/smokescreen/internal/testlog"
 )
 
 type closeOrderConn struct {
 	net.Conn
 	close func() error
+}
+
+func TestCloseRetainsCanceledLoggingContext(t *testing.T) {
+	logger, records := testlog.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	tracker := NewTestTracker(time.Second)
+	closed := 0
+	conn := tracker.NewInstrumentedConn(ctx, closeOrderConn{close: func() error { closed++; return nil }}, logger, "role", "example.com", "connect", "project")
+	cancel()
+	require.Zero(t, closed)
+	atomic.StoreUint64(conn.BytesIn, 12)
+	require.NoError(t, conn.Close())
+	require.NoError(t, conn.Close())
+	require.Equal(t, 1, closed)
+	require.Len(t, records.AllEntries(), 1)
+	entry := records.LastEntry()
+	require.Same(t, ctx, entry.Context)
+	require.ErrorIs(t, entry.Context.Err(), context.Canceled)
+	require.Equal(t, uint64(12), entry.Data[LogFieldBytesIn])
+	atomic.StoreUint64(conn.BytesIn, 15)
+	require.Equal(t, uint64(12), entry.Data[LogFieldBytesIn])
 }
 
 func (c closeOrderConn) Close() error { return c.close() }
@@ -26,7 +49,7 @@ func TestCanonicalCloseAndCleanupOrder(t *testing.T) {
 	tracker := NewTestTracker(time.Second)
 	var callbackCount, closeCount int
 	closeError := errors.New("close failed")
-	conn := tracker.NewInstrumentedConn(closeOrderConn{close: func() error {
+	conn := tracker.NewInstrumentedConn(context.Background(), closeOrderConn{close: func() error {
 		closeCount++
 		require.Equal(t, 1, callbackCount)
 		require.Contains(t, output.String(), CanonicalProxyConnClose)

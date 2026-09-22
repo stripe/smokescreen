@@ -75,7 +75,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 		repr, err := instrumentedConn.JsonStats()
 
 		if err != nil {
-			s.config.Log.Error(logging.Error(err))
+			s.config.Log.ErrorContext(req.Context(), logging.Error(err))
 		}
 
 		rw.Write(repr)

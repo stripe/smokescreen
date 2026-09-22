@@ -61,8 +61,8 @@ var _ acl.Decider = customACL{}
 // An embedding can override tracking and still use the standard logging types.
 type customTracker struct{ *conntrack.Tracker }
 
-func (t customTracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, logger *slog.Logger, role, host, proxyType, project string) *conntrack.InstrumentedConn {
-	return t.Tracker.NewInstrumentedConnWithTimeout(conn, timeout, logger, role, host, proxyType, project)
+func (t customTracker) NewInstrumentedConnWithTimeout(ctx context.Context, conn net.Conn, timeout time.Duration, logger *slog.Logger, role, host, proxyType, project string) *conntrack.InstrumentedConn {
+	return t.Tracker.NewInstrumentedConnWithTimeout(ctx, conn, timeout, logger, role, host, proxyType, project)
 }
 
 var _ conntrack.TrackerInterface = customTracker{}

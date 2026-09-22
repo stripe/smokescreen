@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -32,6 +33,7 @@ type InstrumentedConn struct {
 
 	tracker *Tracker
 	logger  *slog.Logger
+	ctx     context.Context
 
 	Start        time.Time
 	LastActivity *int64 // Unix nano
@@ -50,13 +52,19 @@ type InstrumentedConn struct {
 	OnClose func()
 }
 
-func (t *Tracker) NewInstrumentedConnWithTimeout(conn net.Conn, timeout time.Duration, logger *slog.Logger, role, outboundHost, proxyType, project string) *InstrumentedConn {
-	ic := t.NewInstrumentedConn(conn, logger, role, outboundHost, proxyType, project)
+// NewInstrumentedConnWithTimeout retains ctx for logging only; timeout controls I/O deadlines.
+func (t *Tracker) NewInstrumentedConnWithTimeout(ctx context.Context, conn net.Conn, timeout time.Duration, logger *slog.Logger, role, outboundHost, proxyType, project string) *InstrumentedConn {
+	ic := t.NewInstrumentedConn(ctx, conn, logger, role, outboundHost, proxyType, project)
 	ic.timeout = timeout
 	return ic
 }
 
-func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *slog.Logger, role, outboundHost, proxyType, project string) *InstrumentedConn {
+// NewInstrumentedConn retains ctx for close diagnostics, even after cancellation.
+// Canceling ctx does not close the connection. Nil context uses context.Background.
+func (t *Tracker) NewInstrumentedConn(ctx context.Context, conn net.Conn, logger *slog.Logger, role, outboundHost, proxyType, project string) *InstrumentedConn {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	now := time.Now()
 	nowUnixNano := now.UnixNano()
 	bytesIn := uint64(0)
@@ -69,6 +77,7 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *slog.Logger, role, 
 		OutboundHost: outboundHost,
 		tracker:      t,
 		logger:       logging.OrDefault(logger),
+		ctx:          ctx,
 		Start:        now,
 		LastActivity: &nowUnixNano,
 		BytesIn:      &bytesIn,
@@ -132,7 +141,7 @@ func (ic *InstrumentedConn) Close() error {
 		slog.Time(LogFieldEndTime, end.UTC()),
 		slog.Float64(LogFieldDuration, duration),
 		slog.String(LogFieldError, errorMessage),
-		slog.Time(LogFieldLastActivity, time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC())).Info(CanonicalProxyConnClose)
+		slog.Time(LogFieldLastActivity, time.Unix(0, atomic.LoadInt64(ic.LastActivity)).UTC())).InfoContext(ic.ctx, CanonicalProxyConnClose)
 
 	ic.tracker.Wg().Done()
 	ic.CloseError = ic.Conn.Close()

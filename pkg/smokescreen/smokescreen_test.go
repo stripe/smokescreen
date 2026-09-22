@@ -351,7 +351,7 @@ func TestSelectTargetAddr(t *testing.T) {
 			}
 
 			// Test the function
-			selectedAddr, err := selectTargetAddr(config, ips, tt.port)
+			selectedAddr, err := selectTargetAddr(context.Background(), config, config.Log, ips, tt.port)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -380,7 +380,7 @@ func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 	// All IPs are deferred, should select based on priority in deferred list
 	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
 
-	selectedAddr, err := selectTargetAddr(config, ips, 80)
+	selectedAddr, err := selectTargetAddr(context.Background(), config, config.Log, ips, 80)
 
 	require.NoError(t, err)
 	// Should select 8.8.4.4 because it's first in the TemporarilyDeferredIPs list

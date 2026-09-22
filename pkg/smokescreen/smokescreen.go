@@ -90,6 +90,7 @@ type SmokescreenContext struct {
 	RequestedHost string
 	dialAttrs     []slog.Attr
 	statusCode    int
+	ctx           context.Context
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
@@ -345,7 +346,7 @@ func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 	}
 }
 
-func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) {
+func resolveTCPAddr(ctx context.Context, config *Config, logger *slog.Logger, network, addr string) (*net.TCPAddr, error) {
 	if network != "tcp" {
 		return nil, fmt.Errorf("unknown network type %q", network)
 	}
@@ -358,14 +359,14 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	if dnsTimeout == 0 {
 		dnsTimeout = 5 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
+	lookupCtx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
 	defer cancel()
-	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
+	resolvedPort, err := config.Resolver.LookupPort(lookupCtx, network, port)
 	if err != nil {
 		return nil, err
 	}
 
-	ips, err := config.Resolver.LookupIP(ctx, config.Network, host)
+	ips, err := config.Resolver.LookupIP(lookupCtx, config.Network, host)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +375,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	}
 
 	// Select the best IP using prioritization logic
-	selectedAddr, err := selectTargetAddr(config, ips, resolvedPort)
+	selectedAddr, err := selectTargetAddr(ctx, config, logger, ips, resolvedPort)
 	if err != nil {
 		return nil, err
 	}
@@ -382,10 +383,10 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 }
 
 // logFallbackIP logs when a deferred IP is selected as fallback
-func logFallbackIP(config *Config, addr *net.TCPAddr) {
-	config.Log.With(slog.String("ip", addr.IP.String()),
+func logFallbackIP(ctx context.Context, logger *slog.Logger, addr *net.TCPAddr) {
+	logging.OrDefault(logger).With(slog.String("ip", addr.IP.String()),
 		slog.Int("port", addr.Port),
-		slog.String("reason", "all lookup IPs are in deferred list")).Info("Using temporarily deferred IP as fallback")
+		slog.String("reason", "all lookup IPs are in deferred list")).InfoContext(ctx, "Using temporarily deferred IP as fallback")
 }
 
 // selectFallbackAddr attempts to select a fallback address from temporarily deferred IPs
@@ -399,12 +400,12 @@ func logFallbackIP(config *Config, addr *net.TCPAddr) {
 //
 // It prioritizes IPs in the order they appear in config.TemporarilyDeferredIPs
 // Returns the first matching address found, or nil if no fallback is available
-func selectFallbackAddr(config *Config, fallbackTargets []*net.TCPAddr) *net.TCPAddr {
+func selectFallbackAddr(ctx context.Context, config *Config, logger *slog.Logger, fallbackTargets []*net.TCPAddr) *net.TCPAddr {
 	for _, ipString := range config.TemporarilyDeferredIPs {
 		for _, addr := range fallbackTargets {
 			parsedIP := net.ParseIP(ipString)
 			if parsedIP != nil && addr.IP.Equal(parsedIP) {
-				logFallbackIP(config, addr)
+				logFallbackIP(ctx, logger, addr)
 				return addr
 			}
 		}
@@ -416,7 +417,7 @@ func selectFallbackAddr(config *Config, fallbackTargets []*net.TCPAddr) *net.TCP
 // It prioritizes addresses that are allowed by ACL rules and not in the temporarily deferred list.
 // If no preferred addresses are available, it falls back to temporarily deferred addresses.
 // Returns an error if no valid addresses are found.
-func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, error) {
+func selectTargetAddr(ctx context.Context, config *Config, logger *slog.Logger, ips []net.IP, port int) (*net.TCPAddr, error) {
 	var fallbackTargets []*net.TCPAddr
 	var denialReasons []string
 
@@ -431,9 +432,9 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 		if classification.IsAllowed() {
 			if len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
 				// IP is allowed but temporarily deferred, save for fallback
-				config.Log.With(slog.String("ip", targetAddr.IP.String()),
+				logging.OrDefault(logger).With(slog.String("ip", targetAddr.IP.String()),
 					slog.Int("port", targetAddr.Port),
-					slog.String("reason", "IP is temporarily deny-listed")).Info("Temporarily denying IP, will be used as fallback")
+					slog.String("reason", "IP is temporarily deny-listed")).InfoContext(ctx, "Temporarily denying IP, will be used as fallback")
 				fallbackTargets = append(fallbackTargets, targetAddr)
 				continue
 			}
@@ -446,7 +447,7 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 
 	// Second pass: if no preferred IPs found, try to use a fallback target
 	if len(fallbackTargets) > 0 {
-		if fallbackAddr := selectFallbackAddr(config, fallbackTargets); fallbackAddr != nil {
+		if fallbackAddr := selectFallbackAddr(ctx, config, logger, fallbackTargets); fallbackAddr != nil {
 			return fallbackAddr, nil
 		}
 	}
@@ -459,11 +460,11 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 	return nil, fmt.Errorf("no IP addresses to evaluate")
 }
 
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
+func safeResolve(ctx context.Context, config *Config, logger *slog.Logger, network, addr string) (*net.TCPAddr, string, error) {
 	config.MetricsClient.Incr("resolver.attempts_total", 1)
 
 	resolveStart := time.Now()
-	resolved, err := resolveTCPAddr(config, network, addr)
+	resolved, err := resolveTCPAddr(ctx, config, logger, network, addr)
 	resolveDuration := time.Since(resolveStart)
 	if err != nil {
 		config.MetricsClient.Incr("resolver.errors_total", 1)
@@ -499,11 +500,11 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// or is not tcp we must re-resolve it before establishing the connection.
 	if d.ResolvedAddr == nil || d.OutboundHost != addr || network != "tcp" {
 		var err error
-		d.ResolvedAddr, d.Reason, err = safeResolve(sctx.cfg, network, addr)
+		d.ResolvedAddr, d.Reason, err = safeResolve(sctx.loggingContext(), sctx.cfg, sctx.Logger, network, addr)
 		if err != nil {
 			if _, ok := err.(denyError); ok {
-				sctx.cfg.Log.With(slog.String("address", addr),
-					slog.String("error", logging.Error(err))).Error("unexpected illegal address in dialer")
+				sctx.Logger.With(slog.String("address", addr),
+					slog.String("error", logging.Error(err))).ErrorContext(sctx.loggingContext(), "unexpected illegal address in dialer")
 			}
 			return nil, err
 		}
@@ -559,7 +560,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// requests are pooled and reused by net.Transport.
 	if sctx.ProxyType == connectProxy {
 		logger := sctx.diagnosticLogger()
-		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, logger, d.Role, d.OutboundHost, sctx.ProxyType, d.Project)
+		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(sctx.loggingContext(), conn, sctx.cfg.IdleTimeout, logger, d.Role, d.OutboundHost, sctx.ProxyType, d.Project)
 		pctx.ConnErrorHandler = ic.Error
 
 		// Set up tunnel limiter release callback.
@@ -608,11 +609,11 @@ func HTTPErrorHandler(w io.WriteCloser, pctx *goproxy.ProxyCtx, err error) {
 	resp := rejectResponse(pctx, err)
 
 	if err := resp.Write(w); err != nil {
-		sctx.diagnosticLogger().Error(fmt.Sprintf("Failed to write HTTP error response: %s", logging.Error(err)))
+		sctx.diagnosticLogger().ErrorContext(sctx.loggingContext(), fmt.Sprintf("Failed to write HTTP error response: %s", logging.Error(err)))
 	}
 
 	if err := w.Close(); err != nil {
-		sctx.diagnosticLogger().Error(fmt.Sprintf("Failed to close proxy client connection: %s", logging.Error(err)))
+		sctx.diagnosticLogger().ErrorContext(sctx.loggingContext(), fmt.Sprintf("Failed to close proxy client connection: %s", logging.Error(err)))
 	}
 }
 
@@ -659,13 +660,13 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 		code = http.StatusInternalServerError
 		msg = "An unexpected error occurred: " + err.Error()
 		logMsg = "An unexpected error occurred: " + logging.Error(err)
-		sctx.diagnosticLogger().With(slog.String("error", logging.Error(err))).Warn("rejectResponse called with unexpected error")
+		sctx.diagnosticLogger().With(slog.String("error", logging.Error(err))).WarnContext(sctx.loggingContext(), "rejectResponse called with unexpected error")
 	}
 	sctx.statusCode = code
 
 	// Do not double log deny errors, they are logged in a previous call to logProxy.
 	if _, ok := err.(denyError); !ok {
-		sctx.diagnosticLogger().Error(logMsg)
+		sctx.diagnosticLogger().ErrorContext(sctx.loggingContext(), logMsg)
 	}
 
 	if sctx.cfg.AdditionalErrorMessageOnDeny != "" {
@@ -730,6 +731,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 	return &SmokescreenContext{
 		cfg:           cfg,
 		Logger:        logger,
+		ctx:           req.Context(),
 		ProxyType:     proxyType,
 		start:         start,
 		RequestedHost: req.Host,
@@ -786,13 +788,13 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			existingSctx, ok := pctx.UserData.(*SmokescreenContext)
 			if !ok || existingSctx.Decision == nil {
 				config.Log.With(slog.Bool("context_valid", ok),
-					slog.Bool("decision_present", existingSctx != nil && existingSctx.Decision != nil)).Error("MITM request missing required context or decision from CONNECT phase - rejecting request")
+					slog.Bool("decision_present", existingSctx != nil && existingSctx.Decision != nil)).ErrorContext(req.Context(), "MITM request missing required context or decision from CONNECT phase - rejecting request")
 				err := errors.New("MITM request missing context from CONNECT phase")
 				pctx.Error = denyError{err}
 				return req, rejectResponse(pctx, pctx.Error)
 			}
 			role := existingSctx.Decision.Role
-			config.Log.With(slog.String("role", role)).Info("MITM request, reusing role from CONNECT but checking new destination")
+			existingSctx.Logger.InfoContext(req.Context(), "MITM request, reusing role from CONNECT but checking new destination")
 			sctx = newContext(config, connectProxy, req)
 			sctx.Decision = &ACLDecision{Role: role}
 			sctx.isConnectMitm = true
@@ -812,7 +814,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			req.Header.Del(traceHeader)
 		}()
 
-		sctx.Logger.With(slog.String("url", logging.URL(req.RequestURI))).Debug("received HTTP proxy request")
+		sctx.Logger.With(slog.String("url", logging.URL(req.RequestURI))).DebugContext(sctx.loggingContext(), "received HTTP proxy request")
 		// Build an address parsable by net.ResolveTCPAddr
 		destination, err := hostport.NewWithScheme(req.Host, req.URL.Scheme, false)
 		if err != nil {
@@ -926,7 +928,7 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 	decision := sctx.Decision
 	err := pctx.Error
 	level := canonicalDecisionLevel(decision, err)
-	if !sctx.Logger.Enabled(context.Background(), level) {
+	if !sctx.Logger.Enabled(sctx.loggingContext(), level) {
 		return
 	}
 	attrs := []slog.Attr{slog.Int64(LogFieldDNSLookupTime, sctx.lookupTime.Milliseconds())}
@@ -943,7 +945,7 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 		attrs = append(attrs, slog.Int("status_code", sctx.statusCode))
 	}
 	attrs = append(attrs, sctx.dialAttrs...)
-	sctx.Logger.LogAttrs(context.Background(), level, CanonicalProxyDecision, attrs...)
+	sctx.Logger.LogAttrs(sctx.loggingContext(), level, CanonicalProxyDecision, attrs...)
 }
 
 func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) []any {
@@ -1260,7 +1262,7 @@ func runServer(config *Config, server *http.Server, listener net.Listener, quit 
 // be determined (including no RoleFromRequest configured), unless
 // AllowMissingRole is configured, in which case an empty Role and no error is
 // returned.
-func getRole(config *Config, req *http.Request) (string, error) {
+func getRole(ctx context.Context, config *Config, logger *slog.Logger, req *http.Request) (string, error) {
 	var role string
 	var err error
 
@@ -1276,9 +1278,9 @@ func getRole(config *Config, req *http.Request) (string, error) {
 	case IsMissingRoleError(err) && config.AllowMissingRole:
 		return "", nil
 	default:
-		config.Log.With(slog.String("error", logging.Error(err)),
+		logging.OrDefault(logger).With(slog.String("error", logging.Error(err)),
 			slog.Bool("is_missing_role", IsMissingRoleError(err)),
-			slog.Bool("allow_missing_role", config.AllowMissingRole)).Error("Unable to get role for request")
+			slog.Bool("allow_missing_role", config.AllowMissingRole)).ErrorContext(ctx, "Unable to get role for request")
 		return "", err
 	}
 }
@@ -1309,7 +1311,7 @@ func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req
 	if decision.allow {
 		start := time.Now()
 		hostPort := destination.String()
-		resolved, reason, err := safeResolve(config, "tcp", hostPort)
+		resolved, reason, err := safeResolve(sctx.loggingContext(), config, sctx.Logger, "tcp", hostPort)
 		lookupTime = time.Since(start)
 		if err != nil {
 			if _, ok := err.(denyError); !ok {
@@ -1353,17 +1355,17 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 	// Check if role is already populated in SmokescreenContext (e.g., from CONNECT in MITM mode)
 	if sctx.isConnectMitm {
 		if sctx.Decision == nil || sctx.Decision.Role == "" {
-			config.Log.With(slog.Bool("decision_nil", sctx.Decision == nil),
-				slog.Bool("role_empty", sctx.Decision != nil && sctx.Decision.Role == "")).Error("MITM request missing required role from CONNECT phase")
+			sctx.Logger.With(slog.Bool("decision_nil", sctx.Decision == nil),
+				slog.Bool("role_empty", sctx.Decision != nil && sctx.Decision.Role == "")).ErrorContext(sctx.loggingContext(), "MITM request missing required role from CONNECT phase")
 			config.MetricsClient.Incr("acl.role_not_determined", 1)
 			decision.Reason = "Client role cannot be determined"
 			return decision
 		}
 		role = sctx.Decision.Role
-		config.Log.With(slog.String("role", role),
-			slog.String("destination", destination.String())).Info("Reusing existing role from context (MITM)")
+		sctx.Logger.With(slog.String("role", role),
+			slog.String("destination", destination.String())).InfoContext(sctx.loggingContext(), "Reusing existing role from context (MITM)")
 	} else {
-		role, roleErr = getRole(config, req)
+		role, roleErr = getRole(sctx.loggingContext(), config, sctx.Logger, req)
 		if roleErr != nil {
 			config.MetricsClient.Incr("acl.role_not_determined", 1)
 			decision.Reason = "Client role cannot be determined"
@@ -1387,11 +1389,11 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 		}
 
 		if err != nil {
-			config.Log.With(slog.String("error", logging.Error(err)),
+			sctx.Logger.With(slog.String("error", logging.Error(err)),
 				slog.String("role", role),
 				slog.String("upstream_proxy_name", logging.URL(req.Header.Get("X-Upstream-Https-Proxy"))),
 				slog.String("destination_host", destination.Host),
-				slog.String("kind", "parse_failure")).Error("Unable to parse X-Upstream-Https-Proxy header.")
+				slog.String("kind", "parse_failure")).ErrorContext(sctx.loggingContext(), "Unable to parse X-Upstream-Https-Proxy header.")
 
 			config.MetricsClient.Incr("acl.upstream_proxy_parse_error", 1)
 			return decision
@@ -1416,8 +1418,8 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 	decision.Reason = ACLDecision.Reason
 	decision.MitmConfig = ACLDecision.MitmConfig
 	if err != nil {
-		config.Log.With(slog.String("error", logging.Error(err)),
-			slog.String("role", role)).Warn("EgressAcl.Decide returned an error.")
+		sctx.Logger.With(slog.String("error", logging.Error(err)),
+			slog.String("role", role)).WarnContext(sctx.loggingContext(), "EgressAcl.Decide returned an error.")
 
 		config.MetricsClient.Incr("acl.decide_error", 1)
 		return decision
@@ -1445,9 +1447,9 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 		decision.enforceWouldDeny = false
 		config.MetricsClient.IncrWithTags("acl.allow", tags, 1)
 	default:
-		config.Log.With(slog.String("role", role),
+		sctx.Logger.With(slog.String("role", role),
 			slog.String("destination", destination.Host),
-			slog.String("action", ACLDecision.Result.String())).Warn("Unknown ACL action")
+			slog.String("action", ACLDecision.Result.String())).WarnContext(sctx.loggingContext(), "Unknown ACL action")
 		decision.Reason = "Internal error"
 		config.MetricsClient.IncrWithTags("acl.unknown_error", tags, 1)
 	}
@@ -1492,4 +1494,13 @@ func canonicalDecisionLevel(decision *ACLDecision, err error) slog.Level {
 		level = slog.LevelInfo
 	}
 	return level
+}
+
+// loggingContext is retained solely for diagnostics, including after cancellation.
+// It never controls DNS deadlines, dialing, or tracked connection lifetime.
+func (sctx *SmokescreenContext) loggingContext() context.Context {
+	if sctx.ctx != nil {
+		return sctx.ctx
+	}
+	return context.Background()
 }
