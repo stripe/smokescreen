@@ -149,6 +149,24 @@ func main() {
 	smokescreen.StartWithConfig(conf, nil)
 }
 ```
+
+### Logging
+
+Smokescreen uses `log/slog`, with JSON output to stderr at INFO level by default.
+Supply your own backend through any standard `slog.Handler`:
+
+```go
+cfg := smokescreen.NewConfig()
+cfg.Log = slog.New(callerHandler)
+```
+
+For stock text output, use `slog.New(slog.NewTextHandler(w, nil))` instead.
+For YAML loading, use `smokescreen.LoadConfigWithLogger(path, logger)` or
+`cmd.NewConfiguration(args, logger)` to capture loading diagnostics.
+Callers own handler flushing and cleanup. Use `ReplaceAttr` or a handler wrapper
+for additional [redaction](docs/logging-redaction.md). See the
+[migration notes](docs/logging-changes.md) for operator-visible changes.
+
 ### IP Filtering
 
 To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config. 
