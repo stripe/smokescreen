@@ -9,10 +9,9 @@ import (
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/urfave/cli.v1"
-
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"gopkg.in/urfave/cli.v1"
 )
 
 // Process command line args into a configuration object.  If the "--help" or
@@ -194,19 +193,14 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			return errors.New("Received unexpected non-option argument(s)")
 		}
 
-		var conf *smokescreen.Config
-		if file := c.String("config-file"); file != "" {
-			var err error
-			conf, err = smokescreen.LoadConfig(file)
-			if err != nil {
-				return fmt.Errorf("Couldn't load file \"%s\" specified by --config-file: %v", file, err)
-			}
-		} else {
-			conf = smokescreen.NewConfig()
-		}
-
+		conf := smokescreen.NewConfig()
 		if logger != nil {
 			conf.Log = logger
+		}
+		if file := c.String("config-file"); file != "" {
+			if err := conf.LoadFile(file); err != nil {
+				return fmt.Errorf("Couldn't load file %q specified by --config-file: %v", file, err)
+			}
 		}
 
 		if c.IsSet("listen-ip") {
