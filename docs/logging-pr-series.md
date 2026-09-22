@@ -12,12 +12,12 @@ for now; it belongs in PR 2 before that PR is ready to merge.
 
 | New PR | Combines previous PRs | Purpose |
 | --- | --- | --- |
-| 1 | 1 + 2 | Characterization, benchmarks, and the recording handler |
+| 1 | 1 (correctness tests) + 2 | Existing behavior checks and the recording handler |
 | 2 | 3 + 4 + 5 | Complete slog API migration, defaults, redaction, and configuration |
 | 3 | 6 + 7 | Request context and MITM correlation |
-| 4 | 8 + 9 | Backend/lifecycle validation, examples, migration docs, and release readiness |
+| 4 | 8 + 9 + performance tests from 1 | Backend/lifecycle validation, benchmarks and results, examples, docs, and release readiness |
 
-## PR 1 — Establish the regression baseline
+## PR 1 — Protect existing behavior
 
 **Why:** Operational consumers rely on canonical fields and timing, while proxy
 correctness depends on existing timeout and cleanup behavior. Capture those
@@ -30,9 +30,11 @@ Branch: `shubh/v1-slog-01-baseline` · Initial base: `release-v1.0.0`
 
 - Characterize canonical messages, levels, fields, types, units, omission rules,
   DNS timeout behavior, fatal exits, repeated close, and cleanup ordering.
-- Capture logging and parallel local HTTP/CONNECT benchmark baselines.
 - Add the concurrency-safe test-only slog recording handler, including retained
   record cloning, attributes/groups, context capture, and `testing/slogtest`.
+
+Performance benchmarks and their saved measurements are reviewed together in
+PR 4; PR 1 contains correctness tests only.
 
 ## PR 2 — Migrate logging as one buildable change
 
@@ -96,6 +98,8 @@ Branch: `shubh/v1-slog-04-release-readiness` · Initial base: `shubh/v1-slog-03-
 - Exercise graceful/immediate shutdown and compile examples plus custom
   ACL/tracker implementations. Include the standalone stats-server nil-logger
   regression and its small correction.
+- Add logging/redaction and parallel HTTP/CONNECT benchmarks together with
+  baseline/candidate samples and the performance comparison report.
 - Document standard formatting, context/correlation, caller-owned cleanup,
   migration steps, benchmark comparisons, and cyclomatic-complexity results.
   Keep unrelated control-flow refactors out of this migration.

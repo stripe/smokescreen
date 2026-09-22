@@ -2,6 +2,10 @@
 
 ## Reproduction
 
+Benchmark code and the saved measurements below are grouped in PR 4. PR 1
+contains correctness tests only. Moving the benchmarks between review branches
+does not change these previously recorded results.
+
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
 code is the review stack ending at `e90aeec`. A subsequent standalone stats-server
