@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -109,4 +110,35 @@ func TestFatalConfigExit(t *testing.T) {
 	require.Equal(t, 1, exit.ExitCode())
 	require.Contains(t, string(out), "invalid config")
 	require.Contains(t, string(out), `"level":"ERROR"`)
+}
+
+func BenchmarkCanonicalLogging(b *testing.B) {
+	for _, mode := range []string{"disabled", "json", "text"} {
+		b.Run(mode, func(b *testing.B) {
+			cfg := NewConfig()
+			options := &slog.HandlerOptions{}
+			if mode == "disabled" {
+				options.Level = slog.LevelError + 1
+			}
+			if mode == "json" {
+				cfg.Log = slog.New(slog.NewJSONHandler(io.Discard, options))
+			} else {
+				cfg.Log = slog.New(slog.NewTextHandler(io.Discard, options))
+			}
+
+			pctx := canonicalFixture(cfg)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				logProxy(pctx)
+			}
+		})
+	}
+}
+
+func BenchmarkRedactHeaders(b *testing.B) {
+	headers := http.Header{"Authorization": {"secret"}, "X-Request-Id": {"one", "two"}}
+	for i := 0; i < b.N; i++ {
+		redactHeaders(headers, []string{"X-Request-Id"})
+	}
 }
