@@ -75,7 +75,8 @@ type yamlConfig struct {
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var yc yamlConfig
-	*c = *NewConfig()
+	hadMetrics := c.MetricsClient != nil
+	c.resetForYAML()
 
 	err := unmarshal(&yc)
 	if err != nil {
@@ -135,9 +136,10 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		c.WriteTimeout = yc.WriteTimeout
 	}
 
-	err = c.SetupStatsd(yc.StatsdAddress)
-	if err != nil {
-		return err
+	if yc.StatsdAddress != "" || !hadMetrics {
+		if err := c.SetupStatsd(yc.StatsdAddress); err != nil {
+			return err
+		}
 	}
 
 	if yc.EgressAclFile != "" {
@@ -163,26 +165,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		c.StatsSocketFileMode = os.FileMode(filemode)
 	}
 
-	if yc.Tls != nil {
-		if yc.Tls.CertFile == "" {
-			return errors.New("'tls' section requires 'cert_file'")
-		}
-
-		key_file := yc.Tls.KeyFile
-		if key_file == "" {
-			// Assume CertFile is a cert+key bundle
-			key_file = yc.Tls.CertFile
-		}
-
-		err = c.SetupTls(yc.Tls.CertFile, key_file, yc.Tls.ClientCAFiles)
-		if err != nil {
-			return err
-		}
-
-		err = c.SetupCrls(yc.Tls.CRLFiles)
-		if err != nil {
-			return err
-		}
+	if err := c.applyYAMLTLS(yc.Tls); err != nil {
+		return err
 	}
 
 	if yc.Network != "" {
@@ -199,25 +183,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	c.TimeConnect = yc.TimeConnect
 	c.UnsafeAllowPrivateRanges = yc.UnsafeAllowPrivateRanges
 
-	if yc.MitmCaCertFile != "" || yc.MitmCaKeyFile != "" {
-		if yc.MitmCaCertFile == "" {
-			return errors.New("mitm_ca_cert_file required when mitm_ca_key_file is set")
-		}
-		if yc.MitmCaKeyFile == "" {
-			return errors.New("mitm_ca_key_file required when mitm_ca_cert_file is set")
-		}
-		mitmCa, err := tls.LoadX509KeyPair(yc.MitmCaCertFile, yc.MitmCaKeyFile)
-		if err != nil {
-			return fmt.Errorf("mitm_ca_key_file error tls.LoadX509KeyPair: %w", err)
-		}
-		// set the leaf certificat to reduce per-handshake processing
-		if len(mitmCa.Certificate) == 0 {
-			return errors.New("mitm_ca_key_file error: mitm_ca_key_file contains no certificates")
-		}
-		if mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0]); err != nil {
-			return fmt.Errorf("could not populate x509 Leaf value: %w", err)
-		}
-		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
+	if err := c.applyYAMLMITM(yc.MitmCaCertFile, yc.MitmCaKeyFile); err != nil {
+		return err
 	}
 
 	// Set rate and concurrency limits
@@ -243,16 +210,109 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+// LoadConfig loads a file using an instance-local default logger.
 func LoadConfig(filePath string) (*Config, error) {
+	config := NewConfig()
+	if err := config.LoadFile(filePath); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// LoadFile applies YAML configuration, preserving injected dependencies unless
+// explicitly configured by the file. Set Log before calling to capture loading diagnostics.
+func (c *Config) LoadFile(filePath string) error {
 	bytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	return yaml.UnmarshalStrict(bytes, c)
+}
+
+// resetForYAML resets file-configurable values while keeping caller-owned dependencies.
+func (c *Config) resetForYAML() {
+	previous := *c
+	*c = *NewConfig()
+	if previous.Log != nil {
+		c.Log = previous.Log
+	}
+	if previous.Resolver != nil {
+		c.Resolver = previous.Resolver
+	}
+	if previous.MetricsClient != nil {
+		c.MetricsClient = previous.MetricsClient
+	}
+	c.EgressACL = previous.EgressACL
+	c.ConnTracker = previous.ConnTracker
+	c.Listener = previous.Listener
+	c.TlsConfig = previous.TlsConfig
+	if previous.TlsConfig != nil {
+		c.CrlByAuthorityKeyId = previous.CrlByAuthorityKeyId
+		c.revokedCertSerials = previous.revokedCertSerials
+		c.clientCasBySubjectKeyId = previous.clientCasBySubjectKeyId
+	}
+	c.Healthcheck = previous.Healthcheck
+	c.RoleFromRequest = previous.RoleFromRequest
+	c.DisabledAclPolicyActions = previous.DisabledAclPolicyActions
+	c.ProxyDialTimeout = previous.ProxyDialTimeout
+	c.RejectResponseHandler = previous.RejectResponseHandler
+	c.RejectResponseHandlerWithCtx = previous.RejectResponseHandlerWithCtx
+	c.AcceptResponseHandler = previous.AcceptResponseHandler
+	c.PostDecisionRequestHandler = previous.PostDecisionRequestHandler
+	c.MitmTLSConfig = previous.MitmTLSConfig
+	c.UpstreamProxySelector = previous.UpstreamProxySelector
+	c.UpstreamProxyTLSConfigHandler = previous.UpstreamProxyTLSConfigHandler
+	c.UpstreamProxyConnectReqHandler = previous.UpstreamProxyConnectReqHandler
+
+}
+
+func (c *Config) applyYAMLTLS(config *yamlConfigTls) error {
+	if config != nil {
+		if config.CertFile == "" {
+			return errors.New("'tls' section requires 'cert_file'")
+		}
+
+		key_file := config.KeyFile
+		if key_file == "" {
+			// Assume CertFile is a cert+key bundle
+			key_file = config.CertFile
+		}
+
+		err := c.SetupTls(config.CertFile, key_file, config.ClientCAFiles)
+		if err != nil {
+			return err
+		}
+
+		err = c.SetupCrls(config.CRLFiles)
+		if err != nil {
+			return err
+		}
 	}
 
-	config := &Config{}
-	if err := yaml.UnmarshalStrict(bytes, config); err != nil {
-		return nil, err
+	return nil
+}
+
+func (c *Config) applyYAMLMITM(certFile, keyFile string) error {
+	if certFile != "" || keyFile != "" {
+		if certFile == "" {
+			return errors.New("mitm_ca_cert_file required when mitm_ca_key_file is set")
+		}
+		if keyFile == "" {
+			return errors.New("mitm_ca_key_file required when mitm_ca_cert_file is set")
+		}
+		mitmCa, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return fmt.Errorf("mitm_ca_key_file error tls.LoadX509KeyPair: %w", err)
+		}
+		// set the leaf certificat to reduce per-handshake processing
+		if len(mitmCa.Certificate) == 0 {
+			return errors.New("mitm_ca_key_file error: mitm_ca_key_file contains no certificates")
+		}
+		if mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0]); err != nil {
+			return fmt.Errorf("could not populate x509 Leaf value: %w", err)
+		}
+		c.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
 	}
 
-	return config, nil
+	return nil
 }
