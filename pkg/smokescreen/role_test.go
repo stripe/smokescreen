@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -20,7 +21,7 @@ func _testGetRole(t *testing.T, rfr_s string, rfr_e error, allow_missing bool, e
 		AllowMissingRole: allow_missing,
 		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
-	s, e := getRole(&config, nil)
+	s, e := getRole(context.Background(), &config, config.Log, nil)
 	if e != expect_e {
 		t.Fatalf("expected err %v got %v\n", expect_e, e)
 	}

@@ -89,7 +89,7 @@ func TestDNSOwnsTimeout(t *testing.T) {
 	cfg := NewConfig()
 	cfg.DNSTimeout = 10 * time.Millisecond
 	cfg.Resolver = deadlineResolver{t, cfg.DNSTimeout}
-	_, err := resolveTCPAddr(cfg, "tcp", "example.com:80")
+	_, err := resolveTCPAddr(context.Background(), cfg, cfg.Log, "tcp", "example.com:80")
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
@@ -108,6 +108,7 @@ func TestFatalConfigExit(t *testing.T) {
 	require.ErrorAs(t, err, &exit)
 	require.Equal(t, 1, exit.ExitCode())
 	require.Contains(t, string(out), "invalid config")
+	require.Contains(t, string(out), `"level":"ERROR"`)
 }
 
 func BenchmarkCanonicalLogging(b *testing.B) {
@@ -140,4 +141,3 @@ func BenchmarkRedactHeaders(b *testing.B) {
 		redactHeaders(headers, []string{"X-Request-Id"})
 	}
 }
-
