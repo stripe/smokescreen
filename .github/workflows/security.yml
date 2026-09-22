@@ -9,7 +9,7 @@ on:
       - "vendor/**"
       - ".github/workflows/security.yml"
   push:
-    branches: [master]
+    branches: [master, release-v1.0.0]
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:

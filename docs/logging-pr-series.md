@@ -1,31 +1,152 @@
-# Logging migration review stack
+# Smokescreen v1.0.0 — four-PR logging migration
 
-This breaking change is developed off master `9793d087`. The assembled result is
-on `shubh/smokescreen-slog-migration`. Each smaller branch below adds one reviewable
-change and passes `go test ./...` independently. PRs are stacked against the
-preceding branch; the first uses master as its base.
+Target release: **v1.0.0**. Develop and merge this series on
+`release-v1.0.0`, created from master `9793d087`. Keep master on the existing
+release line throughout development. The Go module remains
+`github.com/stripe/smokescreen`: v1 does not need a `/v1` suffix or import changes.
 
-| Order | Branch | Change |
+The previous nine-part breakdown becomes four implementation PRs. Keep the
+existing commits inside each PR so reviewers can inspect the smaller steps.
+The observer API remains out of scope. Dependency/vendor cleanup remains deferred
+for now; it belongs in PR 2 before that PR is ready to merge.
+
+| New PR | Combines previous PRs | Purpose |
 | --- | --- | --- |
-| 1 | `shubh/slog-01-baseline` | Canonical semantics, execution boundaries, benchmarks |
-| 2 | `shubh/slog-02-recording-handler` | Concurrent slog test handler and slogtest conformance |
-| 3 | `shubh/slog-03-redaction` | Instance defaults and pre-dispatch URL redaction utilities |
-| 4 | `shubh/slog-04-config-loading` | Preserve injected dependencies; decompose YAML initialization |
-| 5 | `shubh/slog-05-api-migration` | Atomic public/API/implementation migration to slog |
-| 6 | `shubh/slog-06-request-context` | Logging contexts without changing execution cancellation |
-| 7 | `shubh/slog-07-mitm-correlation` | Distinct inner request IDs, CONNECT parent correlation |
-| 8 | `shubh/slog-08-validation` | Backend matrix, shutdown checks, compilable examples |
-| 9 | `shubh/slog-09-documentation` | Migration guide, performance/complexity results, final nil-logger regression |
+| 1 | 1 + 2 | Characterization, benchmarks, and the recording handler |
+| 2 | 3 + 4 + 5 | Complete slog API migration, defaults, redaction, and configuration |
+| 3 | 6 + 7 | Request context and MITM correlation |
+| 4 | 8 + 9 | Backend/lifecycle validation, examples, migration docs, and release readiness |
 
-Keep the review stack in draft while the breaking release is being prepared.
-The public API switch stays atomic so intermediate branches build without a
-compatibility adapter. The independent observer API is excluded from this series.
+## PR 1 — Establish the regression baseline
 
-After review, complete the separately deferred dependency cleanup and vendor
-regeneration. CI's existing vendor check is expected to report a diff until that
-happens; the workflow is not disabled. Then open a final integration PR from the
-completed series to master and merge normally. Do not replace or rename master.
+**Why:** Operational consumers rely on canonical fields and timing, while proxy
+correctness depends on existing timeout and cleanup behavior. Capture those
+contracts before changing logging. The recording handler belongs here because
+it supplies the test infrastructure used by the migration.
 
-Select and document the release version before that merge. A major v2 release
-requires `/v2` in the module and import paths; the name of this plan does not make
-that release decision. No module rename or release publication occurs here.
+Branch: `shubh/v1-slog-01-baseline` · Initial base: `release-v1.0.0`
+
+[Review diff](https://github.com/stripe/smokescreen/compare/release-v1.0.0...shubh/v1-slog-01-baseline)
+
+- Characterize canonical messages, levels, fields, types, units, omission rules,
+  DNS timeout behavior, fatal exits, repeated close, and cleanup ordering.
+- Capture logging and parallel local HTTP/CONNECT benchmark baselines.
+- Add the concurrency-safe test-only slog recording handler, including retained
+  record cloning, attributes/groups, context capture, and `testing/slogtest`.
+
+## PR 2 — Migrate logging as one buildable change
+
+**Why:** Public Logrus types couple integrations to one backend. The signatures,
+call sites, configuration loading, bridges, and redaction must change together
+so a caller's logger is used from startup onward and credentials never reach
+that handler. Combining the three original PRs avoids introducing unused
+production utilities and a temporary compatibility layer.
+
+Branch: `shubh/v1-slog-02-migration` · Initial base: `shubh/v1-slog-01-baseline`
+
+[Review diff](https://github.com/stripe/smokescreen/compare/shubh/v1-slog-01-baseline...shubh/v1-slog-02-migration)
+
+- Migrate public logging types, implementation, and existing tests to `*slog.Logger`.
+- Use instance-local stock JSON defaults and consistent nil-logger resolution.
+- Install supplied dependencies before configuration diagnostics and preserve
+  them through YAML loading; decompose initialization into focused helpers.
+- Replace ACL logger embedding with a private field, remove the unused
+  `NewTracker` logger parameter, and replace the legacy writer with instance
+  standard-log bridges.
+- Preserve canonical boundaries, severity selection, field semantics, and
+  redaction before dispatch; snapshot counters as integers and copy headers.
+- **Pending, not performed yet:** once dependency cleanup is authorized, remove
+  Logrus module entries and regenerate vendor with `go mod tidy` and
+  `go mod vendor` in this PR. Then update the dependent PR branches. The existing
+  vendor check currently blocks merge readiness; do not bypass it or create a
+  fifth cleanup PR.
+
+## PR 3 — Carry request context and correlation
+
+**Why:** Caller handlers need request context for trusted tracing metadata, and
+MITM requests need an explicit link to their CONNECT parent. These are one
+coherent correlation change, distinct from replacing the backend APIs.
+
+Branch: `shubh/v1-slog-03-correlation` · Initial base: `shubh/v1-slog-02-migration`
+
+[Review diff](https://github.com/stripe/smokescreen/compare/shubh/v1-slog-02-migration...shubh/v1-slog-03-correlation)
+
+- Carry available context through checks, resolution/dial diagnostics,
+  rejection, and connection-close logging.
+- Add context to tracked-connection construction for diagnostics, retaining it
+  after cancellation without letting it control connection lifetime.
+- Give MITM inner requests distinct IDs and a CONNECT `parent_id`, preserving
+  client trace fallback separately from trusted tracing metadata.
+- Protect DNS/default/custom dial semantics, cleanup order, and stable
+  attributes without duplicate changing fields. No observer callbacks.
+
+## PR 4 — Verify integrations and prepare consumers for v1
+
+**Why:** Helper tests cannot establish that backend choice leaves proxy behavior
+unchanged. End-to-end validation and compilable migration examples provide that
+evidence; documentation explains the breaking signatures and formatting changes
+that consumers must adopt before the first stable release.
+
+Branch: `shubh/v1-slog-04-release-readiness` · Initial base: `shubh/v1-slog-03-correlation`
+
+[Review diff](https://github.com/stripe/smokescreen/compare/shubh/v1-slog-03-correlation...shubh/v1-slog-04-release-readiness)
+
+- Cover HTTP, CONNECT, MITM, and denial using stock JSON/text and caller,
+  disabled, and erroring handlers; verify backend isolation and redaction.
+- Exercise graceful/immediate shutdown and compile examples plus custom
+  ACL/tracker implementations. Include the standalone stats-server nil-logger
+  regression and its small correction.
+- Document standard formatting, context/correlation, caller-owned cleanup,
+  migration steps, benchmark comparisons, and cyclomatic-complexity results.
+  Keep unrelated control-flow refactors out of this migration.
+- Enable security checks on pushes to `release-v1.0.0`. Unit/race/integration
+  workflows already cover all push and PR branches.
+- Verify complete dependency removal after PR 2's deferred cleanup and record
+  release validation, including downstream consumer and dashboard checks still
+  to be completed.
+
+## Review and merge flow
+
+Four review branches are prepared; GitHub PR creation is pending authentication.
+The previous nine branches remain available as historical references.
+
+Open the four as draft PRs using the initial bases above. The first targets
+`release-v1.0.0`; later PRs target their predecessors to show only their own
+changes. Before merging each subsequent PR, retarget it to `release-v1.0.0` once
+its predecessor has landed. If merges are squashed or rewritten, rebase the
+remaining stack so previously reviewed changes do not reappear. All four merge
+into the release branch, never master during development.
+
+Configure branch protection on `release-v1.0.0` to require review and the normal
+checks before merging; branch creation alone does not enable protection. Keep
+master protected as well. Protection is a repository setting and has not been
+configured by this change. Carry required fixes from master into the release
+line as needed, rerunning relevant checks; do not merge unfinished v1 changes
+back into master.
+
+## Release v1 without moving master
+
+1. Finish the four PRs on `release-v1.0.0`, including PR 2's deferred dependency
+   cleanup. Require unit, race, vet, integration, vendor, and security checks to
+   pass. Recheck performance and downstream migration expectations.
+2. Publish an explicitly approved prerelease such as `v1.0.0-alpha.1`, followed
+   by `v1.0.0-rc.1`, from reviewed commits on that branch. Consumers opt in using
+   `go get github.com/stripe/smokescreen@v1.0.0-rc.1`; imports stay unchanged.
+   Publishing tags/releases is a later action, not part of preparing this stack.
+3. Validate representative embedded consumers, dashboards, redaction, and
+   graceful/immediate shutdown against the release candidate. Scheduled GitHub
+   Actions run on the default branch, so use release-branch pushes or explicit
+   workflow dispatch for fresh security checks on the candidate.
+4. Once approved, tag the tested release commit `v1.0.0` and publish release notes
+   linking the migration guide. A release tag can point to `release-v1.0.0`;
+   GitHub does not require that commit to be on master.
+5. Decide separately when master should adopt the released v1 code. There is no
+   need to rename, replace, reset, or force-push master to publish v1, and no
+   mandatory fifth implementation PR in this series.
+
+The branch isolates development, not dependency selection: publishing stable
+`v1.0.0` makes it eligible for Go's `@latest` on the same module path even while
+master stays on v0. Consumers pinned to `v0.1.0` keep that version; consumers
+using `@latest` can receive the breaking upgrade. State that explicitly in the
+release notes. Prereleases allow opt-in testing while the existing stable v0
+release remains available.
