@@ -111,10 +111,11 @@ Branch: `shubh/v1-slog-04-release-readiness` · Initial base: `shubh/v1-slog-03-
 
 ## Review and merge flow
 
-Four review branches are prepared; GitHub PR creation is pending authentication.
-The previous nine branches remain available as historical references.
+PR 1 is open: [#311 — Protect existing logging behavior for v1.0.0](https://github.com/stripe/smokescreen/pull/311).
+All four review branches are pushed; PRs 2–4 will be opened separately. The
+previous nine branches remain available as historical references.
 
-Open the four as draft PRs using the initial bases above. The first targets
+Review the series using the initial bases above. The first PR targets
 `release-v1.0.0`; later PRs target their predecessors to show only their own
 changes. Before merging each subsequent PR, retarget it to `release-v1.0.0` once
 its predecessor has landed. If merges are squashed or rewritten, rebase the
@@ -128,7 +129,12 @@ configured by this change. Carry required fixes from master into the release
 line as needed, rerunning relevant checks; do not merge unfinished v1 changes
 back into master.
 
-## Release v1 without moving master
+## Release and cut over v1 together
+
+Keep the initial v1 scope focused on the logging migration and its supporting
+compatibility, security, and validation work. Complete the four implementation
+PRs on the release branch, then bring the finished v1 changes onto master
+together at a coordinated release cutover.
 
 1. Finish the four PRs on `release-v1.0.0`, including PR 2's deferred dependency
    cleanup. Require unit, race, vet, integration, vendor, and security checks to
@@ -141,12 +147,15 @@ back into master.
    graceful/immediate shutdown against the release candidate. Scheduled GitHub
    Actions run on the default branch, so use release-branch pushes or explicit
    workflow dispatch for fresh security checks on the candidate.
-4. Once approved, tag the tested release commit `v1.0.0` and publish release notes
-   linking the migration guide. A release tag can point to `release-v1.0.0`;
-   GitHub does not require that commit to be on master.
-5. Decide separately when master should adopt the released v1 code. There is no
-   need to rename, replace, reset, or force-push master to publish v1, and no
-   mandatory fifth implementation PR in this series.
+4. Once validated and approved, promote the completed v1 changes to master
+   through the normal reviewed merge process, tag the tested release commit
+   `v1.0.0`, and publish release notes linking the migration guide. Coordinate
+   these as the release cutover; no partial API migration lands on master.
+
+These are four implementation PRs, followed by the coordinated release/promotion
+step. No branch rename, reset, or force-push of master is needed. Git technically
+allows the release tag to point to a tested commit on `release-v1.0.0`; promoting
+the completed changes together is the chosen development and cutover plan.
 
 The branch isolates development, not dependency selection: publishing stable
 `v1.0.0` makes it eligible for Go's `@latest` on the same module path even while
