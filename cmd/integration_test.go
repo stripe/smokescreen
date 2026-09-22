@@ -664,11 +664,11 @@ func findLogEntry(entries []*testlog.Entry, msg string) *testlog.Entry {
 	return nil
 }
 
-func startSmokescreen(t *testing.T, useTLS bool, logHook slog.Handler, httpProxyAddr string) (*smokescreen.Config, *httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTLS bool, logHook *testlog.Handler, httpProxyAddr string) (*smokescreen.Config, *httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
-		"--egress-acl-file=testdata/sample_config.yaml",
+		"--config-file=testdata/config.yaml",
 		"--additional-error-message-on-deny=additional_error_message_validation_key",
 		"--deny-range=1.1.1.1/32",
 		"--allow-range=127.0.0.1/32",
@@ -688,10 +688,13 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook slog.Handler, httpProxy
 		args = append(args, fmt.Sprintf("--upstream-https-proxy-addr=%s", httpProxyAddr))
 	}
 
-	conf, err := NewConfiguration(args, nil)
+	logger := slog.New(logHook)
+	conf, err := NewConfiguration(args, logger)
 	if err != nil {
 		t.Fatalf("Failed to create configuration: %v", err)
 	}
+	require.Same(t, logger, conf.Log)
+	require.NotNil(t, findLogEntry(logHook.AllEntries(), "Loading egress ACL from testdata/sample_config.yaml"))
 
 	if useTLS {
 		conf.RoleFromRequest = testRFRCert
@@ -703,8 +706,6 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook slog.Handler, httpProxy
 	conf.Resolver = loopbackResolver{}
 
 	conf.ConnectTimeout = time.Second
-
-	conf.Log = slog.New(logHook)
 
 	handler := smokescreen.BuildProxy(conf)
 	server := httptest.NewUnstartedServer(handler)

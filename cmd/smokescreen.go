@@ -189,7 +189,7 @@ func NewConfiguration(args []string, logger *slog.Logger) (*smokescreen.Config, 
 		var conf *smokescreen.Config
 		if file := c.String("config-file"); file != "" {
 			var err error
-			conf, err = smokescreen.LoadConfig(file)
+			conf, err = smokescreen.LoadConfigWithLogger(file, logger)
 			if err != nil {
 				return fmt.Errorf("Couldn't load file \"%s\" specified by --config-file: %v", file, err)
 			}
