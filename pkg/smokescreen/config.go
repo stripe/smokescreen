@@ -315,28 +315,41 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 	return nil
 }
 
-func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
-	// TODO: support round-robin between multiple addresses
-	if len(resolverAddresses) > 1 {
-		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
-	}
+type roundRobinAddresses struct {
+	addresses []string
+	next      atomic.Uint64
+}
 
+func newRoundRobinAddresses(addresses []string) *roundRobinAddresses {
+	return &roundRobinAddresses{addresses: addresses}
+}
+
+func (rr *roundRobinAddresses) nextAddress() string {
+	n := rr.next.Add(1) - 1
+	return rr.addresses[n%uint64(len(rr.addresses))]
+}
+
+func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 	// No resolver specified, use the system resolver
 	if len(resolverAddresses) == 0 {
 		return nil
 	}
 
-	addr := resolverAddresses[0]
-	_, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return err
+	validatedResolverAddresses := make([]string, 0, len(resolverAddresses))
+	for _, addr := range resolverAddresses {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return fmt.Errorf("invalid resolver address %q: %w", addr, err)
+		}
+		validatedResolverAddresses = append(validatedResolverAddresses, addr)
 	}
 
+	// Otherwise round robin
+	addrs := newRoundRobinAddresses(validatedResolverAddresses)
 	r := net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			d := net.Dialer{}
-			return d.DialContext(ctx, "udp", addr)
+			return d.DialContext(ctx, "udp", addrs.nextAddress())
 		},
 	}
 	config.Resolver = &r

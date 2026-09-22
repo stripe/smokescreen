@@ -108,7 +108,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		cli.StringSliceFlag{
 			Name:  "resolver-address",
-			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable.",
+			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable. Lookups rotate round-robin across the addresses given.",
 		},
 		cli.StringFlag{
 			Name:  "statsd-address",
