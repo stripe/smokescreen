@@ -15,7 +15,7 @@ preceding branch; the first uses master as its base.
 | 6 | `shubh/slog-06-request-context` | Logging contexts without changing execution cancellation |
 | 7 | `shubh/slog-07-mitm-correlation` | Distinct inner request IDs, CONNECT parent correlation |
 | 8 | `shubh/slog-08-validation` | Backend matrix, shutdown checks, compilable examples |
-| 9 | `shubh/slog-09-documentation` | Migration guide, performance and complexity results |
+| 9 | `shubh/slog-09-documentation` | Migration guide, performance/complexity results, final nil-logger regression |
 
 Keep the review stack in draft while the breaking release is being prepared.
 The public API switch stays atomic so intermediate branches build without a

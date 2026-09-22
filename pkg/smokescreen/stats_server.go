@@ -18,6 +18,7 @@ type StatsServer struct {
 }
 
 func newServer(config *Config) (s *StatsServer) {
+	config.Log = logging.OrDefault(config.Log)
 	s = &StatsServer{
 		config: config,
 		mux:    http.NewServeMux(),

@@ -4,7 +4,8 @@
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
-code is the review stack ending at `e90aeec`. The same benchmark fixtures run on
+code is the review stack ending at `e90aeec`. A subsequent standalone stats-server
+nil-logger correction does not affect these benchmark paths. The same benchmark fixtures run on
 both, with only logger/tracker API setup adapted for the baseline.
 
 ```sh

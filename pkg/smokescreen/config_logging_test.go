@@ -5,11 +5,20 @@ import (
 	"github.com/stripe/smokescreen/internal/testlog"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestStatsServerResolvesNilLogger(t *testing.T) {
+	cfg := NewConfig()
+	cfg.Log = nil
+	server := newServer(cfg)
+	require.NotNil(t, server.config.Log)
+	require.IsType(t, &slog.JSONHandler{}, server.config.Log.Handler())
+}
 
 func TestLoadFilePreservesDependencies(t *testing.T) {
 	logger, records := testlog.New()
