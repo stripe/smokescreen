@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	proxyproto "github.com/armon/go-proxyproto"
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/goproxy"
@@ -719,7 +719,7 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 		ProxyType:     proxyType,
 		start:         start,
 		RequestedHost: req.Host,
-		req:    req,
+		req:           req,
 	}
 }
 
@@ -1037,6 +1037,16 @@ func findListener(ip string, defaultPort uint16) (net.Listener, error) {
 	}
 }
 
+func proxyProtocolListener(listener net.Listener) net.Listener {
+	return &proxyproto.Listener{
+		Listener: listener,
+		ConnPolicy: func(proxyproto.ConnPolicyOptions) (proxyproto.Policy, error) {
+			// Accept both PROXY protocol and direct connections.
+			return proxyproto.USE, nil
+		},
+	}
+}
+
 func StartWithConfig(config *Config, quit <-chan interface{}) {
 	config.Log.Println("starting")
 	var err error
@@ -1061,7 +1071,7 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	}
 
 	if config.SupportProxyProtocol {
-		listener = &proxyproto.Listener{Listener: listener}
+		listener = proxyProtocolListener(listener)
 	}
 
 	var handler http.Handler = proxy

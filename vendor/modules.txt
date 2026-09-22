@@ -8,9 +8,6 @@ github.com/Microsoft/go-winio/internal/fs
 github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/armon/go-proxyproto v0.0.0-20170620220930-48572f11356f
-## explicit
-github.com/armon/go-proxyproto
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
@@ -31,6 +28,9 @@ github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/patrickmn/go-cache v2.1.0+incompatible
 ## explicit
 github.com/patrickmn/go-cache
+# github.com/pires/go-proxyproto v0.15.0
+## explicit; go 1.25.0
+github.com/pires/go-proxyproto
 # github.com/prometheus/client_golang v1.13.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/prometheus
