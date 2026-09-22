@@ -2,9 +2,9 @@
 
 [![godoc](http://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/rs/xid) [![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/rs/xid/master/LICENSE) [![Build Status](https://travis-ci.org/rs/xid.svg?branch=master)](https://travis-ci.org/rs/xid) [![Coverage](http://gocover.io/_badge/github.com/rs/xid)](http://gocover.io/github.com/rs/xid)
 
-Package xid is a globally unique id generator library, ready to be used safely directly in your server code.
+Package xid is a globally unique id generator library, ready to safely be used directly in your server code.
 
-Xid is using Mongo Object ID algorithm to generate globally unique ids with a different serialization (base64) to make it shorter when transported as a string:
+Xid uses the Mongo Object ID algorithm to generate globally unique ids with a different serialization ([base32hex](https://datatracker.ietf.org/doc/html/rfc4648#page-10)) to make it shorter when transported as a string:
 https://docs.mongodb.org/manual/reference/object-id/
 
 - 4-byte value representing the seconds since the Unix epoch,
@@ -13,7 +13,7 @@ https://docs.mongodb.org/manual/reference/object-id/
 - 3-byte counter, starting with a random value.
 
 The binary representation of the id is compatible with Mongo 12 bytes Object IDs.
-The string representation is using base32 hex (w/o padding) for better space efficiency
+The string representation is using [base32hex](https://datatracker.ietf.org/doc/html/rfc4648#page-10) (w/o padding) for better space efficiency
 when stored in that form (20 bytes). The hex variant of base32 is used to retain the
 sortable property of the id.
 
@@ -29,13 +29,13 @@ generator servers. xid stands in between with 12 bytes (96 bits) and a more comp
 URL-safe string representation (20 chars). No configuration or central generator server
 is required so it can be used directly in server's code.
 
-| Name        | Binary Size | String Size    | Features
-|-------------|-------------|----------------|----------------
-| [UUID]      | 16 bytes    | 36 chars       | configuration free, not sortable
-| [shortuuid] | 16 bytes    | 22 chars       | configuration free, not sortable
-| [Snowflake] | 8 bytes     | up to 20 chars | needs machin/DC configuration, needs central server, sortable
-| [MongoID]   | 12 bytes    | 24 chars       | configuration free, sortable
-| xid         | 12 bytes    | 20 chars       | configuration free, sortable
+| Name        | Binary Size | String Size    | Features                                                       |
+| ----------- | ----------- | -------------- | -------------------------------------------------------------- |
+| [UUID]      | 16 bytes    | 36 chars       | configuration free, not sortable                               |
+| [shortuuid] | 16 bytes    | 22 chars       | configuration free, not sortable                               |
+| [Snowflake] | 8 bytes     | up to 20 chars | needs machine/DC configuration, needs central server, sortable |
+| [MongoID]   | 12 bytes    | 24 chars       | configuration free, sortable                                   |
+| xid         | 12 bytes    | 20 chars       | configuration free, sortable                                   |
 
 [UUID]: https://en.wikipedia.org/wiki/Universally_unique_identifier
 [shortuuid]: https://github.com/stochastic-technologies/shortuuid
@@ -46,7 +46,7 @@ Features:
 
 - Size: 12 bytes (96 bits), smaller than UUID, larger than snowflake
 - Base32 hex encoded by default (20 chars when transported as printable string, still sortable)
-- Non configured, you don't need set a unique machine and/or data center id
+- Non configured, you don't need set a unique machine and/or data center id (configurable if needed)
 - K-ordered
 - Embedded time with 1 second precision
 - Unicity guaranteed for 16,777,216 (24 bits) unique ids per second and per host/process
@@ -57,7 +57,8 @@ Best used with [zerolog](https://github.com/rs/zerolog)'s
 
 Notes:
 
-- Xid is dependent on the system time, a monotonic counter and so is not cryptographically secure. If unpredictability of IDs is important, you should not use Xids. It is worth noting that most of the other UUID like implementations are also not cryptographically secure. You shoud use libraries that rely on cryptographically secure sources (like /dev/urandom on unix, crypto/rand in golang), if you want a truly random ID generator.
+- Xid is dependent on the system time, a monotonic counter and so is not cryptographically secure. If unpredictability of IDs is important, you should not use Xids. It is worth noting that most other UUID-like implementations are also not cryptographically secure. You should use libraries that rely on cryptographically secure sources (like /dev/urandom on unix, crypto/rand in golang), if you want a truly random ID generator.
+- MachineID can be set by the environmental variable `XID_MACHINE_ID` to allow fine tune control over the generation.
 
 References:
 
@@ -66,6 +67,17 @@ References:
 - https://blog.twitter.com/2010/announcing-snowflake
 - Python port by [Graham Abbott](https://github.com/graham): https://github.com/graham/python_xid
 - Scala port by [Egor Kolotaev](https://github.com/kolotaev): https://github.com/kolotaev/ride
+- Rust port by [Kaz Yoshihara](https://github.com/kazk): https://github.com/kazk/xid-rs
+- Python wrapper around the Rust port [Aleksandr Shpak](https://github.com/shpaker): https://github.com/shpaker/epyxid
+- Ruby port by [Valar](https://github.com/valarpirai/): https://github.com/valarpirai/ruby_xid
+- Java port by [0xShamil](https://github.com/0xShamil/): https://github.com/0xShamil/java-xid
+- Dart port by [Peter Bwire](https://github.com/pitabwire): https://pub.dev/packages/xid
+- PostgreSQL port by [Rasmus Holm](https://github.com/crholm): https://github.com/modfin/pg-xid
+- Swift port by [Uditha Atukorala](https://github.com/uatuko): https://github.com/uatuko/swift-xid
+- C++ port by [Uditha Atukorala](https://github.com/uatuko): https://github.com/uatuko/libxid
+- Typescript & Javascript port by [Yiwen AI](https://github.com/yiwen-ai): https://github.com/yiwen-ai/xid-ts
+- Typescript & Javascript port by [Thomas Le Jeune](https://github.com/thomastheyoung): https://github.com/thomastheyoung/nexid
+- Gleam port by [Alexandre Del Vecchio](https://github.com/defgenx): https://github.com/defgenx/gxid
 
 ## Install
 
@@ -105,7 +117,7 @@ BenchmarkUUIDv4-2   	 1000000	      1427 ns/op	      64 B/op	       2 allocs/op
 BenchmarkUUIDv4-4   	 1000000	      1452 ns/op	      64 B/op	       2 allocs/op
 ```
 
-Note: UUIDv1 requires a global lock, hence the performence degrading as we add more CPUs.
+Note: UUIDv1 requires a global lock, hence the performance degradation as we add more CPUs.
 
 ## Licenses
 
