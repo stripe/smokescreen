@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -146,7 +147,7 @@ func TestRedactionBeforeHandler(t *testing.T) {
 	cfg := NewConfig()
 	cfg.Log = logger
 	pctx := canonicalFixture(cfg)
-	pctx.Error = errors.New("dial https://alice:secret@proxy.example/?token=secret failed")
+	pctx.Error = &url.Error{Op: "Get", URL: "https://alice:secret@proxy.example/?token=secret", Err: errors.New("dial failed")}
 	logProxy(pctx)
 	require.NotContains(t, records.LastEntry().Data[LogFieldError], "secret")
 	input := http.Header{"User-Agent": {"before"}, "Authorization": {"secret"}}

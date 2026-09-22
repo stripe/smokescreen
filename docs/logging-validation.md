@@ -3,8 +3,8 @@
 ## Reproduction
 
 Benchmark code and the saved measurements below are grouped in PR 4. PR 1
-contains correctness tests only. Candidate measurements were refreshed after the
-standard slog redaction follow-up in PR 2.
+contains correctness tests only. The saved candidate measurements below precede
+the diagnostic-preservation follow-up in PR 2.
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
@@ -79,7 +79,6 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 | runServer | 13 | 13 |
 | logging.URL | — | 6 |
 | logging.Error | — | 4 |
-| logging.Diagnostic | — | 3 |
 
 Dependency preservation initially raised UnmarshalYAML to 44. Separating reset,
 TLS, and MITM setup reduced the main function to 31; the helpers score 4, 6, and

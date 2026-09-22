@@ -40,8 +40,8 @@ PR 4; PR 1 contains correctness tests only.
 
 **Why:** Public Logrus types couple integrations to one backend. The signatures,
 call sites, configuration loading, bridges, and redaction must change together
-so a caller's logger is used from startup onward and credentials never reach
-that handler. Combining the three original PRs avoids introducing unused
+so a caller's logger is used from startup onward and structured URL credentials
+are sanitized before dispatch. Combining the three original PRs avoids introducing unused
 production utilities and a temporary compatibility layer.
 
 Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged PR 1)
@@ -63,11 +63,9 @@ Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged 
   and vendor regeneration remain deferred. The existing vendor check remains
   enabled and is expected to report the pending cleanup.
 
-Review PR 2 in four focused commits: instance defaults/redaction, configuration
-loading, the atomic API migration, then caller redaction through standard slog
-hooks. The last commit documents `ReplaceAttr` and `slog.Handler` wrapping,
-removes the regex secret-name list, and verifies baseline protection before
-handler dispatch. There is no separate redactor API.
+Review PR 2 commit by commit. Caller redaction uses `ReplaceAttr` or a standard
+`slog.Handler`; built-in protection targets URL fields, typed URL errors, and
+MITM headers. Ordinary diagnostics retain their text.
 
 ## PR 3 — Carry request context and correlation
 
