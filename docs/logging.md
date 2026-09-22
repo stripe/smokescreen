@@ -20,8 +20,8 @@ backpressure. Handlers must support concurrent calls as required by slog.
 
 Set `cfg.Log` before `cfg.LoadFile(path)`, or pass your logger to
 `cmd.NewConfiguration(args, logger)`, to capture configuration and ACL-loading
-diagnostics. YAML loading applies only supplied settings, preserving omitted values
-and injected dependencies. Invalid socket modes return errors to the caller.
+diagnostics. YAML behavior is documented separately in
+[configuration loading](config-loading.md).
 
 ## API changes
 

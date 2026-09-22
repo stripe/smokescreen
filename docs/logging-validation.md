@@ -2,13 +2,14 @@
 
 ## Reproduction
 
-Benchmark code and the saved measurements below are grouped in PR 4. PR 1
-contains correctness tests only. Candidate measurements were refreshed after the
-PR 2 review fixes.
+Benchmark code and saved measurements are grouped in the release-readiness PR
+(fifth in the series). The baseline PR contains correctness tests only. Candidate
+measurements were refreshed after the logging review fixes; splitting configuration
+into #314 changes no measured production behavior, so those samples are retained.
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
-code is the review stack ending at `1c67b08`, including the PR 2 review fixes
+code is the review stack ending at `1c67b08`, including the logging review fixes
 through `5e4594c`. Baseline samples are retained from the earlier run on the same machine;
 these measurements were not interleaved. The same benchmark fixtures run on both,
 with only logger/tracker API setup adapted for the baseline.
@@ -81,7 +82,7 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 | logging.errorText | — | 11 |
 | SmokescreenContext.diagnosticLogger | — | 3 |
 
-YAML applies only supplied keys; it no longer resets the config and restores an
+The YAML changes now belong to the separate config PR (#314). YAML applies only supplied keys; it no longer resets the config and restores an
 allowlist. Rule, rate-limit, and TLS helpers score 6; MITM setup scores 8.
 Canonical severity selection scores 5. The CLI constructor is unchanged.
 
@@ -102,9 +103,10 @@ Canonical severity selection scores 5. The CLI constructor is unchanged.
   recording handler passes `testing/slogtest`.
 - Source/import and compiled dependency checks find no Logrus usage. The existing
   module requirement, sums, and vendor files remain unchanged intentionally.
-- The existing CI vendor-regeneration job is expected to report differences after
-  the API migration. It is not bypassed: the separately deferred dependency/vendor
-  cleanup remains deferred and must be resolved before the final v1 release.
+- CI vendor verification passes on the config PR and fails after the slog API
+  migration. Deferred dependency/vendor cleanup is an unresolved merge blocker;
+  there is no assumed approval to merge red checks. The final release requires
+  vendor verification to pass.
 
 Production dashboards were not available for manual validation. Consumers must
 validate parsers against uppercase slog levels and the standard JSON encoding
