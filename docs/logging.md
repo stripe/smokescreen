@@ -93,4 +93,4 @@ security correction. Proxy decisions and client responses are unchanged.
 
 Structured observers are deferred. Existing built-in metrics remain unchanged.
 The unused logging dependency and vendor entries are deliberately retained for a
-separate cleanup PR; this migration does not run module tidy or vendoring.
+deferred cleanup; this migration does not run module tidy or vendoring.

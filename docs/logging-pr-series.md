@@ -8,7 +8,7 @@ release line throughout development. The Go module remains
 The previous nine-part breakdown becomes four implementation PRs. Keep the
 existing commits inside each PR so reviewers can inspect the smaller steps.
 The observer API remains out of scope. Dependency/vendor cleanup remains deferred
-for now; it belongs in PR 2 before that PR is ready to merge.
+for now; no module tidy or vendor regeneration is included in PR 2.
 
 | New PR | Combines previous PRs | Purpose |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ it supplies the test infrastructure used by the migration.
 
 Branch: `shubh/v1-slog-01-baseline` · Initial base: `release-v1.0.0`
 
-[Review diff](https://github.com/stripe/smokescreen/compare/release-v1.0.0...shubh/v1-slog-01-baseline)
+[Merged PR #311](https://github.com/stripe/smokescreen/pull/311)
 
 - Characterize canonical messages, levels, fields, types, units, omission rules,
   DNS timeout behavior, fatal exits, repeated close, and cleanup ordering.
@@ -44,9 +44,9 @@ so a caller's logger is used from startup onward and credentials never reach
 that handler. Combining the three original PRs avoids introducing unused
 production utilities and a temporary compatibility layer.
 
-Branch: `shubh/v1-slog-02-migration` · Initial base: `shubh/v1-slog-01-baseline`
+Branch: `shubh/v1-slog-02-migration` · Base: `release-v1.0.0` (includes merged PR 1)
 
-[Review diff](https://github.com/stripe/smokescreen/compare/shubh/v1-slog-01-baseline...shubh/v1-slog-02-migration)
+[PR #312](https://github.com/stripe/smokescreen/pull/312)
 
 - Migrate public logging types, implementation, and existing tests to `*slog.Logger`.
 - Use instance-local stock JSON defaults and consistent nil-logger resolution.
@@ -57,11 +57,15 @@ Branch: `shubh/v1-slog-02-migration` · Initial base: `shubh/v1-slog-01-baseline
   standard-log bridges.
 - Preserve canonical boundaries, severity selection, field semantics, and
   redaction before dispatch; snapshot counters as integers and copy headers.
-- **Pending, not performed yet:** once dependency cleanup is authorized, remove
-  Logrus module entries and regenerate vendor with `go mod tidy` and
-  `go mod vendor` in this PR. Then update the dependent PR branches. The existing
-  vendor check currently blocks merge readiness; do not bypass it or create a
-  fifth cleanup PR.
+- Include compilable backend/custom ACL/tracker examples and the standalone
+  stats-server nil-logger correction and regression, moved forward from PR 4.
+- Keep Logrus in `go.mod`, `go.sum`, and `vendor/` for now. Dependency cleanup
+  and vendor regeneration remain deferred. The existing vendor check remains
+  enabled and is expected to report the pending cleanup.
+
+Review PR 2 as three independently tested commits: instance defaults/redaction,
+configuration loading, then the atomic API migration with usage examples. Its
+PR description includes a before/after API table and usage patterns.
 
 ## PR 3 — Carry request context and correlation
 
@@ -95,9 +99,8 @@ Branch: `shubh/v1-slog-04-release-readiness` · Initial base: `shubh/v1-slog-03-
 
 - Cover HTTP, CONNECT, MITM, and denial using stock JSON/text and caller,
   disabled, and erroring handlers; verify backend isolation and redaction.
-- Exercise graceful/immediate shutdown and compile examples plus custom
-  ACL/tracker implementations. Include the standalone stats-server nil-logger
-  regression and its small correction.
+- Exercise graceful/immediate shutdown and validate the integration behavior
+  around the APIs and compilable examples introduced in PR 2.
 - Add logging/redaction and parallel HTTP/CONNECT benchmarks together with
   baseline/candidate samples and the performance comparison report.
 - Document standard formatting, context/correlation, caller-owned cleanup,
@@ -105,15 +108,17 @@ Branch: `shubh/v1-slog-04-release-readiness` · Initial base: `shubh/v1-slog-03-
   Keep unrelated control-flow refactors out of this migration.
 - Enable security checks on pushes to `release-v1.0.0`. Unit/race/integration
   workflows already cover all push and PR branches.
-- Verify complete dependency removal after PR 2's deferred cleanup and record
-  release validation, including downstream consumer and dashboard checks still
-  to be completed.
+- Record release validation, including downstream consumer and dashboard
+  checks still to be completed. Dependency cleanup remains separately deferred
+  and must be resolved before the final release.
 
 ## Review and merge flow
 
-PR 1 is open: [#311 — Protect existing logging behavior for v1.0.0](https://github.com/stripe/smokescreen/pull/311).
-All four review branches are pushed; PRs 2–4 will be opened separately. The
-previous nine branches remain available as historical references.
+PR 1 is merged: [#311](https://github.com/stripe/smokescreen/pull/311).
+PR 2 is open against the release branch: [#312](https://github.com/stripe/smokescreen/pull/312).
+The remaining branches are restacked on the merged PR 1 and updated PR 2;
+PRs 3–4 will be opened separately. The previous nine branches remain available
+as historical references.
 
 Review the series using the initial bases above. The first PR targets
 `release-v1.0.0`; later PRs target their predecessors to show only their own
@@ -136,8 +141,8 @@ compatibility, security, and validation work. Complete the four implementation
 PRs on the release branch, then bring the finished v1 changes onto master
 together at a coordinated release cutover.
 
-1. Finish the four PRs on `release-v1.0.0`, including PR 2's deferred dependency
-   cleanup. Require unit, race, vet, integration, vendor, and security checks to
+1. Finish the four PRs on `release-v1.0.0` and resolve the deferred dependency
+   cleanup before release. Require unit, race, vet, integration, vendor, and security checks to
    pass. Recheck performance and downstream migration expectations.
 2. Publish an explicitly approved prerelease such as `v1.0.0-alpha.1`, followed
    by `v1.0.0-rc.1`, from reviewed commits on that branch. Consumers opt in using

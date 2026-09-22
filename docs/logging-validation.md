@@ -101,7 +101,7 @@ The large CLI constructor remains outside this migration.
   module requirement, sums, and vendor files remain unchanged intentionally.
 - The existing CI vendor-regeneration job is expected to report differences after
   the API migration. It is not bypassed: the separately deferred dependency/vendor
-  cleanup belongs in PR 2 before it is ready to merge into `release-v1.0.0`.
+  cleanup remains deferred and must be resolved before the final v1 release.
 
 Production dashboards were not available for manual validation. Consumers must
 validate parsers against uppercase slog levels and the standard JSON encoding
