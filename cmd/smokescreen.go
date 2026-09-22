@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"runtime/debug"
 	"strconv"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
@@ -20,7 +20,7 @@ import (
 // "--version" flags are provided, return nil with no error.
 // If args is nil, os.Args will be used.  If logger is nil, a default logger
 // will be created and included in the returned configuration.
-func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, error) {
+func NewConfiguration(args []string, logger *slog.Logger) (*smokescreen.Config, error) {
 	if args == nil {
 		args = os.Args
 	}
@@ -346,7 +346,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		// Setup the connection tracker if there is not yet one in the config
 		if conf.ConnTracker == nil {
-			conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, conf.MetricsClient, conf.Log, conf.ShuttingDown, nil)
+			conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, conf.MetricsClient, conf.ShuttingDown, nil)
 		}
 		configToReturn = conf
 		return nil

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/logging"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -158,7 +159,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		filemode, err := strconv.ParseInt(yc.StatsSocketFileMode, 8, 9)
 
 		if err != nil {
-			c.Log.Fatal(err)
+			c.Log.Error(logging.Error(err))
+			os.Exit(1)
 		}
 
 		c.StatsSocketFileMode = os.FileMode(filemode)
