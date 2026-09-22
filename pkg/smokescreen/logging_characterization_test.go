@@ -22,7 +22,7 @@ import (
 func canonicalFixture(cfg *Config) *goproxy.ProxyCtx {
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
 	req.Header.Set(traceHeader, "client-trace")
-	sctx := newContext(cfg, httpProxy, req)
+	sctx := newContext(cfg, httpProxy, req, nil)
 	sctx.Decision = &ACLDecision{allow: true, Reason: "allowed", Role: "service", Project: "project"}
 	sctx.lookupTime = 1500 * time.Microsecond
 	return &goproxy.ProxyCtx{Req: req, UserData: sctx}

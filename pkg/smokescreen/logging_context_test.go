@@ -24,7 +24,7 @@ func TestCanceledContextDeliveredToLogging(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), loggingContextKey{}, "trusted-trace"))
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil).WithContext(ctx)
 	req.Header.Set(traceHeader, "untrusted-client-trace")
-	sctx := newContext(cfg, httpProxy, req)
+	sctx := newContext(cfg, httpProxy, req, nil)
 	sctx.Decision = &ACLDecision{allow: true}
 	cancel()
 	logProxy(&goproxy.ProxyCtx{Req: req, UserData: sctx})
@@ -77,7 +77,7 @@ func TestCanceledContextPreservesDialingBehavior(t *testing.T) {
 	cfg := NewConfig()
 	cfg.ConnTracker = conntrack.NewTracker(0, cfg.MetricsClient, cfg.ShuttingDown, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://"+listener.Addr().String(), nil)
-	sctx := newContext(cfg, httpProxy, req)
+	sctx := newContext(cfg, httpProxy, req, nil)
 	sctx.Decision = &ACLDecision{allow: true, OutboundHost: listener.Addr().String(), ResolvedAddr: listener.Addr().(*net.TCPAddr)}
 	pctx := &goproxy.ProxyCtx{Req: req, UserData: sctx}
 	ctx, cancel := context.WithCancel(context.WithValue(req.Context(), goproxy.ProxyContextKey, pctx))
@@ -93,4 +93,24 @@ func TestCanceledContextPreservesDialingBehavior(t *testing.T) {
 	}
 	_, err = dialContext(ctx, "tcp", listener.Addr().String())
 	require.True(t, errors.Is(err, context.Canceled))
+}
+
+func TestMITMCorrelation(t *testing.T) {
+	logger, records := testlog.New()
+	cfg := NewConfig()
+	cfg.Log = logger
+	connect := httptest.NewRequest(http.MethodConnect, "http://example.com:443", nil)
+	connect.Header.Set(traceHeader, "client-trace")
+	parent := newContext(cfg, connectProxy, connect, nil)
+	connect.Header.Del(traceHeader)
+	for i := 0; i < 2; i++ {
+		inner := newContext(cfg, connectProxy, httptest.NewRequest(http.MethodGet, "https://example.com", nil), parent)
+		inner.Logger.InfoContext(inner.loggingContext(), "inner")
+		e := records.LastEntry()
+		require.Equal(t, parent.id, e.Data[LogFieldParentID])
+		require.NotEqual(t, parent.id, e.Data[LogFieldID])
+		require.Equal(t, "client-trace", e.Data[LogFieldTraceID])
+	}
+	entries := records.AllEntries()
+	require.NotEqual(t, entries[0].Data[LogFieldID], entries[1].Data[LogFieldID])
 }
