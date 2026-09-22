@@ -7,7 +7,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/prometheus/client_golang v1.13.0
-	github.com/rs/xid v1.2.1
+	github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.12.1
 	github.com/stripe/goproxy v0.0.0-20260826103935-0cd07c409a76

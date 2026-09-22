@@ -50,8 +50,8 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/rs/xid v1.2.1
-## explicit
+# github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
+## explicit; go 1.16
 github.com/rs/xid
 # github.com/sirupsen/logrus v1.9.0
 ## explicit; go 1.13
