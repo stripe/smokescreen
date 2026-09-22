@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
@@ -586,6 +587,75 @@ func TestClientHalfCloseConnection(t *testing.T) {
 	a.NotNil(entry)
 }
 
+func TestProxyProtocolIntegration(t *testing.T) {
+	target := httptest.NewServer(ProxyTargetHandler)
+	defer target.Close()
+
+	var logHook logrustest.Hook
+	proxyAddr := startSmokescreenWithProxyProtocol(t, &logHook)
+
+	v2Header, err := proxyproto.HeaderProxyFromAddrs(
+		2,
+		&net.TCPAddr{IP: net.ParseIP("192.0.2.3"), Port: 23456},
+		&net.TCPAddr{IP: net.ParseIP("192.0.2.4"), Port: 443},
+	).Format()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		header         []byte
+		expectedRemote string
+	}{
+		{
+			name:           "PROXY v1 header",
+			header:         []byte("PROXY TCP4 192.0.2.1 192.0.2.2 12345 443\r\n"),
+			expectedRemote: "192.0.2.1:12345",
+		},
+		{
+			name:           "PROXY v2 header",
+			header:         v2Header,
+			expectedRemote: "192.0.2.3:23456",
+		},
+		{
+			name: "direct connection",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logHook.Reset()
+
+			conn, err := net.Dial("tcp", proxyAddr)
+			require.NoError(t, err)
+			defer conn.Close()
+
+			if len(tt.header) > 0 {
+				_, err = conn.Write(tt.header)
+				require.NoError(t, err)
+			}
+
+			req, err := http.NewRequest("GET", target.URL, nil)
+			require.NoError(t, err)
+			req.Header.Set("X-Smokescreen-Role", "egressneedingservice-open")
+			require.NoError(t, req.WriteProxy(conn))
+
+			resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			assert.Equalf(t, http.StatusOK, resp.StatusCode, "response body: %s", body)
+			assert.Equal(t, "okok", string(body))
+
+			if tt.expectedRemote != "" {
+				entry := findLogEntry(logHook.AllEntries(), smokescreen.CanonicalProxyDecision)
+				require.NotNil(t, entry)
+				assert.Equal(t, tt.expectedRemote, entry.Data[smokescreen.LogFieldInRemoteAddr])
+			}
+		})
+	}
+}
+
 func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	for _, entry := range entries {
 		if entry.Message == msg {
@@ -648,6 +718,46 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	}
 
 	return conf, server, nil
+}
+
+func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string {
+	t.Helper()
+
+	args := []string{
+		"smokescreen",
+		"--listen-ip=127.0.0.1",
+		"--egress-acl-file=testdata/sample_config.yaml",
+		"--allow-range=127.0.0.1/32",
+		"--proxy-protocol",
+	}
+	conf, err := NewConfiguration(args, nil)
+	require.NoError(t, err)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	conf.Listener = listener
+	conf.RoleFromRequest = testRFRHeader
+	conf.MetricsClient = metrics.NewNoOpMetricsClient()
+	conf.Resolver = loopbackResolver{}
+	conf.ConnectTimeout = time.Second
+	conf.Log.AddHook(logHook)
+
+	quit := make(chan interface{}, 1)
+	done := make(chan struct{})
+	go func() {
+		smokescreen.StartWithConfig(conf, quit)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		quit <- true
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("timed out stopping proxy-protocol server")
+		}
+	})
+
+	return listener.Addr().String()
 }
 
 func TestCRLEnforcement(t *testing.T) {
