@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
@@ -172,7 +171,10 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 	}
 
 	if test.OverConnect {
-		client = cleanhttp.DefaultClient()
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.DisableKeepAlives = true
+		transport.MaxIdleConnsPerHost = -1
+		client = &http.Client{Transport: transport}
 		client.Transport.(*http.Transport).DialContext =
 			func(ctx context.Context, network, addr string) (net.Conn, error) {
 				var conn net.Conn
