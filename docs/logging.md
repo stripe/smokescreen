@@ -18,10 +18,9 @@ shutdown. Smokescreen does not reconfigure or close a supplied handler. Handlers
 are synchronous and may add request latency; integrations own queueing and
 backpressure. Handlers must support concurrent calls as required by slog.
 
-Set `cfg.Log` before `cfg.LoadFile(path)`, or pass your logger to
+Use `smokescreen.LoadConfigWithLogger(path, logger)`, or pass your logger to
 `cmd.NewConfiguration(args, logger)`, to capture configuration and ACL-loading
-diagnostics. YAML behavior is documented separately in
-[configuration loading](config-loading.md).
+diagnostics. Loading still starts from defaults with the existing YAML semantics.
 
 ## API changes
 

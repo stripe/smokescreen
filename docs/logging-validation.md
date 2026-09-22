@@ -2,10 +2,10 @@
 
 ## Reproduction
 
-Benchmark code and saved measurements are grouped in the release-readiness PR
-(fifth in the series). The baseline PR contains correctness tests only. Candidate
-measurements were refreshed after the logging review fixes; splitting configuration
-into #314 changes no measured production behavior, so those samples are retained.
+Benchmark code and saved measurements are grouped in PR 4. PR 1 contains
+correctness tests only. These samples predate the scope cleanup that restored
+existing YAML behavior: the fixtures initialize configs directly with `NewConfig`
+and do not load YAML. Their sampled logging/forwarding paths are unchanged.
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
@@ -72,7 +72,7 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 
 | Function | Master | Candidate |
 | --- | ---: | ---: |
-| Config.UnmarshalYAML | 39 | 19 |
+| Config.UnmarshalYAML | 39 | 39 |
 | logProxy | 8 | 6 |
 | cmd.NewConfiguration | 47 | 47 |
 | BuildProxy | 24 | 24 |
@@ -82,9 +82,9 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 | logging.errorText | — | 11 |
 | SmokescreenContext.diagnosticLogger | — | 3 |
 
-The YAML changes now belong to the separate config PR (#314). YAML applies only supplied keys; it no longer resets the config and restores an
-allowlist. Rule, rate-limit, and TLS helpers score 6; MITM setup scores 8.
-Canonical severity selection scores 5. The CLI constructor is unchanged.
+The YAML loader retains its existing control flow and semantics. The new
+`LoadConfigWithLogger` helper scores 3; the CLI constructor remains 47.
+Canonical severity selection scores 5. Broader control-flow refactors are deferred.
 
 ## Correctness checks
 
@@ -103,8 +103,8 @@ Canonical severity selection scores 5. The CLI constructor is unchanged.
   recording handler passes `testing/slogtest`.
 - Source/import and compiled dependency checks find no Logrus usage. The existing
   module requirement, sums, and vendor files remain unchanged intentionally.
-- CI vendor verification passes on the config PR and fails after the slog API
-  migration. Deferred dependency/vendor cleanup is an unresolved merge blocker;
+- CI vendor verification fails after the slog API migration. Deferred
+  dependency/vendor cleanup remains unresolved;
   there is no assumed approval to merge red checks. The final release requires
   vendor verification to pass.
 
