@@ -4,11 +4,12 @@
 package acl
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
 	"path"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -178,7 +179,7 @@ func TestACLDecision(t *testing.T) {
 			a := assert.New(t)
 
 			yl := NewYAMLLoader(path.Join("testdata", testCase.yamlFile))
-			acl, err := New(logrus.New(), yl, []string{})
+			acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 			a.NoError(err)
 			a.NotNil(acl)
@@ -199,7 +200,7 @@ func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader("testdata/no_default.yaml")
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 	a.NoError(err)
 	a.NotNil(acl)
@@ -231,7 +232,7 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 
 func TestACLMalformedPolicyDisable(t *testing.T) {
 	_, err := New(
-		logrus.New(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		NewYAMLLoader("testdata/no_default.yaml"), // any file will do
 		[]string{"sillystring"},
 	)
@@ -360,12 +361,11 @@ func TestHostMatchesGlob(t *testing.T) {
 	}
 }
 
-
 func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader(path.Join("testdata", "mitm_config.yaml"))
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 	a.NoError(err)
 	a.NotNil(acl)
@@ -416,16 +416,16 @@ func TestInvalidMitmComfig(t *testing.T) {
 // TestIDNValidation tests Internationalized Domain Name handling
 func TestIDNValidation(t *testing.T) {
 	acl := &ACL{}
-	
+
 	// Unicode domain should be rejected with punycode suggestion
 	err := acl.ValidateDomainGlob("test", "тест.example.com")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "use \"xn--e1aybc.example.com\"")
-	
+
 	// Punycode domain should be valid
 	err = acl.ValidateDomainGlob("test", "xn--e1aybc.example.com")
 	assert.NoError(t, err)
-	
+
 	// Unicode with wildcard should be rejected
 	err = acl.ValidateDomainGlob("test", "*.тест.example.com")
 	assert.Error(t, err)
@@ -436,10 +436,10 @@ func TestIDNValidation(t *testing.T) {
 func TestIDNHostMatching(t *testing.T) {
 	// Unicode hostname should match punycode glob
 	assert.True(t, HostMatchesGlob("тест.example.com", "xn--e1aybc.example.com"))
-	
+
 	// Punycode hostname should match unicode glob
 	assert.True(t, HostMatchesGlob("xn--e1aybc.example.com", "тест.example.com"))
-	
+
 	// Wildcard matching with IDN
 	assert.True(t, HostMatchesGlob("sub.тест.example.com", "*.xn--e1aybc.example.com"))
 	assert.False(t, HostMatchesGlob("тест.example.com", "*.xn--e1aybc.example.com"))
@@ -448,14 +448,14 @@ func TestIDNHostMatching(t *testing.T) {
 // TestExternalProxyGlobValidation tests external proxy glob validation
 func TestExternalProxyGlobValidation(t *testing.T) {
 	acl := &ACL{}
-	
+
 	// Valid external proxy globs
 	validRule := Rule{
 		DomainGlobs:        []string{"example.com"},
 		ExternalProxyGlobs: []string{"proxy.example.com", "*.proxies.com"},
 	}
 	assert.NoError(t, acl.ValidateRule("test", validRule))
-	
+
 	// Invalid external proxy glob
 	invalidRule := Rule{
 		DomainGlobs:        []string{"example.com"},
@@ -477,7 +477,7 @@ func TestDecisionWithProxyHost(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Allowed proxy and target
 	decision, err := acl.Decide(DecideArgs{Service: "proxy-service", Host: "example.com", ConnectProxyHost: "proxy.example.com"})
 	assert.NoError(t, err)
@@ -557,7 +557,7 @@ func TestDecideConnectReqIgnored(t *testing.T) {
 
 func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 	a := assert.New(t)
-	logger := logrus.New()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Config with open default rule
 	yamlFilePath := path.Join("testdata", "sample_default_bypass_config.yaml")
@@ -572,7 +572,7 @@ func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 
 func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
 	a := assert.New(t)
-	logger := logrus.New()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Config with open default rule
 	yamlFilePath := path.Join("testdata", "contains_invalid_glob_default.yaml")

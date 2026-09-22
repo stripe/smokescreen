@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/smokescreen/internal/testlog"
 )
 
 func TestConfigurationUsesLoggerDuringLoad(t *testing.T) {
-	logger, records := logrustest.NewNullLogger()
+	logger, records := testlog.New()
 	dir := t.TempDir()
 	aclPath := filepath.Join(dir, "acl.yaml")
 	require.NoError(t, os.WriteFile(aclPath, []byte("version: v1\nservices: []\n"), 0600))

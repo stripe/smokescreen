@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/stripe/smokescreen/internal/logging"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
@@ -32,14 +33,17 @@ func (s *StatsServer) Serve() {
 	ln, err := net.Listen("unix", s.socketPath)
 
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server: ", err)
+		s.config.Log.Error(logging.Sanitize(fmt.Sprint("Could not start the reporting server: ", err)))
+		os.Exit(1)
 	}
 	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
 
 	s.ln = ln
-	err = http.Serve(s.ln, s.mux)
+	server := http.Server{Handler: s.mux, ErrorLog: logging.StdLogger(s.config.Log)}
+	err = server.Serve(s.ln)
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server: ", err)
+		s.config.Log.Error(logging.Sanitize(fmt.Sprint("Could not start the reporting server: ", err)))
+		os.Exit(1)
 	}
 }
 
@@ -70,7 +74,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 		repr, err := instrumentedConn.JsonStats()
 
 		if err != nil {
-			s.config.Log.Error(err)
+			s.config.Log.Error(logging.Sanitize(err.Error()))
 		}
 
 		rw.Write(repr)

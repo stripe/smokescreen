@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/logging"
 	"gopkg.in/yaml.v2"
 )
 
@@ -159,7 +160,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		filemode, err := strconv.ParseInt(yc.StatsSocketFileMode, 8, 9)
 
 		if err != nil {
-			c.Log.Fatal(err)
+			c.Log.Error(logging.Sanitize(fmt.Sprint(err)))
+			os.Exit(1)
 		}
 
 		c.StatsSocketFileMode = os.FileMode(filemode)
@@ -233,9 +235,7 @@ func (c *Config) LoadFile(filePath string) error {
 func (c *Config) resetForYAML() {
 	previous := *c
 	*c = *NewConfig()
-	if previous.Log != nil {
-		c.Log = previous.Log
-	}
+	c.Log = logging.OrDefault(previous.Log)
 	if previous.Resolver != nil {
 		c.Resolver = previous.Resolver
 	}

@@ -1,8 +1,8 @@
 package smokescreen
 
 import (
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/smokescreen/internal/testlog"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 	"net/http"
@@ -12,14 +12,14 @@ import (
 )
 
 func TestLoadFilePreservesDependencies(t *testing.T) {
-	logger, records := logrustest.NewNullLogger()
+	logger, records := testlog.New()
 	cfg := NewConfig()
 	cfg.Log = logger
 	resolver := &deadlineResolver{t: t}
 	cfg.Resolver = resolver
 	metricClient := metrics.NewNoOpMetricsClient()
 	cfg.MetricsClient = metricClient
-	tracker := conntrack.NewTracker(0, metricClient, cfg.Log, cfg.ShuttingDown, nil)
+	tracker := conntrack.NewTracker(0, metricClient, cfg.ShuttingDown, nil)
 	cfg.ConnTracker = tracker
 	cfg.RoleFromRequest = func(*http.Request) (string, error) { return "caller", nil }
 	path := filepath.Join(t.TempDir(), "config.yaml")

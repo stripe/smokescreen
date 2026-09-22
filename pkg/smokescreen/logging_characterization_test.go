@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
 )
@@ -35,16 +35,15 @@ func TestCanonicalDecisionSemantics(t *testing.T) {
 		err           error
 		level         string
 	}{
-		{"allow", true, false, nil, "info"},
-		{"report", true, true, nil, "info"},
-		{"deny", false, true, denyError{errors.New("denied")}, "warning"},
-		{"dial failure", true, false, errors.New("dial failed"), "error"},
+		{"allow", true, false, nil, "INFO"},
+		{"report", true, true, nil, "INFO"},
+		{"deny", false, true, denyError{errors.New("denied")}, "WARN"},
+		{"dial failure", true, false, errors.New("dial failed"), "ERROR"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
 			cfg := NewConfig()
-			cfg.Log.SetOutput(&out)
-			cfg.Log.SetFormatter(&logrus.JSONFormatter{})
+			cfg.Log = slog.New(slog.NewJSONHandler(&out, nil))
 			pctx := canonicalFixture(cfg)
 			sctx := pctx.UserData.(*SmokescreenContext)
 			sctx.Decision.allow = tc.allow
@@ -115,13 +114,16 @@ func BenchmarkCanonicalLogging(b *testing.B) {
 	for _, mode := range []string{"disabled", "json", "text"} {
 		b.Run(mode, func(b *testing.B) {
 			cfg := NewConfig()
-			cfg.Log.SetOutput(io.Discard)
-			if mode == "json" {
-				cfg.Log.SetFormatter(&logrus.JSONFormatter{})
-			}
+			options := &slog.HandlerOptions{}
 			if mode == "disabled" {
-				cfg.Log.SetLevel(logrus.PanicLevel)
+				options.Level = slog.LevelError + 1
 			}
+			if mode == "json" {
+				cfg.Log = slog.New(slog.NewJSONHandler(io.Discard, options))
+			} else {
+				cfg.Log = slog.New(slog.NewTextHandler(io.Discard, options))
+			}
+
 			pctx := canonicalFixture(cfg)
 			b.ReportAllocs()
 			b.ResetTimer()
