@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +37,69 @@ func TestMetricsTags(t *testing.T) {
 		err := mc.AddMetricTags(metric, map[string]string{"globalize": "value"})
 		r.Error(err)
 	})
+}
+
+func TestStatsdMetricsClientPreservesMetricValues(t *testing.T) {
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+	defer listener.Close()
+
+	mc, err := NewStatsdMetricsClient(listener.LocalAddr().String(), "smokescreen.")
+	require.NoError(t, err)
+	defer mc.StatsdClient().Close()
+
+	require.NoError(t, mc.Incr("acl.allow", 1))
+	require.NoError(t, mc.Incr("acl.allow", 1))
+	require.NoError(t, mc.Gauge("requests.concurrent", 10, 1))
+	require.NoError(t, mc.Histogram("cn.duration", 2.5, 1))
+	require.NoError(t, mc.Timing("resolver.lookup_time", 1500*time.Millisecond, 1))
+	require.NoError(t, mc.StatsdClient().Flush())
+
+	var payload strings.Builder
+	buf := make([]byte, 1024)
+	deadline := time.Now().Add(time.Second)
+	for {
+		require.NoError(t, listener.SetReadDeadline(deadline))
+		n, _, err := listener.ReadFromUDP(buf)
+		if err != nil {
+			break
+		}
+		payload.Write(buf[:n])
+		if len(strings.Fields(payload.String())) == 4 {
+			break
+		}
+	}
+
+	lines := strings.Fields(payload.String())
+	require.ElementsMatch(t, []string{
+		"smokescreen.acl.allow:2|c",
+		"smokescreen.requests.concurrent:10|g",
+		"smokescreen.cn.duration:2.5|h",
+		"smokescreen.resolver.lookup_time:1500.000000|ms",
+	}, lines)
+}
+
+func TestStatsdMetricsClientPreservesNamespace(t *testing.T) {
+	for _, namespace := range []string{"", "legacy"} {
+		t.Run(namespace, func(t *testing.T) {
+			listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+			require.NoError(t, err)
+			defer listener.Close()
+
+			mc, err := NewStatsdMetricsClient(listener.LocalAddr().String(), namespace)
+			require.NoError(t, err)
+			defer mc.StatsdClient().Close()
+
+			require.NoError(t, mc.Incr("acl.allow", 1))
+			require.NoError(t, mc.StatsdClient().Flush())
+
+			buf := make([]byte, 1024)
+			require.NoError(t, listener.SetReadDeadline(time.Now().Add(time.Second)))
+			n, _, err := listener.ReadFromUDP(buf)
+			require.NoError(t, err)
+			require.Equal(t, namespace+"acl.allow:1|c", strings.TrimSpace(string(buf[:n])))
+		})
+	}
 }
 
 func TestMetricsClient(t *testing.T) {

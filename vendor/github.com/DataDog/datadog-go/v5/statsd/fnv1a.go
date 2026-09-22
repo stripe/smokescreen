@@ -37,3 +37,10 @@ func addString32(h uint32, s string) uint32 {
 
 	return h
 }
+
+// appendString32 appends s to b while adding its bytes to the precomputed hash
+// value h. It is useful for building a byte representation and its hash in one
+// pass.
+func appendString32(b []byte, h uint32, s string) ([]byte, uint32) {
+	return append(b, s...), addString32(h, s)
+}

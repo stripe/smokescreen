@@ -3,7 +3,7 @@ module github.com/stripe/smokescreen
 go 1.25.0
 
 require (
-	github.com/DataDog/datadog-go v4.5.1+incompatible
+	github.com/DataDog/datadog-go/v5 v5.9.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/prometheus/client_golang v1.13.0

@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/DataDog/datadog-go/statsd"
+	"github.com/DataDog/datadog-go/v5/statsd"
 	"sync/atomic"
 	"time"
 )
@@ -13,6 +13,7 @@ import (
 // StatsdMetricsClient is not thread safe and should not be used concurrently.
 type StatsdMetricsClient struct {
 	metricsTags  map[string][]string
+	namespace    string
 	statsdClient statsd.ClientInterface
 	started      atomic.Value
 }
@@ -20,11 +21,15 @@ type StatsdMetricsClient struct {
 // NewMetricsClient creates a new StatsdMetricsClient with the provided statsd address and
 // namespace.
 func NewStatsdMetricsClient(addr, namespace string) (*StatsdMetricsClient, error) {
-	c, err := statsd.New(addr)
+	c, err := statsd.New(
+		addr,
+		statsd.WithClientSideAggregation(),
+		statsd.WithAggregationInterval(2*time.Second),
+		statsd.WithoutOriginDetection(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	c.Namespace = namespace
 
 	// Populate the client's map to hold metric tags
 	metricsTags := make(map[string][]string)
@@ -34,6 +39,7 @@ func NewStatsdMetricsClient(addr, namespace string) (*StatsdMetricsClient, error
 
 	return &StatsdMetricsClient{
 		metricsTags:  metricsTags,
+		namespace:    namespace,
 		statsdClient: c,
 	}, nil
 }
@@ -86,7 +92,7 @@ func (mc *StatsdMetricsClient) GetMetricTags(metric string) []string {
 
 func (mc *StatsdMetricsClient) Incr(metric string, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Incr(metric, baseTags, rate)
+	return mc.statsdClient.Incr(mc.metricName(metric), baseTags, rate)
 }
 
 func (mc *StatsdMetricsClient) IncrWithTags(
@@ -95,14 +101,14 @@ func (mc *StatsdMetricsClient) IncrWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Incr(metric, combinedTags, rate)
+	return mc.statsdClient.Incr(mc.metricName(metric), combinedTags, rate)
 }
 
 func (mc *StatsdMetricsClient) Gauge(
 	metric string,
 	value float64, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Gauge(metric, value, baseTags, rate)
+	return mc.statsdClient.Gauge(mc.metricName(metric), value, baseTags, rate)
 }
 
 func (mc *StatsdMetricsClient) Histogram(
@@ -110,7 +116,7 @@ func (mc *StatsdMetricsClient) Histogram(
 	value float64,
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Histogram(metric, value, baseTags, rate)
+	return mc.statsdClient.Histogram(mc.metricName(metric), value, baseTags, rate)
 }
 
 func (mc *StatsdMetricsClient) HistogramWithTags(
@@ -120,12 +126,12 @@ func (mc *StatsdMetricsClient) HistogramWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Histogram(metric, value, combinedTags, rate)
+	return mc.statsdClient.Histogram(mc.metricName(metric), value, combinedTags, rate)
 }
 
 func (mc *StatsdMetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Timing(metric, d, baseTags, rate)
+	return mc.statsdClient.Timing(mc.metricName(metric), d, baseTags, rate)
 }
 
 func (mc *StatsdMetricsClient) TimingWithTags(
@@ -135,7 +141,7 @@ func (mc *StatsdMetricsClient) TimingWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Timing(metric, d, combinedTags, rate)
+	return mc.statsdClient.Timing(mc.metricName(metric), d, combinedTags, rate)
 }
 
 func (mc *StatsdMetricsClient) StatsdClient() statsd.ClientInterface {
@@ -144,6 +150,10 @@ func (mc *StatsdMetricsClient) StatsdClient() statsd.ClientInterface {
 
 func (mc *StatsdMetricsClient) SetStarted() {
 	mc.started.Store(true)
+}
+
+func (mc *StatsdMetricsClient) metricName(metric string) string {
+	return mc.namespace + metric
 }
 
 // StatsdMetricsClient implements MetricsClientInterface
