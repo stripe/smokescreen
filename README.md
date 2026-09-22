@@ -39,6 +39,27 @@ Smokescreen uses a [custom fork](https://github.com/stripe/goproxy) of goproxy t
 Generally, Smokescreen will only support the two most recent Go versions. See
 [the test configuration](.github/workflows/test.yml) for details.
 
+### Building without Prometheus
+
+Prometheus support is included by default:
+
+```sh
+go build .
+```
+
+> **Note:** Prometheus is currently opt-out. In a future release, it will become
+> opt-in; consumers that require Prometheus should account for that build change.
+
+To build a binary without Prometheus packages in its compiled dependency graph,
+pass the `smokescreen_no_prometheus` build tag:
+
+```sh
+go build -tags=smokescreen_no_prometheus .
+```
+
+The no-Prometheus binary accepts the usual non-Prometheus configuration, but
+fails during startup configuration if `--expose-prometheus-metrics` is set.
+
 [mod]: https://github.com/golang/go/wiki/Modules
 
 ## Usage
