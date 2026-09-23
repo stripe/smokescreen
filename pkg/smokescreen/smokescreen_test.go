@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -22,11 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/testlog"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
@@ -334,8 +334,7 @@ func TestSelectTargetAddr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test config
 			config := NewConfig()
-			config.Log = logrus.New()
-			config.Log.SetLevel(logrus.DebugLevel)
+			config.Log = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 			if len(tt.allowRanges) > 0 {
 				err := config.SetAllowRanges(tt.allowRanges)
@@ -378,8 +377,7 @@ func TestSelectTargetAddr(t *testing.T) {
 
 func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 	// Create a logger with a test hook
-	logger, hook := logrustest.NewNullLogger()
-	logger.SetLevel(logrus.InfoLevel)
+	logger, hook := testlog.New()
 
 	config := NewConfig()
 	config.Log = logger
@@ -563,7 +561,7 @@ func TestConsistentHostHeader(t *testing.T) {
 
 	// Custom proxy config for the "remote" httptest.NewServer
 	conf := NewConfig()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), conf.Log, atomic.Value{}, nil)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -601,10 +599,10 @@ func TestClearsTraceIDHeader(t *testing.T) {
 	defer ts.Close()
 
 	// Custom proxy config for the "remote" httptest.NewServer
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 	conf := NewConfig()
-	conf.Log.AddHook(&logHook)
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), conf.Log, atomic.Value{}, nil)
+	conf.Log = slog.New(&logHook)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, metrics.NewNoOpMetricsClient(), atomic.Value{}, nil)
 	err := conf.SetAllowAddresses([]string{"127.0.0.1"})
 	r.NoError(err)
 
@@ -763,7 +761,6 @@ func TestInvalidHost(t *testing.T) {
 		})
 	}
 }
-
 
 func TestErrorHeader(t *testing.T) {
 	a := assert.New(t)
@@ -951,7 +948,7 @@ func TestProxyTimeouts(t *testing.T) {
 
 		r.Equal("http", entry.Data["proxy_type"])
 		r.Contains(entry.Data["error"], "i/o timeout")
-		r.Equal(entry.Data["status_code"], 504)
+		r.Equal(int64(504), entry.Data["status_code"])
 	})
 
 	// This isn't quite correct, as there is some nondeterministic behavior with the way
@@ -1702,7 +1699,7 @@ func TestCONNECTProxyACLs(t *testing.T) {
 		second_client.Do(second_req)
 
 		// Filter for only CANONICAL-PROXY-DECISION entries
-		var canonicalEntries []*logrus.Entry
+		var canonicalEntries []*testlog.Entry
 		for _, entry := range logHook.AllEntries() {
 			if entry.Message == CanonicalProxyDecision {
 				canonicalEntries = append(canonicalEntries, entry)
@@ -1905,7 +1902,7 @@ func TestConfigValidate(t *testing.T) {
 	})
 }
 
-func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
+func findCanonicalProxyDecision(logs []*testlog.Entry) *testlog.Entry {
 	for _, entry := range logs {
 		if entry.Message == CanonicalProxyDecision {
 			return entry
@@ -1914,7 +1911,7 @@ func findCanonicalProxyDecision(logs []*logrus.Entry) *logrus.Entry {
 	return nil
 }
 
-func findCanonicalProxyClose(logs []*logrus.Entry) *logrus.Entry {
+func findCanonicalProxyClose(logs []*testlog.Entry) *testlog.Entry {
 	for _, entry := range logs {
 		if entry.Message == conntrack.CanonicalProxyConnClose {
 			return entry
@@ -1939,14 +1936,14 @@ func testConfig(role string) (*Config, error) {
 	}
 
 	mc := metrics.NewMockMetricsClient()
-	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc, conf.Log, atomic.Value{}, nil)
+	conf.ConnTracker = conntrack.NewTracker(conf.IdleTimeout, mc, atomic.Value{}, nil)
 	conf.MetricsClient = mc
 	return conf, nil
 }
 
-func proxyLogHook(conf *Config) *logrustest.Hook {
-	var testHook logrustest.Hook
-	conf.Log.AddHook(&testHook)
+func proxyLogHook(conf *Config) *testlog.Handler {
+	var testHook testlog.Handler
+	conf.Log = slog.New(&testHook)
 	return &testHook
 }
 

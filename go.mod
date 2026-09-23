@@ -8,7 +8,6 @@ require (
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
-	github.com/sirupsen/logrus v1.10.1
 	github.com/stretchr/testify v1.12.1
 	github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
 	github.com/urfave/cli/v3 v3.11.0

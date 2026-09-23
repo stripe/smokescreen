@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/logging"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -76,7 +78,9 @@ type yamlConfig struct {
 
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var yc yamlConfig
+	logger := c.Log
 	*c = *NewConfig()
+	c.Log = logging.OrDefault(logger)
 
 	err := unmarshal(&yc)
 	if err != nil {
@@ -158,7 +162,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		filemode, err := strconv.ParseInt(yc.StatsSocketFileMode, 8, 9)
 
 		if err != nil {
-			c.Log.Fatal(err)
+			c.Log.Error(logging.Error(err))
+			os.Exit(1)
 		}
 
 		c.StatsSocketFileMode = os.FileMode(filemode)
@@ -244,13 +249,20 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+// LoadConfig loads a fresh configuration using the default logger.
 func LoadConfig(filePath string) (*Config, error) {
+	return LoadConfigWithLogger(filePath, nil)
+}
+
+// LoadConfigWithLogger loads a fresh configuration using logger for loading
+// diagnostics and child components. A nil logger uses the instance-local default.
+func LoadConfigWithLogger(filePath string, logger *slog.Logger) (*Config, error) {
 	yamlBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	config := &Config{}
+	config := &Config{Log: logger}
 	decoder := yaml.NewDecoder(bytes.NewReader(yamlBytes))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(config); err != nil {

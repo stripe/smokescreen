@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,8 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stripe/goproxy"
+	"github.com/stripe/smokescreen/internal/logging"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -52,7 +53,7 @@ const (
 	DefaultStatsdAddress = "127.0.0.1:8200"
 
 	// Rate limiting defaults
-	DefaultMaxConcurrentRequests 	   = 0   // 0 = unlimited
+	DefaultMaxConcurrentRequests       = 0   // 0 = unlimited
 	DefaultMaxRequestRate              = 0.0 // 0 = unlimited
 	DefaultMaxRequestBurst             = -1  // -1 = use 2x rate
 	DefaultMaxConcurrentConnectTunnels = 0   // 0 = unlimited
@@ -88,15 +89,20 @@ type Config struct {
 	RoleFromRequest              func(subject *http.Request) (string, error)
 	clientCasBySubjectKeyId      map[string]*x509.Certificate
 	AdditionalErrorMessageOnDeny string
-	Log                          *log.Logger
-	DisabledAclPolicyActions     []string
-	AllowMissingRole             bool
-	StatsSocketDir               string
-	StatsSocketFileMode          os.FileMode
-	StatsServer                  *StatsServer // StatsServer
-	ConnTracker                  conntrack.TrackerInterface
-	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
-	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
+	// Log selects the logging handler. Nil uses instance-local JSON to stderr.
+	// The caller owns handler buffering, flushing, and closing.
+	// Fatal startup exits do not flush buffered handlers or run deferred cleanup.
+	// Use slog.HandlerOptions.ReplaceAttr with JSON/TextHandler, or a standard
+	// slog.Handler wrapper, for additional application-specific redaction.
+	Log                      *slog.Logger
+	DisabledAclPolicyActions []string
+	AllowMissingRole         bool
+	StatsSocketDir           string
+	StatsSocketFileMode      os.FileMode
+	StatsServer              *StatsServer // StatsServer
+	ConnTracker              conntrack.TrackerInterface
+	Healthcheck              http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
+	ShuttingDown             atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
 
 	// Network type to use when performing DNS lookups. Must be one of "ip", "ip4" or "ip6".
 	Network string
@@ -384,16 +390,12 @@ type authKeyId struct {
 }
 
 func NewConfig() *Config {
-	log.SetFormatter(&log.JSONFormatter{
-		TimestampFormat: time.RFC3339Nano,
-	})
-
 	return &Config{
 		Resolver:                &net.Resolver{},
 		CrlByAuthorityKeyId:     make(map[string]*pkix.CertificateList),
 		revokedCertSerials:      make(map[string]map[string]bool),
 		clientCasBySubjectKeyId: make(map[string]*x509.Certificate),
-		Log:                     log.New(),
+		Log:                     logging.OrDefault(nil),
 		Port:                    DefaultPort,
 		ConnectTimeout:          DefaultConnectTimeout,
 		ExitTimeout:             DefaultExitTimeout,
@@ -411,7 +413,8 @@ func NewConfig() *Config {
 
 // Gathers all local IP addresses to prevent recursive proxy attacks.
 func (config *Config) InitializeSelfConnectionDetection() error {
-	localIPs, err := getAllLocalIPs()
+	config.Log = logging.OrDefault(config.Log)
+	localIPs, err := getAllLocalIPs(config.Log)
 	if err != nil {
 		return fmt.Errorf("failed to get local IPs for self-connection detection: %w", err)
 	}
@@ -421,11 +424,9 @@ func (config *Config) InitializeSelfConnectionDetection() error {
 	for i, ip := range config.LocalIPs {
 		ipStrings[i] = ip.String()
 	}
-	config.Log.WithFields(log.Fields{
-		"listening_ip":   config.Ip,
-		"listening_port": config.Port,
-		"local_ips":      ipStrings,
-	}).Info("Self-connection detection initialized")
+	config.Log.With(slog.String("listening_ip", config.Ip),
+		slog.Int("listening_port", int(config.Port)),
+		slog.Any("local_ips", ipStrings)).Info("Self-connection detection initialized")
 
 	return nil
 }
@@ -435,7 +436,8 @@ var getNetInterfaces = net.Interfaces
 
 // getAllLocalIPs returns all IP addresses assigned to network interfaces on this host.
 // This includes loopback, private, public, and any other IPs.
-func getAllLocalIPs() ([]net.IP, error) {
+func getAllLocalIPs(logger *slog.Logger) ([]net.IP, error) {
+	logger = logging.OrDefault(logger)
 	localIPs := []net.IP{}
 
 	interfaces, err := getNetInterfaces()
@@ -446,10 +448,8 @@ func getAllLocalIPs() ([]net.IP, error) {
 	for _, iface := range interfaces {
 		addrs, err := iface.Addrs()
 		if err != nil {
-			log.WithFields(log.Fields{
-				"interface": iface.Name,
-				"error":     err,
-			}).Warn("Failed to get addresses for network interface, skipping")
+			logger.With(slog.String("interface", iface.Name),
+				slog.String("error", logging.Error(err))).Warn("Failed to get addresses for network interface, skipping")
 			continue
 		}
 
@@ -469,13 +469,14 @@ func getAllLocalIPs() ([]net.IP, error) {
 	}
 
 	if len(localIPs) == 0 {
-		log.Warn("No local IPs detected for self-connection detection")
+		logger.Warn("No local IPs detected for self-connection detection")
 	}
 
 	return localIPs, nil
 }
 
 func (config *Config) SetupCrls(crlFiles []string) error {
+	config.Log = logging.OrDefault(config.Log)
 	for _, crlFile := range crlFiles {
 		crlBytes, err := ioutil.ReadFile(crlFile)
 		if err != nil {
@@ -484,7 +485,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 
 		certList, err := x509.ParseCRL(crlBytes)
 		if err != nil {
-			log.Printf("Failed to parse CRL in '%s': %#v\n", crlFile, err)
+			config.Log.Info(fmt.Sprintf("Failed to parse CRL in '%s': %#v\n", crlFile, err))
 		}
 
 		// find the X509v3 Authority Key Identifier in the extensions (2.5.29.35)
@@ -496,7 +497,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 				var crlAuthorityKey authKeyId
 				_, err := asn1.Unmarshal(v.Value, &crlAuthorityKey)
 				if err != nil {
-					fmt.Printf("error: Failed to read AuthorityKey: %#v\n", err)
+					config.Log.Info(fmt.Sprintf("error: Failed to read AuthorityKey: %#v\n", err))
 					continue
 				}
 				crlIssuerId = string(crlAuthorityKey.Id)
@@ -504,7 +505,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 			}
 		}
 		if crlIssuerId == "" {
-			log.Print(fmt.Errorf("error: CRL from '%s' has no Authority Key Identifier: ignoring it\n", crlFile))
+			config.Log.Info(fmt.Sprintf("error: CRL from '%s' has no Authority Key Identifier: ignoring it\n", crlFile))
 			continue
 		}
 
@@ -512,15 +513,15 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 		caCert, ok := config.clientCasBySubjectKeyId[crlIssuerId]
 
 		if !ok {
-			log.Printf("warn: CRL loaded for issuer '%s' but no such CA loaded: ignoring it\n", hex.EncodeToString([]byte(crlIssuerId)))
-			fmt.Printf("%#v loaded certs\n", len(config.clientCasBySubjectKeyId))
+			config.Log.Info(fmt.Sprintf("warn: CRL loaded for issuer '%s' but no such CA loaded: ignoring it\n", hex.EncodeToString([]byte(crlIssuerId))))
+			config.Log.Info(fmt.Sprintf("%#v loaded certs\n", len(config.clientCasBySubjectKeyId)))
 			continue
 		}
 
 		// At this point, we have the CA certificate and the CRL. All that's left before evicting the CRL we currently trust is to verify the new CRL's signature
 		err = caCert.CheckCRLSignature(certList)
 		if err != nil {
-			fmt.Printf("error: Could not trust CRL. Error during signature check: %#v\n", err)
+			config.Log.Info(fmt.Sprintf("error: Could not trust CRL. Error during signature check: %#v\n", err))
 			continue
 		}
 
@@ -533,14 +534,14 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 		}
 		config.revokedCertSerials[crlIssuerId] = serialSet
 
-		fmt.Printf("info: Loaded CRL for Authority ID '%s'\n", hex.EncodeToString([]byte(crlIssuerId)))
+		config.Log.Info(fmt.Sprintf("info: Loaded CRL for Authority ID '%s'\n", hex.EncodeToString([]byte(crlIssuerId))))
 	}
 
 	// Verify that all CAs loaded have a CRL
 	for k := range config.clientCasBySubjectKeyId {
 		_, ok := config.CrlByAuthorityKeyId[k]
 		if !ok {
-			fmt.Printf("warn: no CRL loaded for Authority ID '%s'\n", hex.EncodeToString([]byte(k)))
+			config.Log.Info(fmt.Sprintf("warn: no CRL loaded for Authority ID '%s'\n", hex.EncodeToString([]byte(k))))
 		}
 	}
 	return nil
@@ -548,7 +549,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 
 func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if addr == "" {
-		fmt.Println("warn: no statsd addr provided, using noop client")
+		logging.OrDefault(config.Log).Warn("no statsd addr provided, using noop client")
 		config.MetricsClient = metrics.NewNoOpMetricsClient()
 		return nil
 	}
@@ -566,16 +567,17 @@ func (config *Config) SetupStatsd(addr string) error {
 }
 
 func (config *Config) SetupEgressAcl(aclFile string) error {
+	config.Log = logging.OrDefault(config.Log)
 	if aclFile == "" {
 		config.EgressACL = nil
 		return nil
 	}
 
-	log.Printf("Loading egress ACL from %s", aclFile)
+	config.Log.Info(fmt.Sprintf("Loading egress ACL from %s", aclFile))
 
 	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
 	if err != nil {
-		log.Print(err)
+		config.Log.Info(logging.Error(err))
 		return err
 	}
 	config.EgressACL = egressACL
@@ -601,6 +603,7 @@ func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) erro
 
 // certFile and keyFile may be the same file containing concatenated PEM blocks
 func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string) error {
+	config.Log = logging.OrDefault(config.Log)
 	if certFile == "" || keyFile == "" {
 		return errors.New("both certificate and key files must be specified to set up TLS")
 	}
@@ -679,7 +682,7 @@ func (config *Config) populateClientCaMap(pemCerts []byte) (ok bool) {
 		if err != nil {
 			continue
 		}
-		fmt.Printf("info: Loaded CA with Authority ID '%s'\n", hex.EncodeToString(cert.SubjectKeyId))
+		config.Log.Info(fmt.Sprintf("info: Loaded CA with Authority ID '%s'\n", hex.EncodeToString(cert.SubjectKeyId)))
 		config.clientCasBySubjectKeyId[string(cert.SubjectKeyId)] = cert
 		ok = true
 	}

@@ -1,9 +1,10 @@
 package acl
 
 import (
+	"io"
+	"log/slog"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +14,7 @@ func TestYAMLLoader(t *testing.T) {
 	// Load a sane config
 	{
 		yl := NewYAMLLoader("testdata/sample_config.yaml")
-		acl, err := New(logrus.New(), yl, []string{})
+		acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Rules))
@@ -24,7 +25,7 @@ func TestYAMLLoader(t *testing.T) {
 	// Load a sane config with global lists
 	{
 		yl := NewYAMLLoader("testdata/sample_config_with_global.yaml")
-		acl, err := New(logrus.New(), yl, []string{})
+		acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(4, len(acl.Rules))
@@ -35,7 +36,7 @@ func TestYAMLLoader(t *testing.T) {
 	// Load a broken config
 	{
 		yl := NewYAMLLoader("testdata/broken_config.yaml")
-		acl, err := New(logrus.New(), yl, []string{})
+		acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 		a.NotNil(err)
 		a.Nil(acl)
 	}
@@ -43,7 +44,7 @@ func TestYAMLLoader(t *testing.T) {
 	// Load a config that contains an unknown action
 	{
 		yl := NewYAMLLoader("testdata/unknown_action.yaml")
-		acl, err := New(logrus.New(), yl, []string{})
+		acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 		a.NotNil(err)
 		a.Nil(acl)
 	}
@@ -51,7 +52,7 @@ func TestYAMLLoader(t *testing.T) {
 	// Load a valid MITM config
 	{
 		yl := NewYAMLLoader("testdata/mitm_config.yaml")
-		acl, err := New(logrus.New(), yl, []string{})
+		acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 		a.Nil(err)
 		a.NotNil(acl)
 		a.Equal(1, len(acl.Rules))
@@ -63,7 +64,7 @@ func TestYAMLLoaderInvalidGlob(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader("testdata/contains_invalid_glob.yaml")
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 	a.NotNil(err)
 	a.Nil(acl)
 }
@@ -72,7 +73,7 @@ func TestYAMLLoaderInvalidMiddleGlob(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader("testdata/contains_middle_glob.yaml")
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 	a.NotNil(err)
 	a.Nil(acl)
 }
@@ -81,7 +82,7 @@ func TestYAMLLoaderDisabledAclAction(t *testing.T) {
 	a := assert.New(t)
 	disabledActions := []string{"enforce"}
 	yl := NewYAMLLoader("testdata/sample_config.yaml")
-	acl, err := New(logrus.New(), yl, disabledActions)
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, disabledActions)
 	a.NotNil(err)
 	a.Nil(acl)
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
@@ -22,11 +23,9 @@ import (
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
-	"github.com/sirupsen/logrus"
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
+	"github.com/stripe/smokescreen/internal/testlog"
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
@@ -90,7 +89,7 @@ type TestCase struct {
 }
 
 // validateProxyResponse validates tests cases and expected responses from TestSmokescreenIntegration
-func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*testlog.Entry) {
 	t.Logf("HTTP Response: %#v", resp)
 
 	a := assert.New(t)
@@ -126,7 +125,7 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 		a.Equal(test.ExpectStatus, resp.StatusCode, "Expected status did not match actual response code")
 	}
 
-	var entries []*logrus.Entry
+	var entries []*testlog.Entry
 	entries = append(entries, logs...)
 
 	if len(entries) > 0 {
@@ -281,7 +280,7 @@ func generateRequestForTest(t *testing.T, test *TestCase) *http.Request {
 	return req
 }
 
-func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hook) (*http.Response, error) {
+func executeRequestForTest(t *testing.T, test *TestCase, logHook *testlog.Handler) (*http.Response, error) {
 	t.Logf("Executing Request for test case %#v", test)
 
 	logHook.Reset()
@@ -293,7 +292,7 @@ func executeRequestForTest(t *testing.T, test *TestCase, logHook *logrustest.Hoo
 }
 
 func TestSmokescreenIntegration(t *testing.T) {
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 
 	// Holds TLS and non-TLS enabled local HTTP servers
 	httpServers := map[bool]*httptest.Server{}
@@ -457,7 +456,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 // sent to a smokescreen instance with an additional upstream proxy set
 // (proxy chaining) forwards the request to the next proxy hop instead of directly
 // to the proxy target.
-func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*logrus.Entry) {
+func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.Response, err error, logs []*testlog.Entry) {
 	a := assert.New(t)
 	t.Logf("HTTP Response: %#v", resp)
 
@@ -472,7 +471,7 @@ func validateProxyResponseWithUpstream(t *testing.T, test *TestCase, resp *http.
 }
 
 func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 	servers := map[bool]*httptest.Server{}
 
 	failingUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -527,7 +526,7 @@ func TestClientHalfCloseConnection(t *testing.T) {
 	})
 	remote := httptest.NewServer(h)
 
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 
 	conf, server, err := startSmokescreen(t, false, &logHook, "")
 	require.NoError(t, err)
@@ -591,7 +590,7 @@ func TestProxyProtocolIntegration(t *testing.T) {
 	target := httptest.NewServer(ProxyTargetHandler)
 	defer target.Close()
 
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 	proxyAddr := startSmokescreenWithProxyProtocol(t, &logHook)
 
 	v2Header, err := proxyproto.HeaderProxyFromAddrs(
@@ -656,7 +655,7 @@ func TestProxyProtocolIntegration(t *testing.T) {
 	}
 }
 
-func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
+func findLogEntry(entries []*testlog.Entry, msg string) *testlog.Entry {
 	for _, entry := range entries {
 		if entry.Message == msg {
 			return entry
@@ -665,11 +664,11 @@ func findLogEntry(entries []*logrus.Entry, msg string) *logrus.Entry {
 	return nil
 }
 
-func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyAddr string) (*smokescreen.Config, *httptest.Server, error) {
+func startSmokescreen(t *testing.T, useTLS bool, logHook *testlog.Handler, httpProxyAddr string) (*smokescreen.Config, *httptest.Server, error) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
-		"--egress-acl-file=testdata/sample_config.yaml",
+		"--config-file=testdata/config.yaml",
 		"--additional-error-message-on-deny=additional_error_message_validation_key",
 		"--deny-range=1.1.1.1/32",
 		"--allow-range=127.0.0.1/32",
@@ -689,10 +688,13 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 		args = append(args, fmt.Sprintf("--upstream-https-proxy-addr=%s", httpProxyAddr))
 	}
 
-	conf, err := NewConfiguration(args, nil)
+	logger := slog.New(logHook)
+	conf, err := NewConfiguration(args, logger)
 	if err != nil {
 		t.Fatalf("Failed to create configuration: %v", err)
 	}
+	require.Same(t, logger, conf.Log)
+	require.NotNil(t, findLogEntry(logHook.AllEntries(), "Loading egress ACL from testdata/sample_config.yaml"))
 
 	if useTLS {
 		conf.RoleFromRequest = testRFRCert
@@ -704,8 +706,6 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	conf.Resolver = loopbackResolver{}
 
 	conf.ConnectTimeout = time.Second
-
-	conf.Log.AddHook(logHook)
 
 	handler := smokescreen.BuildProxy(conf)
 	server := httptest.NewUnstartedServer(handler)
@@ -720,7 +720,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	return conf, server, nil
 }
 
-func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string {
+func startSmokescreenWithProxyProtocol(t *testing.T, logHook slog.Handler) string {
 	t.Helper()
 
 	args := []string{
@@ -740,7 +740,7 @@ func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string
 	conf.MetricsClient = metrics.NewNoOpMetricsClient()
 	conf.Resolver = loopbackResolver{}
 	conf.ConnectTimeout = time.Second
-	conf.Log.AddHook(logHook)
+	conf.Log = slog.New(logHook)
 
 	quit := make(chan interface{}, 1)
 	done := make(chan struct{})
@@ -761,7 +761,7 @@ func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string
 }
 
 func TestCRLEnforcement(t *testing.T) {
-	var logHook logrustest.Hook
+	var logHook testlog.Handler
 
 	_, proxyServer, err := startSmokescreen(t, true, &logHook, "")
 	require.NoError(t, err)
