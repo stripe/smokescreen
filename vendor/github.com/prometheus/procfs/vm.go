@@ -1,4 +1,4 @@
-// Copyright 2019 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,7 +12,6 @@
 // limitations under the License.
 
 //go:build !windows
-// +build !windows
 
 package procfs
 
@@ -26,7 +25,9 @@ import (
 )
 
 // The VM interface is described at
-//   https://www.kernel.org/doc/Documentation/sysctl/vm.txt
+//
+//	https://www.kernel.org/doc/Documentation/sysctl/vm.txt
+//
 // Each setting is exposed as a single file.
 // Each file contains one line with a single numerical value, except lowmem_reserve_ratio which holds an array
 // and numa_zonelist_order (deprecated) which is a string.
@@ -84,7 +85,7 @@ func (fs FS) VM() (*VM, error) {
 		return nil, err
 	}
 	if !file.Mode().IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", path)
+		return nil, fmt.Errorf("%w: %s is not a directory", ErrFileRead, path)
 	}
 
 	files, err := os.ReadDir(path)
