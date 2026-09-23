@@ -127,6 +127,13 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"2606:4700:4700::1111", 1, ipAllowDefault}, // Cloudflare DNS
 		testCase{"64:ff9c::1", 1, ipAllowDefault},           // Outside NAT64 /96 prefix
 
+		// RFC 8215 NAT64 local-use prefix (64:ff9b:1::/48)
+		testCase{"64:ff9b:1:abcd:0:5431:a4d:2", 1, ipDenyIPv6Embedding},
+		testCase{"64:ff9b:1::", 1, ipDenyIPv6Embedding},
+		testCase{"64:ff9b:1:ffff:ffff:ffff:ffff:ffff", 1, ipDenyIPv6Embedding},
+		testCase{"64:ff9b:0:ffff::1", 1, ipAllowDefault}, // Just outside local-use /48
+		testCase{"64:ff9b:2::", 1, ipAllowDefault},       // Just outside local-use /48
+
 		// Self-connection detection
 		testCase{"127.0.0.1", 4750, ipDenySelfConnection},
 		testCase{"192.168.1.100", 4750, ipDenySelfConnection},
