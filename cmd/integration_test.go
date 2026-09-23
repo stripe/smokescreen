@@ -742,6 +742,10 @@ func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string
 	conf.ConnectTimeout = time.Second
 	conf.Log.AddHook(logHook)
 
+	// Skip self-connection auto-detection, which would otherwise deny our
+	// own 127.0.0.1 test target as a self-connection.
+	conf.LocalIPs = []net.IP{}
+
 	quit := make(chan interface{}, 1)
 	done := make(chan struct{})
 	go func() {
