@@ -202,6 +202,7 @@ func addrIsInRuleRange(ranges []RuleRange, addr *net.TCPAddr) bool {
 
 var cgnatRange *net.IPNet
 var nat64WellKnownPrefix *net.IPNet
+var nat64LocalUsePrefix *net.IPNet
 var sixToFourPrefix *net.IPNet
 var teredoPrefix *net.IPNet
 
@@ -217,6 +218,15 @@ func init() {
 	_, nat64WellKnownPrefix, err = net.ParseCIDR("64:ff9b::/96")
 	if err != nil {
 		panic(fmt.Sprintf("smokescreen internal error: could not parse NAT64 prefix: %v", err))
+	}
+
+	// RFC 8215 NAT64 local-use prefix
+	_, nat64LocalUsePrefix, err = net.ParseCIDR("64:ff9b:1::/48")
+	if err != nil {
+		panic(fmt.Sprintf(
+			"smokescreen internal error: could not parse NAT64 local-use prefix: %v",
+			err,
+		))
 	}
 
 	// RFC 3056 6to4 prefix (embeds IPv4 address)
@@ -244,7 +254,8 @@ func addrIsNAT64(addr *net.TCPAddr) bool {
 	if addr.IP.To4() != nil {
 		return false
 	}
-	return nat64WellKnownPrefix.Contains(addr.IP)
+	return nat64WellKnownPrefix.Contains(addr.IP) ||
+		nat64LocalUsePrefix.Contains(addr.IP)
 }
 
 // addrIs6to4 checks if an IPv6 address is within the 6to4 prefix.
