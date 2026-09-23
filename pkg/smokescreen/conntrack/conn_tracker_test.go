@@ -1,24 +1,25 @@
 package conntrack
 
 import (
+	"io"
+	"log/slog"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
-var testLogger = logrus.New()
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 // TestConnTrackerDelete is a sanity check to ensure we aren't leaking
 // connection references in the tracker's sync.Map
 func TestConnTrackerDelete(t *testing.T) {
 	tr := NewTestTracker(time.Second * 1)
 
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testDeleteConn", "localhost", "http", "test_project")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, testLogger, "testDeleteConn", "localhost", "http", "test_project")
 	ic.Close()
 
 	tr.Range(func(k, v interface{}) bool {
@@ -32,7 +33,7 @@ func TestConnTrackerMaybeIdleIn(t *testing.T) {
 	assert := assert.New(t)
 
 	tr := NewTestTracker(time.Nanosecond)
-	ic := tr.NewInstrumentedConn(&net.UnixConn{}, logrus.NewEntry(testLogger), "testMaybeIdle", "localhost", "http", "test_project")
+	ic := tr.NewInstrumentedConn(&net.UnixConn{}, testLogger, "testMaybeIdle", "localhost", "http", "test_project")
 
 	time.Sleep(time.Millisecond)
 
@@ -49,7 +50,7 @@ func NewTestTracker(idle time.Duration) *Tracker {
 	sd := atomic.Value{}
 	sd.Store(false)
 
-	return NewTracker(idle, metrics.NewNoOpMetricsClient(), logrus.New(), sd, nil)
+	return NewTracker(idle, metrics.NewNoOpMetricsClient(), sd, nil)
 }
 
 // TestConnSuccessRateTracker tests that a ConnTracker with a ConnSuccessRateTracker correctly
@@ -87,7 +88,6 @@ func TestConnSuccessRateTracker(t *testing.T) {
 			tracker := NewTracker(
 				time.Second,
 				metrics.NewNoOpMetricsClient(), // We aren't testing metrics for the Tracker here, only for the embedded ConnSuccessRateTracker
-				logrus.New(),
 				sd,
 				StartNewConnSuccessRateTracker(500*time.Millisecond, 2*time.Second, 10*time.Second, mockMetricsClient))
 

@@ -2,10 +2,11 @@ package acl
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/internal/logging"
 	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 )
 
@@ -33,7 +34,7 @@ type ACL struct {
 	GlobalDenyList   []string
 	GlobalAllowList  []string
 	DisabledPolicies []EnforcementPolicy
-	*logrus.Logger
+	logger           *slog.Logger
 }
 
 type Rule struct {
@@ -65,7 +66,7 @@ type Decision struct {
 	MitmConfig *MitmConfig
 }
 
-func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, error) {
+func New(logger *slog.Logger, loader Loader, disabledActions []string) (*ACL, error) {
 	acl, err := loader.Load()
 	if err != nil {
 		return nil, err
@@ -81,10 +82,10 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 		return nil, err
 	}
 
-	acl.Logger = logger
+	acl.logger = logging.OrDefault(logger)
 
 	if acl.DefaultRule == nil {
-		acl.Warn("no default rule set. any services without a rule will be denied.")
+		acl.logger.Warn("no default rule set. any services without a rule will be denied.")
 	}
 	return acl, nil
 }
