@@ -61,6 +61,9 @@ github.com/stretchr/testify/require
 # github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
 ## explicit; go 1.13
 github.com/stripe/goproxy
+# github.com/urfave/cli/v3 v3.11.0
+## explicit; go 1.22
+github.com/urfave/cli/v3
 # go.yaml.in/yaml/v3 v3.0.5
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -137,6 +140,3 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/urfave/cli.v1 v1.20.0
-## explicit
-gopkg.in/urfave/cli.v1
