@@ -3,10 +3,11 @@ package acl
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/stripe/smokescreen/internal/logging"
 	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 	"golang.org/x/net/publicsuffix"
 )
@@ -39,7 +40,7 @@ type ACL struct {
 	// lists match hosts outside the glob's registrable domain, as they always
 	// do in GlobalDenyList. See HostMatchesGlob.
 	UnsafeAllowWildcardsAcrossPublicSuffixes bool
-	*logrus.Logger
+	logger                                   *slog.Logger
 }
 
 type Rule struct {
@@ -71,7 +72,7 @@ type Decision struct {
 	MitmConfig *MitmConfig
 }
 
-func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, error) {
+func New(logger *slog.Logger, loader Loader, disabledActions []string) (*ACL, error) {
 	acl, err := loader.Load()
 	if err != nil {
 		return nil, err
@@ -87,10 +88,10 @@ func New(logger *logrus.Logger, loader Loader, disabledActions []string) (*ACL, 
 		return nil, err
 	}
 
-	acl.Logger = logger
+	acl.logger = logging.OrDefault(logger)
 
 	if acl.DefaultRule == nil {
-		acl.Warn("no default rule set. any services without a rule will be denied.")
+		acl.logger.Warn("no default rule set. any services without a rule will be denied.")
 	}
 	return acl, nil
 }

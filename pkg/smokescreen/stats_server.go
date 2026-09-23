@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/stripe/smokescreen/internal/logging"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
 )
 
@@ -18,6 +19,7 @@ type StatsServer struct {
 }
 
 func newServer(config *Config) (*StatsServer, error) {
+	config.Log = logging.OrDefault(config.Log)
 	s := &StatsServer{
 		config: config,
 		mux:    http.NewServeMux(),
@@ -35,7 +37,7 @@ func newServer(config *Config) (*StatsServer, error) {
 	}
 
 	s.ln = ln
-	s.httpServer = &http.Server{Handler: s.mux}
+	s.httpServer = &http.Server{Handler: s.mux, ErrorLog: logging.StdLogger(config.Log)}
 	return s, nil
 }
 
@@ -43,17 +45,17 @@ func newServer(config *Config) (*StatsServer, error) {
 func (s *StatsServer) Serve() {
 	defer s.Shutdown()
 	if err := s.httpServer.Serve(s.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.config.Log.Errorf("stats server serving failed: %v", err)
+		s.config.Log.Error(fmt.Sprintf("stats server serving failed: %s", logging.Error(err)))
 	}
 }
 
 // Shutdown closes the stats server, listener, and any active stats requests.
 func (s *StatsServer) Shutdown() {
 	if err := s.httpServer.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-		s.config.Log.Errorf("failed to close stats server: %v", err)
+		s.config.Log.Error(fmt.Sprintf("failed to close stats server: %s", logging.Error(err)))
 	}
 	if err := s.ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-		s.config.Log.Errorf("failed to close stats listener: %v", err)
+		s.config.Log.Error(fmt.Sprintf("failed to close stats listener: %s", logging.Error(err)))
 	}
 }
 
@@ -79,7 +81,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 		repr, err := instrumentedConn.JsonStats()
 
 		if err != nil {
-			s.config.Log.Error(err)
+			s.config.Log.Error(logging.Error(err))
 		}
 
 		rw.Write(repr)
@@ -97,7 +99,7 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 func StartStatsServer(config *Config) *StatsServer {
 	server, err := newServer(config)
 	if err != nil {
-		config.Log.Errorf("could not start the stats server: %v", err)
+		config.Log.Error(fmt.Sprintf("could not start the stats server: %s", logging.Error(err)))
 		return nil
 	}
 	go server.Serve()
