@@ -52,7 +52,7 @@ const (
 	DefaultStatsdAddress = "127.0.0.1:8200"
 
 	// Rate limiting defaults
-	DefaultMaxConcurrentRequests 	   = 0   // 0 = unlimited
+	DefaultMaxConcurrentRequests       = 0   // 0 = unlimited
 	DefaultMaxRequestRate              = 0.0 // 0 = unlimited
 	DefaultMaxRequestBurst             = -1  // -1 = use 2x rate
 	DefaultMaxConcurrentConnectTunnels = 0   // 0 = unlimited
@@ -484,7 +484,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 
 		certList, err := x509.ParseCRL(crlBytes)
 		if err != nil {
-			log.Printf("Failed to parse CRL in '%s': %#v\n", crlFile, err)
+			return fmt.Errorf("failed to parse CRL %q: %w", crlFile, err)
 		}
 
 		// find the X509v3 Authority Key Identifier in the extensions (2.5.29.35)
@@ -496,32 +496,27 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 				var crlAuthorityKey authKeyId
 				_, err := asn1.Unmarshal(v.Value, &crlAuthorityKey)
 				if err != nil {
-					fmt.Printf("error: Failed to read AuthorityKey: %#v\n", err)
-					continue
+					return fmt.Errorf("failed to parse Authority Key Identifier in CRL %q: %w", crlFile, err)
 				}
 				crlIssuerId = string(crlAuthorityKey.Id)
 				break
 			}
 		}
 		if crlIssuerId == "" {
-			log.Print(fmt.Errorf("error: CRL from '%s' has no Authority Key Identifier: ignoring it\n", crlFile))
-			continue
+			return fmt.Errorf("CRL %q has no Authority Key Identifier", crlFile)
 		}
 
 		// Make sure we have a CA for this CRL or warn
 		caCert, ok := config.clientCasBySubjectKeyId[crlIssuerId]
 
 		if !ok {
-			log.Printf("warn: CRL loaded for issuer '%s' but no such CA loaded: ignoring it\n", hex.EncodeToString([]byte(crlIssuerId)))
-			fmt.Printf("%#v loaded certs\n", len(config.clientCasBySubjectKeyId))
-			continue
+			return fmt.Errorf("CRL %q has Authority Key Identifier %q, but no matching client CA is loaded", crlFile, hex.EncodeToString([]byte(crlIssuerId)))
 		}
 
 		// At this point, we have the CA certificate and the CRL. All that's left before evicting the CRL we currently trust is to verify the new CRL's signature
 		err = caCert.CheckCRLSignature(certList)
 		if err != nil {
-			fmt.Printf("error: Could not trust CRL. Error during signature check: %#v\n", err)
-			continue
+			return fmt.Errorf("failed to verify signature for CRL %q: %w", crlFile, err)
 		}
 
 		// At this point, we have a new CRL which we trust. Let's evict the old one.
@@ -633,12 +628,13 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 			}
 
 			for _, chain := range cs.VerifiedChains {
-				for _, cert := range chain {
-					if cert.IsCA {
-						continue
-					}
+				// The final certificate is the trust anchor. Check every certificate
+				// before it, including intermediate CA certificates.
+				for i := 0; i+1 < len(chain); i++ {
+					cert := chain[i]
+					issuer := chain[i+1]
 
-					issuerKeyId := string(cert.AuthorityKeyId)
+					issuerKeyId := string(issuer.SubjectKeyId)
 					serials, ok := config.revokedCertSerials[issuerKeyId]
 					if !ok {
 						continue
