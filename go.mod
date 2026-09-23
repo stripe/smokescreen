@@ -11,9 +11,9 @@ require (
 	github.com/sirupsen/logrus v1.10.1
 	github.com/stretchr/testify v1.12.1
 	github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
+	github.com/urfave/cli/v3 v3.11.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/net v0.59.0
-	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
 require (

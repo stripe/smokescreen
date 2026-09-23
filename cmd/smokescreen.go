@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -9,7 +10,7 @@ import (
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
@@ -26,7 +27,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	var configToReturn *smokescreen.Config
 
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Name = "smokescreen"
 	app.Version = "devel"
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
@@ -35,162 +36,153 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 
-	// Suppress "help" subcommand, as we have no other subcommands.
-	// Unfortunately, this also suppresses "--help", so we'll add it back in
-	// manually below.  See https://github.com/urfave/cli/issues/523
-	app.HideHelp = true
+	// Suppress the "help" subcommand, as we have no other subcommands, while
+	// retaining urfave/cli's built-in --help flag.
+	app.HideHelpCommand = true
 
 	app.Flags = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "help",
-			Usage: "Show this help text.",
-		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "config-file",
 			Usage: "Load configuration from `FILE`.  Command line options override values in the file.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "listen-ip",
 			Usage: "Listen on interface with address `IP`.\n\t\tThis argument is ignored when running under Einhorn. (default: any)",
 		},
-		cli.UintFlag{
+		&cli.UintFlag{
 			Name:  "listen-port",
 			Value: uint(smokescreen.DefaultPort),
 			Usage: "Listen on port `PORT`.\n\t\tThis argument is ignored when running under Einhorn.",
 		},
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name:  "timeout",
 			Value: smokescreen.DefaultConnectTimeout,
 			Usage: "Time out after `DURATION` when connecting.",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "proxy-protocol",
 			Usage: "Enable PROXY protocol support.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "deny-range",
 			Usage: "Add `RANGE`(in CIDR notation) to list of blocked IP ranges.  Repeatable.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow-range",
 			Usage: "Add `RANGE` (in CIDR notation) to list of allowed IP ranges.  Repeatable.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "deny-address",
 			Usage: "Add IP[:PORT] to list of blocked IPs.  Repeatable.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow-address",
 			Usage: "Add IP[:PORT] to list of allowed IPs.  Repeatable.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "egress-acl-file",
 			Usage: "Validate egress traffic against `FILE`",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "expose-prometheus-metrics",
 			Usage: "Expose metrics via prometheus.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "prometheus-endpoint",
 			Value: smokescreen.DefaultPrometheusEndpoint,
 			Usage: "Expose prometheus metrics on `ENDPOINT`. Requires --expose-prometheus-metrics to be set.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "prometheus-listen-ip",
 			Value: smokescreen.DefaultPrometheusListenIP,
 			Usage: "Listen for prometheus metrics on interface with address IP. Requires --expose-prometheus-metrics to be set.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "prometheus-port",
 			Value: smokescreen.DefaultPrometheusPort,
 			Usage: "Expose prometheus metrics on `PORT`. Requires --expose-prometheus-metrics to be set.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "resolver-address",
 			Usage: "Make DNS requests to `ADDRESS` (IP:port).  Repeatable.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "statsd-address",
 			Value: smokescreen.DefaultStatsdAddress,
 			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tls-server-bundle-file",
 			Usage: "Authenticate to clients using key and certs from `FILE`",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "tls-client-ca-file",
 			Usage: "Validate client certificates using Certificate Authority from `FILE`",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "tls-crl-file",
 			Usage: "Verify validity of client certificates against Certificate Revocation List from `FILE`",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "additional-error-message-on-deny",
 			Usage: "Display `MESSAGE` in the HTTP response if proxying request is denied",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "disable-acl-policy-action",
 			Usage: "Disable usage of a `POLICY ACTION` such as \"open\" in the egress ACL",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "stats-socket-dir",
 			Usage: "Enable connection tracking. Will expose one UDS in `DIR` going by the name of \"track-{pid}.sock\".\n\t\tThis should be an absolute path with all symlinks, if any, resolved.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "stats-socket-file-mode",
 			Value: "700",
 			Usage: "Set the filemode to `FILE_MODE` on the statistics socket",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "unsafe-allow-private-ranges",
 			Usage: "Allow private ip ranges by default",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "upstream-http-proxy-addr",
 			Value: "",
 			Usage: "Set Smokescreen's upstream HTTP proxy address",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "upstream-https-proxy-addr",
 			Value: "",
 			Usage: "Set Smokescreen's upstream HTTPS proxy address",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "max-concurrent-requests",
 			Value: smokescreen.DefaultMaxConcurrentRequests,
 			Usage: "Maximum number of requests that can be processed simultaneously.\n\t\t0 = unlimited (default).",
 		},
-		cli.Float64Flag{
+		&cli.Float64Flag{
 			Name:  "max-request-rate",
 			Value: smokescreen.DefaultMaxRequestRate,
 			Usage: "Maximum number of requests per second.\n\t\t0 = unlimited (default).",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "max-request-burst",
 			Value: smokescreen.DefaultMaxRequestBurst,
 			Usage: "Maximum burst capacity for rate limiting.\n\t\tMust be greater than max-request-rate when specified.\n\t\tOmit to use default (2x max-request-rate).",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "max-concurrent-connect-tunnels",
 			Value: smokescreen.DefaultMaxConcurrentConnectTunnels,
 			Usage: "Maximum number of concurrent CONNECT tunnels.\n\t\tUnlike max-concurrent-requests, this limits actual long-lived connections.\n\t\t0 = unlimited (default).",
 		},
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name:  "dns-timeout",
 			Value: smokescreen.DefaultDNSTimeout,
 			Usage: "Maximum time to wait for DNS resolution.",
 		},
 	}
 
-	app.Action = func(c *cli.Context) error {
-		if c.Bool("help") {
-			cli.ShowAppHelp(c)
-			return nil // configToReturn will not be set
-		}
-		if len(c.Args()) > 0 {
+	app.Action = func(_ context.Context, c *cli.Command) error {
+		if c.Args().Len() > 0 {
 			return errors.New("Received unexpected non-option argument(s)")
 		}
 
@@ -360,7 +352,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		return nil
 	}
 
-	err := app.Run(args)
+	err := app.Run(context.Background(), args)
 
 	return configToReturn, err
 }
