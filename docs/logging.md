@@ -3,7 +3,7 @@
 Smokescreen uses standard `log/slog`. Its default is an instance-local
 `slog.New(slog.NewJSONHandler(os.Stderr, nil))`, at INFO level. Nil loggers use
 that default; neither `slog.Default()` nor the standard global logger is changed.
-The module path and minimum Go version (1.25) are unchanged.
+The module path is unchanged. Go 1.26 is required, matching master.
 
 ## Supplying a backend
 

@@ -3,9 +3,9 @@
 ## Reproduction
 
 Benchmark code and saved measurements are grouped in PR 4. PR 1 contains
-correctness tests only. These samples predate the scope cleanup that restored
-existing YAML behavior: the fixtures initialize configs directly with `NewConfig`
-and do not load YAML. Their sampled logging/forwarding paths are unchanged.
+correctness tests only. These historical samples predate the dependency updates
+from master `ede63db`. Refresh baseline/candidate measurements on the synchronized
+dependencies before release; the rebase has not been benchmarked.
 
 Measurements: Apple M4 Pro, darwin/arm64, Go 1.27.1, 14 logical CPUs, ten
 repetitions. Baseline production code is master `9793d087`; candidate production
@@ -70,11 +70,11 @@ There are no new per-event goroutines; observer work is deferred.
 
 Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test files:
 
-| Function | Master | Candidate |
+| Function | Master (`ede63db`) | Candidate |
 | --- | ---: | ---: |
 | Config.UnmarshalYAML | 39 | 39 |
 | logProxy | 8 | 6 |
-| cmd.NewConfiguration | 47 | 47 |
+| cmd.NewConfiguration | 46 | 46 |
 | BuildProxy | 24 | 24 |
 | dialContext | 19 | 19 |
 | runServer | 13 | 13 |
@@ -83,13 +83,13 @@ Measured with `github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0`, excluding test file
 | SmokescreenContext.diagnosticLogger | — | 3 |
 
 The YAML loader retains its existing control flow and semantics. The new
-`LoadConfigWithLogger` helper scores 3; the CLI constructor remains 47.
+`LoadConfigWithLogger` helper scores 3; the CLI constructor matches master at 46.
 Canonical severity selection scores 5. Broader control-flow refactors are deferred.
 
 ## Correctness checks
 
 - Unit tests, race tests, vet, and the hermetic integration suite pass on Go 1.27.1.
-  Unit tests also pass on the minimum supported Go version, 1.25.7.
+  Unit tests also pass on Go 1.26.5.
 - Every implementation branch in the review stack passes `go test ./...`.
 - Stock JSON, stock text, caller, failing, and disabled handlers cover HTTP,
   CONNECT, MITM, and denial with the same proxy outcomes.
