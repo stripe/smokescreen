@@ -36,16 +36,11 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	app.Usage = "A simple HTTP proxy that prevents SSRF and can restrict destinations"
 	app.ArgsUsage = " " // blank but non-empty to suppress default "[arguments...]"
 
-	// Suppress "help" subcommand, as we have no other subcommands.
-	// Unfortunately, this also suppresses "--help", so we'll add it back in
-	// manually below.  See https://github.com/urfave/cli/issues/523
-	app.HideHelp = true
+	// Suppress the "help" subcommand, as we have no other subcommands, while
+	// retaining urfave/cli's built-in --help flag.
+	app.HideHelpCommand = true
 
 	app.Flags = []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "help",
-			Usage: "Show this help text.",
-		},
 		&cli.StringFlag{
 			Name:  "config-file",
 			Usage: "Load configuration from `FILE`.  Command line options override values in the file.",
@@ -187,9 +182,6 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	}
 
 	app.Action = func(_ context.Context, c *cli.Command) error {
-		if c.Bool("help") {
-			return cli.ShowAppHelp(c) // configToReturn will not be set
-		}
 		if c.Args().Len() > 0 {
 			return errors.New("Received unexpected non-option argument(s)")
 		}
