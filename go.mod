@@ -1,6 +1,6 @@
 module github.com/stripe/smokescreen
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.9.1
@@ -12,7 +12,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.59.0
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
@@ -25,10 +25,10 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
