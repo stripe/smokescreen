@@ -5,11 +5,12 @@ package acl
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"path"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -180,7 +181,7 @@ func TestACLDecision(t *testing.T) {
 			a := assert.New(t)
 
 			yl := NewYAMLLoader(path.Join("testdata", testCase.yamlFile))
-			acl, err := New(logrus.New(), yl, []string{})
+			acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 			a.NoError(err)
 			a.NotNil(acl)
@@ -201,7 +202,7 @@ func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader("testdata/acl_no_default.yaml")
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 	a.NoError(err)
 	a.NotNil(acl)
@@ -233,7 +234,7 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 
 func TestACLMalformedPolicyDisable(t *testing.T) {
 	_, err := New(
-		logrus.New(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		NewYAMLLoader("testdata/acl_no_default.yaml"), // any file will do
 		[]string{"sillystring"},
 	)
@@ -473,7 +474,7 @@ func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
 	yl := NewYAMLLoader(path.Join("testdata", "acl_mitm_config.yaml"))
-	acl, err := New(logrus.New(), yl, []string{})
+	acl, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), yl, []string{})
 
 	a.NoError(err)
 	a.NotNil(acl)
@@ -665,7 +666,7 @@ func TestDecideConnectReqIgnored(t *testing.T) {
 
 func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 	a := assert.New(t)
-	logger := logrus.New()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Config with open default rule
 	yamlFilePath := path.Join("testdata", "acl_sample_default_bypass_config.yaml")
@@ -680,7 +681,7 @@ func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 
 func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
 	a := assert.New(t)
-	logger := logrus.New()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Config with open default rule
 	yamlFilePath := path.Join("testdata", "acl_contains_invalid_glob_default.yaml")

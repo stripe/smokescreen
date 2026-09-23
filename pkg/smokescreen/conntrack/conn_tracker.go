@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	cache "github.com/patrickmn/go-cache"
-	"github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 	"golang.org/x/net/publicsuffix"
 )
@@ -17,8 +17,8 @@ type TrackerInterface interface {
 	ReportConnectionSuccessRate() *ConnSuccessRateStats
 	RecordAttempt(string, bool)
 	MaybeIdleIn(time.Duration) time.Duration
-	NewInstrumentedConn(net.Conn, *logrus.Entry, string, string, string, string) *InstrumentedConn
-	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *logrus.Entry, string, string, string, string) *InstrumentedConn
+	NewInstrumentedConn(net.Conn, *slog.Logger, string, string, string, string) *InstrumentedConn
+	NewInstrumentedConnWithTimeout(net.Conn, time.Duration, *slog.Logger, string, string, string, string) *InstrumentedConn
 	Wg() *sync.WaitGroup
 	Range(f func(interface{}, interface{}) bool)
 }
@@ -96,7 +96,7 @@ func StartNewConnSuccessRateTracker(calculationInterval time.Duration, calculati
 	return newSuccessTracker
 }
 
-func NewTracker(idle time.Duration, statsc metrics.MetricsClientInterface, logger *logrus.Logger, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
+func NewTracker(idle time.Duration, statsc metrics.MetricsClientInterface, sd atomic.Value, successRateTracker *ConnSuccessRateTracker) *Tracker {
 	return &Tracker{
 		Map:                &sync.Map{},
 		ShuttingDown:       sd,

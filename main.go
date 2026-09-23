@@ -1,11 +1,12 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
+	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/cmd"
+	"github.com/stripe/smokescreen/internal/logging"
 	"github.com/stripe/smokescreen/pkg/smokescreen"
 )
 
@@ -24,22 +25,13 @@ func defaultRoleFromRequest(req *http.Request) (string, error) {
 }
 
 func main() {
-	conf, err := cmd.NewConfiguration(nil, nil)
+	logger := logging.OrDefault(nil)
+	conf, err := cmd.NewConfiguration(nil, logger)
 	if err != nil {
-		logrus.Fatalf("Could not create configuration: %v", err)
+		logger.Error(fmt.Sprintf("Could not create configuration: %s", logging.Error(err)))
+		os.Exit(1)
 	} else if conf != nil {
 		conf.RoleFromRequest = defaultRoleFromRequest
-
-		conf.Log.Formatter = &logrus.JSONFormatter{}
-
-		adapter := &smokescreen.Log2LogrusWriter{
-			Entry: conf.Log.WithField("stdlog", "1"),
-		}
-
-		// Set the standard logger to use our logger's writer as output.
-		log.SetOutput(adapter)
-		log.SetFlags(0)
 		smokescreen.StartWithConfig(conf, nil)
 	}
-	// Otherwise, --help or --version was passed and handled by NewConfiguration, so do nothing
 }

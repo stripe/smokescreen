@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
 )
@@ -34,16 +34,15 @@ func TestCanonicalDecisionSemantics(t *testing.T) {
 		err           error
 		level         string
 	}{
-		{"allow", true, false, nil, "info"},
-		{"report", true, true, nil, "info"},
-		{"deny", false, true, denyError{errors.New("denied")}, "warning"},
-		{"dial failure", true, false, errors.New("dial failed"), "error"},
+		{"allow", true, false, nil, "INFO"},
+		{"report", true, true, nil, "INFO"},
+		{"deny", false, true, denyError{errors.New("denied")}, "WARN"},
+		{"dial failure", true, false, errors.New("dial failed"), "ERROR"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
 			cfg := NewConfig()
-			cfg.Log.SetOutput(&out)
-			cfg.Log.SetFormatter(&logrus.JSONFormatter{})
+			cfg.Log = slog.New(slog.NewJSONHandler(&out, nil))
 			pctx := canonicalFixture(cfg)
 			sctx := pctx.UserData.(*SmokescreenContext)
 			sctx.Decision.allow = tc.allow
@@ -59,6 +58,7 @@ func TestCanonicalDecisionSemantics(t *testing.T) {
 			require.Equal(t, float64(1), record[LogFieldDNSLookupTime])
 			require.Equal(t, "client-trace", record[LogFieldTraceID])
 			require.NotEmpty(t, record[LogFieldID])
+			require.Equal(t, sctx.start.UTC().Format(time.RFC3339Nano), record[LogFieldStartTime])
 			require.NotContains(t, record, LogFieldContentLength)
 			if tc.err == nil {
 				require.NotContains(t, record, LogFieldError)
