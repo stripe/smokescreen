@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25", "1.26", "1.27"]
+        go-version: ["1.26", "1.27"]
     env:
       GOFLAGS: -mod=vendor
     steps:
