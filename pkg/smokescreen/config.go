@@ -410,7 +410,12 @@ func NewConfig() *Config {
 }
 
 // Gathers all local IP addresses to prevent recursive proxy attacks.
+// Skipped if config.LocalIPs is already set.
 func (config *Config) InitializeSelfConnectionDetection() error {
+	if config.LocalIPs != nil {
+		return nil
+	}
+
 	localIPs, err := getAllLocalIPs()
 	if err != nil {
 		return fmt.Errorf("failed to get local IPs for self-connection detection: %w", err)

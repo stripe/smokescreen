@@ -300,11 +300,9 @@ func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAdd
 // Check for self-connection: prevent proxy from connecting to itself
 // This blocks recursive proxy attacks where destination resolves to proxy's own IP
 func addrIsLocalIp(config *Config, addr *net.TCPAddr) bool {
-	if addr.Port == int(config.Port) {
-		for _, localIP := range config.LocalIPs {
-			if addr.IP.Equal(localIP) {
-				return true
-			}
+	for _, localIP := range config.LocalIPs {
+		if addr.IP.Equal(localIP) {
+			return true
 		}
 	}
 	return false

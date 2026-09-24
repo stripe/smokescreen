@@ -96,9 +96,9 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"1.1.1.1", 1, ipDenyUserConfigured},
 
 		// localhost
-		testCase{"127.0.0.1", 1, ipDenyNotGlobalUnicast},
+		testCase{"127.0.0.1", 1, ipDenySelfConnection},
 		testCase{"127.255.255.255", 1, ipDenyNotGlobalUnicast},
-		testCase{"::1", 1, ipDenyNotGlobalUnicast},
+		testCase{"::1", 1, ipDenySelfConnection},
 		testCase{"127.0.1.1", 1, ipAllowUserConfigured},
 
 		// ec2 metadata endpoint
@@ -138,8 +138,10 @@ func TestClassifyAddr(t *testing.T) {
 		testCase{"127.0.0.1", 4750, ipDenySelfConnection},
 		testCase{"192.168.1.100", 4750, ipDenySelfConnection},
 		testCase{"::1", 4750, ipDenySelfConnection},
-		testCase{"127.0.0.1", 8080, ipDenyNotGlobalUnicast}, // Different port
-		testCase{"8.8.8.8", 4750, ipAllowDefault},           // Different IP
+		testCase{"127.0.0.1", 8080, ipDenySelfConnection},     // Different port, still local
+		testCase{"192.168.1.100", 9810, ipDenySelfConnection}, // Different port, still local
+		testCase{"::1", 8080, ipDenySelfConnection},           // Different port, still local
+		testCase{"8.8.8.8", 4750, ipAllowDefault},             // Different IP
 	}
 
 	for _, test := range testIPs {
@@ -763,7 +765,6 @@ func TestInvalidHost(t *testing.T) {
 		})
 	}
 }
-
 
 func TestErrorHeader(t *testing.T) {
 	a := assert.New(t)
