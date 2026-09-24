@@ -30,8 +30,9 @@ type PrometheusMetricsClient struct {
 }
 
 func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string) (*PrometheusMetricsClient, error) {
-	http.Handle(endpoint, promhttp.Handler())
-	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), nil)
+	mux := http.NewServeMux()
+	mux.Handle(endpoint, promhttp.Handler())
+	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), mux)
 
 	metricsTags := make(map[string]map[string]string)
 	for _, m := range metrics {

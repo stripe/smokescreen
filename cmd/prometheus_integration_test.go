@@ -21,6 +21,10 @@ func TestPrometheusMetricsEndpoint(t *testing.T) {
 	metricsPort := strconv.Itoa(metricsListener.Addr().(*net.TCPAddr).Port)
 	require.NoError(t, metricsListener.Close())
 
+	http.DefaultServeMux.HandleFunc("/default-mux-test-handler", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	endpoint := "/metrics-integration"
 	args := []string{
 		"smokescreen",
@@ -50,4 +54,16 @@ func TestPrometheusMetricsEndpoint(t *testing.T) {
 		body, err := io.ReadAll(resp.Body)
 		return err == nil && strings.Contains(string(body), "go_gc_duration_seconds")
 	}, time.Second, 10*time.Millisecond)
+
+	debugVarsURL := fmt.Sprintf("http://127.0.0.1:%s/debug/vars", metricsPort)
+	resp, err := metricsClient.Get(debugVarsURL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	sentinelURL := fmt.Sprintf("http://127.0.0.1:%s/default-mux-test-handler", metricsPort)
+	resp, err = metricsClient.Get(sentinelURL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
