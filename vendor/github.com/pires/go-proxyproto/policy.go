@@ -11,10 +11,7 @@ import (
 //
 // See below for the different policies.
 //
-// In case an error is returned the connection is denied: an error wrapping
-// ErrInvalidUpstream denies just that connection while Listener.Accept keeps
-// listening; any other error is returned by Accept itself, which typically
-// stops the caller's accept loop.
+// In case an error is returned the connection is denied.
 //
 // Deprecated: use ConnPolicyFunc instead.
 type PolicyFunc func(upstream net.Addr) (Policy, error)
@@ -25,10 +22,7 @@ type PolicyFunc func(upstream net.Addr) (Policy, error)
 //
 // See below for the different policies.
 //
-// In case an error is returned the connection is denied: an error wrapping
-// ErrInvalidUpstream denies just that connection while Listener.Accept keeps
-// listening; any other error is returned by Accept itself, which typically
-// stops the caller's accept loop.
+// In case an error is returned the connection is denied.
 type ConnPolicyFunc func(connPolicyOptions ConnPolicyOptions) (Policy, error)
 
 // ConnPolicyOptions contains the remote and local addresses of a connection.
@@ -58,37 +52,8 @@ const (
 	// SKIP accepts a connection without requiring the PROXY header.
 	// Note: an example usage can be found in the SkipProxyHeaderForCIDR
 	// function.
-	//
-	// On a Listener, SKIP short-circuits Accept and returns the raw, unwrapped
-	// connection. On a Conn (via WithPolicy), a PROXY header that is present is
-	// still consumed from the stream but discarded: ProxyHeader returns nil and
-	// no validation runs.
 	SKIP
 )
-
-// DefaultPolicy is the policy applied when none is configured explicitly: by
-// NewConn when no WithPolicy option is given, and by Listener.Accept when
-// neither Policy nor ConnPolicy is set.
-//
-// It defaults to REQUIRE, per the spec's mandate that a receiver "MUST not try
-// to guess whether the protocol header is present or not": a connection that
-// does not open with a PROXY header fails its first Read/Write with
-// ErrNoProxyProtocol. Note REQUIRE alone still honors headers from any peer;
-// restricting who may send one needs a policy such as TrustProxyHeaderFrom or
-// TrustProxyHeaderFromRanges. (The deprecated *WhiteListPolicy helpers are
-// NOT equivalent: they return USE for allowed peers, which replaces this
-// default and makes the header optional again — that is why they were
-// deprecated in favor of the explicit PolicyFromRanges.)
-//
-// Deployments that relied on the historical optional-header behavior can
-// restore it process-wide with:
-//
-//	proxyproto.DefaultPolicy = proxyproto.USE
-//
-// Like DefaultReadHeaderTimeout, this is a package-level variable to keep it
-// easy to override. Set it at program init; it must not be modified
-// concurrently with accepting connections.
-var DefaultPolicy = REQUIRE
 
 // ConnSkipProxyHeaderForCIDR returns a ConnPolicyFunc which can be used to accept
 // a connection from a skipHeaderCIDR without requiring a PROXY header, e.g.
@@ -98,10 +63,7 @@ func ConnSkipProxyHeaderForCIDR(skipHeaderCIDR *net.IPNet, def Policy) ConnPolic
 	return func(connOpts ConnPolicyOptions) (Policy, error) {
 		ip, err := ipFromAddr(connOpts.Upstream)
 		if err != nil {
-			// Deny only this connection: wrapping ErrInvalidUpstream keeps
-			// Listener.Accept listening instead of surfacing the error and
-			// stopping the caller's accept loop.
-			return def, fmt.Errorf("%w: %w", ErrInvalidUpstream, err)
+			return def, err
 		}
 
 		if skipHeaderCIDR != nil && skipHeaderCIDR.Contains(ip) {
@@ -137,13 +99,13 @@ func WithPolicy(p Policy) func(*Conn) {
 // IP addresses and IP ranges. In case upstream IP is not in list the proxy
 // header will be ignored. If one of the provided IP addresses or IP ranges
 // is invalid it will return an error instead of a ConnPolicyFunc.
-//
-// Deprecated: the name hides that the header stays optional (USE) for allowed
-// peers, overriding the REQUIRE default. Use the equivalent, explicit
-// PolicyFromRanges(allowed, USE, IGNORE), or TrustProxyHeaderFromRanges for
-// the spec-strict header-mandatory posture.
 func ConnLaxWhiteListPolicy(allowed []string) (ConnPolicyFunc, error) {
-	return PolicyFromRanges(allowed, USE, IGNORE)
+	allowFrom, err := parse(allowed)
+	if err != nil {
+		return nil, err
+	}
+
+	return connWhitelistPolicy(allowFrom, IGNORE), nil
 }
 
 // LaxWhiteListPolicy returns a PolicyFunc which decides whether the
@@ -152,8 +114,7 @@ func ConnLaxWhiteListPolicy(allowed []string) (ConnPolicyFunc, error) {
 // header will be ignored. If one of the provided IP addresses or IP ranges
 // is invalid it will return an error instead of a PolicyFunc.
 //
-// Deprecated: use PolicyFromRanges(allowed, USE, IGNORE) instead; see
-// ConnLaxWhiteListPolicy for why.
+// Deprecated: use ConnLaxWhiteListPolicy instead.
 func LaxWhiteListPolicy(allowed []string) (PolicyFunc, error) {
 	connPolicy, err := ConnLaxWhiteListPolicy(allowed)
 	if err != nil {
@@ -167,9 +128,6 @@ func LaxWhiteListPolicy(allowed []string) (PolicyFunc, error) {
 
 // ConnMustLaxWhiteListPolicy returns a ConnLaxWhiteListPolicy but will panic
 // if one of the provided IP addresses or IP ranges is invalid.
-//
-// Deprecated: use MustPolicyFromRanges(allowed, USE, IGNORE) instead; see
-// ConnLaxWhiteListPolicy for why.
 func ConnMustLaxWhiteListPolicy(allowed []string) ConnPolicyFunc {
 	pfunc, err := ConnLaxWhiteListPolicy(allowed)
 	if err != nil {
@@ -182,8 +140,7 @@ func ConnMustLaxWhiteListPolicy(allowed []string) ConnPolicyFunc {
 // MustLaxWhiteListPolicy returns a LaxWhiteListPolicy but will panic if one
 // of the provided IP addresses or IP ranges is invalid.
 //
-// Deprecated: use MustPolicyFromRanges(allowed, USE, IGNORE) instead; see
-// ConnLaxWhiteListPolicy for why.
+// Deprecated: use ConnMustLaxWhiteListPolicy instead.
 func MustLaxWhiteListPolicy(allowed []string) PolicyFunc {
 	connPolicy := ConnMustLaxWhiteListPolicy(allowed)
 	return func(upstream net.Addr) (Policy, error) {
@@ -198,14 +155,13 @@ func MustLaxWhiteListPolicy(allowed []string) PolicyFunc {
 // ErrSuperfluousProxyHeader and every subsequent read returns the same error,
 // so the connection should be closed. If one of the provided IP addresses or IP
 // ranges is invalid it will return an error instead of a ConnPolicyFunc.
-//
-// Deprecated: "strict" only refers to refusing headers from unlisted peers;
-// the header stays optional (USE) for allowed peers, overriding the REQUIRE
-// default. Use the equivalent, explicit PolicyFromRanges(allowed, USE,
-// REJECT), or TrustProxyHeaderFromRanges for the spec-strict header-mandatory
-// posture.
 func ConnStrictWhiteListPolicy(allowed []string) (ConnPolicyFunc, error) {
-	return PolicyFromRanges(allowed, USE, REJECT)
+	allowFrom, err := parse(allowed)
+	if err != nil {
+		return nil, err
+	}
+
+	return connWhitelistPolicy(allowFrom, REJECT), nil
 }
 
 // StrictWhiteListPolicy returns a PolicyFunc which decides whether the
@@ -216,8 +172,7 @@ func ConnStrictWhiteListPolicy(allowed []string) (ConnPolicyFunc, error) {
 // so the connection should be closed. If one of the provided IP addresses or IP
 // ranges is invalid it will return an error instead of a PolicyFunc.
 //
-// Deprecated: use PolicyFromRanges(allowed, USE, REJECT) instead; see
-// ConnStrictWhiteListPolicy for why.
+// Deprecated: use ConnStrictWhiteListPolicy instead.
 func StrictWhiteListPolicy(allowed []string) (PolicyFunc, error) {
 	connPolicy, err := ConnStrictWhiteListPolicy(allowed)
 	if err != nil {
@@ -231,9 +186,6 @@ func StrictWhiteListPolicy(allowed []string) (PolicyFunc, error) {
 
 // ConnMustStrictWhiteListPolicy returns a ConnStrictWhiteListPolicy but will panic
 // if one of the provided IP addresses or IP ranges is invalid.
-//
-// Deprecated: use MustPolicyFromRanges(allowed, USE, REJECT) instead; see
-// ConnStrictWhiteListPolicy for why.
 func ConnMustStrictWhiteListPolicy(allowed []string) ConnPolicyFunc {
 	pfunc, err := ConnStrictWhiteListPolicy(allowed)
 	if err != nil {
@@ -246,8 +198,7 @@ func ConnMustStrictWhiteListPolicy(allowed []string) ConnPolicyFunc {
 // MustStrictWhiteListPolicy returns a StrictWhiteListPolicy but will panic
 // if one of the provided IP addresses or IP ranges is invalid.
 //
-// Deprecated: use MustPolicyFromRanges(allowed, USE, REJECT) instead; see
-// ConnStrictWhiteListPolicy for why.
+// Deprecated: use ConnMustStrictWhiteListPolicy instead.
 func MustStrictWhiteListPolicy(allowed []string) PolicyFunc {
 	connPolicy := ConnMustStrictWhiteListPolicy(allowed)
 	return func(upstream net.Addr) (Policy, error) {
@@ -255,60 +206,22 @@ func MustStrictWhiteListPolicy(allowed []string) PolicyFunc {
 	}
 }
 
-func connRangesPolicy(allowed []func(net.IP) bool, matched, unmatched Policy) ConnPolicyFunc {
+func connWhitelistPolicy(allowed []func(net.IP) bool, def Policy) ConnPolicyFunc {
 	return func(connOpts ConnPolicyOptions) (Policy, error) {
 		upstreamIP, err := ipFromAddr(connOpts.Upstream)
 		if err != nil {
-			// Something is wrong with the source IP: deny only this connection.
-			// Wrapping ErrInvalidUpstream keeps Listener.Accept listening instead
-			// of surfacing the error and stopping the caller's accept loop.
-			return REJECT, fmt.Errorf("%w: %w", ErrInvalidUpstream, err)
+			// something is wrong with the source IP, better reject the connection
+			return REJECT, err
 		}
 
 		for _, allowFrom := range allowed {
 			if allowFrom(upstreamIP) {
-				return matched, nil
+				return USE, nil
 			}
 		}
 
-		return unmatched, nil
+		return def, nil
 	}
-}
-
-// PolicyFromRanges returns a ConnPolicyFunc that applies the matched policy to
-// connections whose upstream address belongs to ranges, and the unmatched
-// policy to every other connection. Each entry in ranges may be an individual
-// IP address ("10.0.0.10") or a CIDR range ("10.0.0.0/24"); an invalid entry
-// returns an error instead of a ConnPolicyFunc. Connections whose upstream
-// address cannot be classified are dropped by Listener.Accept via an
-// ErrInvalidUpstream-wrapping error.
-//
-// It is the explicit replacement for the deprecated *WhiteListPolicy helpers:
-//
-//	PolicyFromRanges(ranges, USE, IGNORE) // ConnLaxWhiteListPolicy
-//	PolicyFromRanges(ranges, USE, REJECT) // ConnStrictWhiteListPolicy
-//
-// Both of those combinations leave the header optional for matched peers. For
-// the spec-strict posture — trusted sources MUST send a header, everything
-// else is dropped — use TrustProxyHeaderFromRanges instead.
-func PolicyFromRanges(ranges []string, matched, unmatched Policy) (ConnPolicyFunc, error) {
-	allowFrom, err := parse(ranges)
-	if err != nil {
-		return nil, err
-	}
-
-	return connRangesPolicy(allowFrom, matched, unmatched), nil
-}
-
-// MustPolicyFromRanges returns PolicyFromRanges and panics if any entry in
-// ranges is invalid. Intended for static configuration known at program init.
-func MustPolicyFromRanges(ranges []string, matched, unmatched Policy) ConnPolicyFunc {
-	pfunc, err := PolicyFromRanges(ranges, matched, unmatched)
-	if err != nil {
-		panic(err)
-	}
-
-	return pfunc
 }
 
 func parse(allowed []string) ([]func(net.IP) bool, error) {
@@ -348,70 +261,25 @@ func ipFromAddr(upstream net.Addr) (net.IP, error) {
 	return upstreamIP, nil
 }
 
-// TrustProxyHeaderFrom returns a ConnPolicyFunc implementing the spec's
-// receiver posture end to end: connections from trusted IPs MUST carry a PROXY
-// header (REQUIRE — absence fails the first Read with ErrNoProxyProtocol, so
-// header presence is never guessed), and connections from any other source are
-// dropped by Listener.Accept without stopping the listener.
-//
-// Note the REJECT policy alone cannot provide the second half: REJECT refuses
-// connections that DO send a header, but a headerless connection from an
-// untrusted peer would still be served raw, sharing the port between PROXY and
-// non-PROXY traffic — exactly what the spec's security model forbids.
+// TrustProxyHeaderFrom returns a ConnPolicyFunc which can be used to decide
+// whether to use or reject PROXY headers based on the source IP of the
+// connection. This policy ensures that only trusted sources can set the PROXY
+// header. Connections from IPs not in the trusted list will be rejected.
 func TrustProxyHeaderFrom(trustedIPs ...net.IP) ConnPolicyFunc {
 	return func(connOpts ConnPolicyOptions) (Policy, error) {
 		ip, err := ipFromAddr(connOpts.Upstream)
 		if err != nil {
-			// Deny only this connection: wrapping ErrInvalidUpstream keeps
-			// Listener.Accept listening instead of surfacing the error and
-			// stopping the caller's accept loop.
-			return REJECT, fmt.Errorf("%w: %w", ErrInvalidUpstream, err)
+			return REJECT, err
 		}
 
 		for _, trustedIP := range trustedIPs {
 			if trustedIP.Equal(ip) {
-				return REQUIRE, nil
+				return USE, nil
 			}
 		}
 
-		return REJECT, fmt.Errorf("%w: %s is not a trusted PROXY sender", ErrInvalidUpstream, ip)
+		return REJECT, nil
 	}
-}
-
-// TrustProxyHeaderFromRanges is the CIDR-capable variant of
-// TrustProxyHeaderFrom, with the same spec posture: connections from the
-// trusted set MUST carry a PROXY header (REQUIRE), and connections from any
-// other source are dropped by Listener.Accept without stopping the listener.
-// Each entry in trusted may be an individual IP address ("10.0.0.10") or a
-// CIDR range ("10.0.0.0/24"); an invalid entry returns an error instead of a
-// ConnPolicyFunc.
-//
-// Unlike the *WhiteListPolicy helpers — which make the header optional (USE)
-// for allowed peers and merely ignore or refuse the header for denied ones —
-// this helper never guesses whether a header is present.
-func TrustProxyHeaderFromRanges(trusted []string) (ConnPolicyFunc, error) {
-	allowFrom, err := parse(trusted)
-	if err != nil {
-		return nil, err
-	}
-
-	return func(connOpts ConnPolicyOptions) (Policy, error) {
-		ip, err := ipFromAddr(connOpts.Upstream)
-		if err != nil {
-			// Deny only this connection: wrapping ErrInvalidUpstream keeps
-			// Listener.Accept listening instead of surfacing the error and
-			// stopping the caller's accept loop.
-			return REJECT, fmt.Errorf("%w: %w", ErrInvalidUpstream, err)
-		}
-
-		for _, allow := range allowFrom {
-			if allow(ip) {
-				return REQUIRE, nil
-			}
-		}
-
-		return REJECT, fmt.Errorf("%w: %s is not a trusted PROXY sender", ErrInvalidUpstream, ip)
-	}, nil
 }
 
 // IgnoreProxyHeaderNotOnInterface returns a ConnPolicyFunc which can be used to
@@ -422,11 +290,7 @@ func IgnoreProxyHeaderNotOnInterface(allowedIP net.IP) ConnPolicyFunc {
 	return func(connOpts ConnPolicyOptions) (Policy, error) {
 		ip, err := ipFromAddr(connOpts.Downstream)
 		if err != nil {
-			// The local (downstream) address cannot be classified; deny only this
-			// connection. Wrapping ErrInvalidUpstream keeps Listener.Accept
-			// listening instead of surfacing the error and stopping the caller's
-			// accept loop.
-			return REJECT, fmt.Errorf("%w: %w", ErrInvalidUpstream, err)
+			return REJECT, err
 		}
 
 		if allowedIP.Equal(ip) {

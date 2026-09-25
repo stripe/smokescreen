@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/DataDog/datadog-go/v5 v5.9.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/pires/go-proxyproto v0.15.0
+	github.com/pires/go-proxyproto v0.14.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
 	github.com/sirupsen/logrus v1.10.1
