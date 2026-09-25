@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -316,27 +317,30 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 }
 
 func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
-	// TODO: support round-robin between multiple addresses
-	if len(resolverAddresses) > 1 {
-		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
-	}
-
 	// No resolver specified, use the system resolver
 	if len(resolverAddresses) == 0 {
 		return nil
 	}
 
-	addr := resolverAddresses[0]
-	_, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return err
+	validatedResolverAddresses := make([]string, 0, len(resolverAddresses))
+	for _, addr := range resolverAddresses {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return fmt.Errorf("invalid resolver address %q: %w", addr, err)
+		}
+		validatedResolverAddresses = append(validatedResolverAddresses, addr)
 	}
 
+	// Otherwise pick an address at random for each DNS exchange. Go's resolver
+	// calls Dial once per exchange and issues the A and AAAA queries for a
+	// lookup concurrently, so a deterministic round robin might pair the
+	// same query type with the same address. A random choice spreads both
+	// query types and retries across all configured addresses.
+	addrs := validatedResolverAddresses
 	r := net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			d := net.Dialer{}
-			return d.DialContext(ctx, "udp", addr)
+			return d.DialContext(ctx, "udp", addrs[rand.IntN(len(addrs))])
 		},
 	}
 	config.Resolver = &r
