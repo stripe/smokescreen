@@ -623,11 +623,17 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 		ClientAuth:   clientAuth,
 		ClientCAs:    clientCAs,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			if len(config.revokedCertSerials) == 0 {
+			if len(config.revokedCertSerials) == 0 || len(cs.VerifiedChains) == 0 {
 				return nil
 			}
 
 			for _, chain := range cs.VerifiedChains {
+				if len(chain) == 0 {
+					continue
+				}
+
+				revoked := false
+
 				// The final certificate is the trust anchor. Check every certificate
 				// before it, including intermediate CA certificates.
 				for i := 0; i+1 < len(chain); i++ {
@@ -641,11 +647,17 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 					}
 
 					if serials[cert.SerialNumber.String()] {
-						return fmt.Errorf("certificate with serial %s has been revoked", cert.SerialNumber.String())
+						revoked = true
+						break
 					}
 				}
+
+				if !revoked {
+					return nil
+				}
 			}
-			return nil
+
+			return errors.New("all verified certificate chains contain a revoked certificate")
 		},
 	}
 

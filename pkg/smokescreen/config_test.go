@@ -26,6 +26,10 @@ func TestVerifyConnection(t *testing.T) {
 	leaf := certificate(1, "intermediate", "leaf", false)
 	intermediate := certificate(2, "root", "intermediate", true)
 	root := certificate(3, "root-issuer", "root", true)
+	rootA := certificate(20, "root-issuer", "root-a", true)
+	rootB := certificate(21, "root-issuer", "root-b", true)
+	revokedIntermediate := certificate(22, "root-a", "intermediate-a", true)
+	cleanIntermediate := certificate(23, "root-b", "intermediate-b", true)
 
 	tests := []struct {
 		name               string
@@ -82,11 +86,19 @@ func TestVerifyConnection(t *testing.T) {
 			},
 		},
 		{
-			name:           "empty chain is accepted",
+			name:           "empty verified chains is accepted",
+			verifiedChains: nil,
+			revokedCertSerials: map[string]map[string]bool{
+				"intermediate": {"1": true},
+			},
+		},
+		{
+			name:           "empty inner chain is not a clean path",
 			verifiedChains: [][]*x509.Certificate{{}},
 			revokedCertSerials: map[string]map[string]bool{
 				"intermediate": {"1": true},
 			},
+			wantErr: true,
 		},
 		{
 			name:           "single-certificate chain is accepted",
@@ -103,13 +115,69 @@ func TestVerifyConnection(t *testing.T) {
 			},
 		},
 		{
-			name: "revocation in any verified chain is rejected",
+			name: "revoked path first and clean path second is accepted",
 			verifiedChains: [][]*x509.Certificate{
-				{certificate(5, "safe-issuer", "safe", false), root},
-				{certificate(6, "revoking-issuer", "revoked", false), root},
+				{leaf, revokedIntermediate, rootA},
+				{leaf, cleanIntermediate, rootB},
 			},
 			revokedCertSerials: map[string]map[string]bool{
-				"root": {"6": true},
+				"root-a": {"22": true},
+			},
+		},
+		{
+			name: "clean path first and revoked path second is accepted",
+			verifiedChains: [][]*x509.Certificate{
+				{leaf, cleanIntermediate, rootB},
+				{leaf, revokedIntermediate, rootA},
+			},
+			revokedCertSerials: map[string]map[string]bool{
+				"root-a": {"22": true},
+			},
+		},
+		{
+			name: "all paths contain revoked intermediates",
+			verifiedChains: [][]*x509.Certificate{
+				{leaf, revokedIntermediate, rootA},
+				{leaf, cleanIntermediate, rootB},
+			},
+			revokedCertSerials: map[string]map[string]bool{
+				"root-a": {"22": true},
+				"root-b": {"23": true},
+			},
+			wantErr: true,
+		},
+		{
+			name: "shared leaf is revoked",
+			verifiedChains: [][]*x509.Certificate{
+				{leaf, revokedIntermediate, rootA},
+				{leaf, cleanIntermediate, rootB},
+			},
+			revokedCertSerials: map[string]map[string]bool{
+				"intermediate-a": {"1": true},
+				"intermediate-b": {"1": true},
+			},
+			wantErr: true,
+		},
+		{
+			name: "same revoked intermediate appears in every path",
+			verifiedChains: [][]*x509.Certificate{
+				{leaf, revokedIntermediate, rootA},
+				{leaf, revokedIntermediate, rootB},
+			},
+			revokedCertSerials: map[string]map[string]bool{
+				"root-a": {"22": true},
+				"root-b": {"22": true},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty path does not make revoked connection pass",
+			verifiedChains: [][]*x509.Certificate{
+				{},
+				{leaf, revokedIntermediate, rootA},
+			},
+			revokedCertSerials: map[string]map[string]bool{
+				"root-a": {"22": true},
 			},
 			wantErr: true,
 		},
