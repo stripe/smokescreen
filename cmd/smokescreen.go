@@ -287,6 +287,11 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {
 				return err
 			}
+		} else if c.IsSet("disable-acl-policy-action") {
+			// Revalidate a YAML-loaded ACL now that disabled actions are known.
+			if err := conf.ReloadEgressAcl(); err != nil {
+				return err
+			}
 		}
 
 		if c.IsSet("unsafe-allow-private-ranges") {

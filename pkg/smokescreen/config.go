@@ -210,6 +210,9 @@ type Config struct {
 	// Self-connection detection field to prevent recursive proxy attacks
 	// LocalIPs contains all IP addresses assigned to network interfaces on this host
 	LocalIPs []net.IP
+
+	// aclFilePath is the file most recently passed to SetupEgressAcl, if any.
+	aclFilePath string
 }
 
 type missingRoleError struct {
@@ -568,6 +571,7 @@ func (config *Config) SetupStatsd(addr string) error {
 func (config *Config) SetupEgressAcl(aclFile string) error {
 	if aclFile == "" {
 		config.EgressACL = nil
+		config.aclFilePath = ""
 		return nil
 	}
 
@@ -579,8 +583,18 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 		return err
 	}
 	config.EgressACL = egressACL
+	config.aclFilePath = aclFile
 
 	return nil
+}
+
+// ReloadEgressAcl re-validates the last-loaded ACL file against the current
+// DisabledAclPolicyActions. No-op if no ACL file has been loaded.
+func (config *Config) ReloadEgressAcl() error {
+	if config.aclFilePath == "" {
+		return nil
+	}
+	return config.SetupEgressAcl(config.aclFilePath)
 }
 
 func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) error {
