@@ -72,6 +72,41 @@ jobs:
             rm -r "${DIST:?}/${name}"
           done
           (cd "$DIST" && sha256sum ./*.tar.gz > SHA256SUMS)
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          # Exercise the shipped linux/amd64 artifact rather than the build tree.
+          work="$(mktemp -d)"
+          tar -C "$work" -xzf "${DIST}/smokescreen_${TAG}_linux_amd64.tar.gz"
+          bin="${work}/smokescreen_${TAG}_linux_amd64/smokescreen"
+
+          version="$("$bin" --version)"
+          echo "$version"
+          # v0.1.0 appends "-rev-<commit>"; later versions print the tag alone.
+          grep -qxE "smokescreen version ${TAG//./\\.}(-rev-[0-9a-f]{7})?" <<<"$version"
+
+          "$bin" --listen-ip 127.0.0.1 --listen-port 4750 >"${work}/smokescreen.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 50); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "smokescreen exited during startup"
+              cat "${work}/smokescreen.log"
+              exit 1
+            fi
+            # A denied request to loopback proves smokescreen itself is answering,
+            # not just that something holds the port, without touching the network.
+            if curl -s -o /dev/null -D - --max-time 2 -x http://127.0.0.1:4750 http://127.0.0.1:9/ 2>/dev/null |
+              grep -qi '^x-smokescreen-error:'; then
+              echo "smokescreen is up and answering"
+              kill "$pid"
+              exit 0
+            fi
+            sleep 0.2
+          done
+          echo "smokescreen did not start answering within 10s"
+          cat "${work}/smokescreen.log"
+          kill "$pid"
+          exit 1
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/dist/*.tar.gz
