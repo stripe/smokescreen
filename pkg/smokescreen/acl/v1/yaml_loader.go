@@ -3,7 +3,7 @@ package acl
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"go.yaml.in/yaml/v3"
@@ -53,7 +53,7 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 	}
 	defer f.Close()
 
-	yamlFile, err := ioutil.ReadAll(f)
+	yamlFile, err := io.ReadAll(f)
 	if err != nil {
 		return nil, fmt.Errorf("could not load acl configuration")
 	}
@@ -77,7 +77,7 @@ func (cfg *YAMLConfig) Load() (*ACL, error) {
 	}
 
 	if cfg.Services == nil {
-		return nil, errors.New("Top level list 'services' is missing")
+		return nil, errors.New("top level list 'services' is missing")
 	}
 
 	for _, v := range cfg.Services {

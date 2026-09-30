@@ -3,8 +3,9 @@
 package metrics
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMapKeys(t *testing.T) {

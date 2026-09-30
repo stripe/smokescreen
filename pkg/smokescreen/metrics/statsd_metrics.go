@@ -2,9 +2,10 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/DataDog/datadog-go/v5/statsd"
 	"sync/atomic"
 	"time"
+
+	"github.com/DataDog/datadog-go/v5/statsd"
 )
 
 // StatsdMetricsClient is a thin wrapper around statsd.ClientInterface. It is used to allow

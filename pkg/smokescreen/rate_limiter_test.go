@@ -76,7 +76,7 @@ func TestRateLimitedHandler_Concurrency(t *testing.T) {
 
 	handler := NewRateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		blocked <- struct{}{} // signal we're in handler
-		<-release            // wait for release
+		<-release             // wait for release
 		w.WriteHeader(http.StatusOK)
 	}), config)
 

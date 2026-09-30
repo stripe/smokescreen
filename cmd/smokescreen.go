@@ -187,7 +187,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 	app.Action = func(_ context.Context, c *cli.Command) error {
 		if c.Args().Len() > 0 {
-			return errors.New("Received unexpected non-option argument(s)")
+			return errors.New("received unexpected non-option argument(s)")
 		}
 
 		var conf *smokescreen.Config
@@ -195,7 +195,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			var err error
 			conf, err = smokescreen.LoadConfig(file)
 			if err != nil {
-				return fmt.Errorf("Couldn't load file \"%s\" specified by --config-file: %v", file, err)
+				return fmt.Errorf("couldn't load file \"%s\" specified by --config-file: %v", file, err)
 			}
 		} else {
 			conf = smokescreen.NewConfig()
@@ -212,7 +212,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		if c.IsSet("listen-port") {
 			port := c.Uint("listen-port")
 			if port > math.MaxUint16 {
-				return fmt.Errorf("Invalid listen-port: %d", port)
+				return fmt.Errorf("invalid listen-port: %d", port)
 			}
 			conf.Port = uint16(port)
 		}

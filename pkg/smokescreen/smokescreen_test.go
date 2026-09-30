@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -810,7 +809,7 @@ func TestInvalidHost(t *testing.T) {
 				r.Equal(http.StatusBadGateway, resp.StatusCode)
 
 				defer resp.Body.Close()
-				b, _ := ioutil.ReadAll(resp.Body)
+				b, _ := io.ReadAll(resp.Body)
 				r.Contains(string(b), "Failed to resolve remote hostname")
 			}
 
@@ -1559,7 +1558,7 @@ func TestCustomRequestHandler(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(200, resp.StatusCode)
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				r.NoError(err)
 				resp.Body.Close()
 				r.Equal([]byte("OK"), body)
@@ -1614,7 +1613,7 @@ func TestCustomRequestHandler(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(200, resp.StatusCode)
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				r.NoError(err)
 				resp.Body.Close()
 				r.Equal([]byte("OK"), body)
@@ -1835,7 +1834,7 @@ func TestMitm(t *testing.T) {
 		go func() {
 			resp, err := client.Do(req)
 			r.NoError(err)
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			r.NoError(err)
 			resp.Body.Close()
 			// We check the response body to see if the Mitm-Header-Inject header was injected by the Mitm handler

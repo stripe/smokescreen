@@ -21,7 +21,7 @@ type MockMetricsClient struct {
 // with counters to track metric updates.
 func NewMockMetricsClient() *MockMetricsClient {
 	return &MockMetricsClient{
-		&*NewNoOpMetricsClient(),
+		NewNoOpMetricsClient(),
 		make(map[string]uint64),
 		make(map[string][]float64),
 		sync.Mutex{},
@@ -67,7 +67,7 @@ func (m *MockMetricsClient) GetCount(metric string, tags map[string]string) (uin
 	i, ok := m.counts[mName]
 	if !ok {
 		keys := make([]string, 0, len(m.counts))
-		for k, _ := range m.counts {
+		for k := range m.counts {
 			keys = append(keys, k)
 		}
 		return 0, fmt.Errorf("unknown metric %s (know %s)", mName, strings.Join(keys, ","))
@@ -93,7 +93,7 @@ func (m *MockMetricsClient) GetValues(metric string, tags map[string]string) ([]
 	i, ok := m.values[mName]
 	if !ok {
 		keys := make([]string, 0, len(m.counts))
-		for k, _ := range m.values {
+		for k := range m.values {
 			keys = append(keys, k)
 		}
 		return nil, fmt.Errorf("unknown metric %s (know %s)", mName, strings.Join(keys, ","))

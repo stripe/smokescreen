@@ -11,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -116,7 +116,7 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 			return
 		}
 		// If there is a response returned, it should contain smokescreen's error message
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -202,7 +202,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 						certs = append(certs, cert)
 					}
 
-					caBytes, err := ioutil.ReadFile("testdata/pki/ca.pem")
+					caBytes, err := os.ReadFile("testdata/pki/ca.pem")
 					if err != nil {
 						return nil, err
 					}
@@ -243,7 +243,7 @@ func generateClientForTest(t *testing.T, test *TestCase) *http.Client {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
-					resp, err := ioutil.ReadAll(resp.Body)
+					resp, err := io.ReadAll(resp.Body)
 					if err != nil {
 						return nil, err
 					}

@@ -30,6 +30,35 @@ jobs:
       - name: Unit tests
         run: go test -v -timeout 2m -failfast ./...
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=vendor
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27"
+          cache: true
+      - name: Check formatting
+        run: |
+          unformatted="$(git ls-files -z '*.go' ':!:vendor/' | xargs -0 gofmt -l)"
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt -w on:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: Install staticcheck
+        env:
+          GOFLAGS: ""
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 # 2026.1.1; 2026.1 cannot read Go 1.27 export data
+      - name: Staticcheck
+        run: |
+          staticcheck ./...
+          staticcheck -tags=integration ./cmd/...
+          staticcheck -tags=smokescreen_no_prometheus ./...
+
   race:
     name: Race detector
     runs-on: ubuntu-latest
@@ -112,4 +141,9 @@ jobs:
       - name: Check vendor tree
         run: |
           go mod vendor
-          git diff --exit-code -- go.mod go.sum vendor/
+          # Porcelain status also catches newly vendored files that were never committed.
+          if [ -n "$(git status --porcelain -- go.mod go.sum vendor/)" ]; then
+            git status --short -- go.mod go.sum vendor/
+            echo "Run 'go mod vendor' and commit the result"
+            exit 1
+          fi

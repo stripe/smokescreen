@@ -5,3 +5,6 @@
 *.swn
 *debug.test*
 *.iml
+# Emitted by go mod vendor but not committed: it contains a contact email that
+# Stripe's commit PII scanner rejects. It has no effect on the build.
+/vendor/github.com/urfave/cli/v3/CODE_OF_CONDUCT.md

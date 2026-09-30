@@ -1,9 +1,10 @@
 package metrics
 
 import (
-	"github.com/stretchr/testify/require"
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestConstructTagArray(t *testing.T) {
