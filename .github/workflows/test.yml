@@ -52,7 +52,7 @@ jobs:
       - name: Install staticcheck
         env:
           GOFLAGS: ""
-        run: go install honnef.co/go/tools/cmd/staticcheck@2026.1
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 # 2026.1.1; 2026.1 cannot read Go 1.27 export data
       - name: Staticcheck
         run: |
           staticcheck ./...
