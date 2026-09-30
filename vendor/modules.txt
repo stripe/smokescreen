@@ -20,8 +20,8 @@ github.com/munnerz/goautoneg
 # github.com/patrickmn/go-cache v2.1.0+incompatible
 ## explicit
 github.com/patrickmn/go-cache
-# github.com/pires/go-proxyproto v0.14.0
-## explicit; go 1.25.0
+# github.com/pires/go-proxyproto v0.12.0
+## explicit; go 1.25
 github.com/pires/go-proxyproto
 # github.com/prometheus/client_golang v1.24.1
 ## explicit; go 1.25.0
@@ -47,8 +47,8 @@ github.com/prometheus/procfs/internal/util
 # github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
 ## explicit; go 1.16
 github.com/rs/xid
-# github.com/sirupsen/logrus v1.10.1
-## explicit; go 1.23
+# github.com/sirupsen/logrus v1.9.4
+## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/test
 # github.com/stretchr/testify v1.12.1
