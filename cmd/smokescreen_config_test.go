@@ -11,28 +11,28 @@ import (
 
 func TestNewConfigurationSelfConnectionPorts(t *testing.T) {
 	tests := []struct {
-		name     string
-		yaml     string
-		flags    []string
-		allPorts bool
+		name                 string
+		yaml                 string
+		flags                []string
+		allowSelfConnections bool
 	}{
-		{name: "default", allPorts: true},
-		{name: "omitted in YAML", yaml: "{}", allPorts: true},
-		{name: "enabled in YAML", yaml: "deny_self_connections_on_all_ports: true", allPorts: true},
-		{name: "disabled in YAML", yaml: "deny_self_connections_on_all_ports: false", allPorts: false},
-		{name: "enabled by CLI", flags: []string{"--deny-self-connections-on-all-ports=true"}, allPorts: true},
-		{name: "disabled by CLI", flags: []string{"--deny-self-connections-on-all-ports=false"}, allPorts: false},
+		{name: "default", allowSelfConnections: false},
+		{name: "omitted in YAML", yaml: "{}", allowSelfConnections: false},
+		{name: "enabled in YAML", yaml: "allow_self_connections: true", allowSelfConnections: true},
+		{name: "disabled in YAML", yaml: "allow_self_connections: false", allowSelfConnections: false},
+		{name: "enabled by CLI", flags: []string{"--allow-self-connections=true"}, allowSelfConnections: true},
+		{name: "disabled by CLI", flags: []string{"--allow-self-connections=false"}, allowSelfConnections: false},
 		{
-			name:     "CLI enables over YAML",
-			yaml:     "deny_self_connections_on_all_ports: false",
-			flags:    []string{"--deny-self-connections-on-all-ports"},
-			allPorts: true,
+			name:                 "CLI enables over YAML",
+			yaml:                 "allow_self_connections: false",
+			flags:                []string{"--allow-self-connections"},
+			allowSelfConnections: true,
 		},
 		{
-			name:     "CLI disables over YAML",
-			yaml:     "deny_self_connections_on_all_ports: true",
-			flags:    []string{"--deny-self-connections-on-all-ports=false"},
-			allPorts: false,
+			name:                 "CLI disables over YAML",
+			yaml:                 "allow_self_connections: true",
+			flags:                []string{"--allow-self-connections=false"},
+			allowSelfConnections: false,
 		},
 	}
 
@@ -49,7 +49,7 @@ func TestNewConfigurationSelfConnectionPorts(t *testing.T) {
 			config, err := NewConfiguration(args, nil)
 			require.NoError(t, err)
 			require.NotNil(t, config)
-			assert.Equal(t, tt.allPorts, config.DenySelfConnectionsOnAllPorts)
+			assert.Equal(t, tt.allowSelfConnections, config.AllowSelfConnections)
 		})
 	}
 }

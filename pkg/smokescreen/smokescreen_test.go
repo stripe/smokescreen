@@ -164,11 +164,11 @@ func TestClassifyAddr(t *testing.T) {
 
 func TestClassifyAddrSelfConnectionPorts(t *testing.T) {
 	modes := []struct {
-		name     string
-		allPorts bool
+		name                 string
+		allowSelfConnections bool
 	}{
-		{name: "all ports", allPorts: true},
-		{name: "listening port only", allPorts: false},
+		{name: "all ports", allowSelfConnections: false},
+		{name: "listening port only", allowSelfConnections: true},
 	}
 	tests := []struct {
 		name              string
@@ -195,7 +195,7 @@ func TestClassifyAddrSelfConnectionPorts(t *testing.T) {
 	for _, mode := range modes {
 		t.Run(mode.name, func(t *testing.T) {
 			config := NewConfig()
-			config.DenySelfConnectionsOnAllPorts = mode.allPorts
+			config.AllowSelfConnections = mode.allowSelfConnections
 			config.Port = 4750
 			config.LocalIPs = []net.IP{
 				net.ParseIP("192.0.2.1"),
@@ -212,7 +212,7 @@ func TestClassifyAddrSelfConnectionPorts(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					addr := &net.TCPAddr{IP: net.ParseIP(tt.ip), Port: tt.port}
 					want := tt.wantAllPorts
-					if !mode.allPorts {
+					if mode.allowSelfConnections {
 						want = tt.wantListeningPort
 					}
 					assert.Equal(t, want, classifyAddr(config, addr))

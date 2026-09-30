@@ -64,9 +64,8 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Enable PROXY protocol support.",
 		},
 		&cli.BoolFlag{
-			Name:  "deny-self-connections-on-all-ports",
-			Value: true,
-			Usage: "Deny connections to local interface addresses on every port (default: true). Set to false to restrict the self-connection check to the listening port.",
+			Name:  "allow-self-connections",
+			Usage: "Allow connections to local interface addresses on ports other than the listening port, subject to normal IP and ACL checks (default: false).",
 		},
 		&cli.StringSliceFlag{
 			Name:  "deny-range",
@@ -226,8 +225,8 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			conf.SupportProxyProtocol = c.Bool("proxy-protocol")
 		}
 
-		if c.IsSet("deny-self-connections-on-all-ports") {
-			conf.DenySelfConnectionsOnAllPorts = c.Bool("deny-self-connections-on-all-ports")
+		if c.IsSet("allow-self-connections") {
+			conf.AllowSelfConnections = c.Bool("allow-self-connections")
 		}
 
 		if c.IsSet("additional-error-message-on-deny") {

@@ -22,8 +22,8 @@ type yamlConfigTls struct {
 	CRLFiles      []string `yaml:"crl_files"`
 }
 
-// Pointer fields distinguish an omitted value from an explicit zero or false
-// so unmarshalling can preserve the defaults from NewConfig.
+// Port and ExitTimeout use a pointer so we can distinguish unset vs explicit
+// zero, to avoid overriding a non-zero default when the value is not set.
 type yamlConfig struct {
 	Ip                   string
 	Port                 *uint16
@@ -35,11 +35,10 @@ type yamlConfig struct {
 	StatsdAddress        string   `yaml:"statsd_address"`
 	EgressAclFile        string   `yaml:"acl_file"`
 	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
+	AllowSelfConnections bool     `yaml:"allow_self_connections"`
 	DenyMessageExtra     string   `yaml:"deny_message_extra"`
 	AllowMissingRole     bool     `yaml:"allow_missing_role"`
 	Network              string   `yaml:"network"`
-
-	DenySelfConnectionsOnAllPorts *bool `yaml:"deny_self_connections_on_all_ports"`
 
 	ConnectTimeout *time.Duration `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
@@ -151,10 +150,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	c.SupportProxyProtocol = yc.SupportProxyProtocol
-
-	if yc.DenySelfConnectionsOnAllPorts != nil {
-		c.DenySelfConnectionsOnAllPorts = *yc.DenySelfConnectionsOnAllPorts
-	}
+	c.AllowSelfConnections = yc.AllowSelfConnections
 
 	if yc.StatsSocketDir != "" {
 		c.StatsSocketDir = yc.StatsSocketDir

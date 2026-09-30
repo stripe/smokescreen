@@ -77,7 +77,7 @@ Here are the options you can give Smokescreen:
                                                  This argument is ignored when running under Einhorn. (default: 4750)
    --timeout DURATION                          Time out after DURATION when connecting. (default: 10s)
    --proxy-protocol                            Enable PROXY protocol support.
-   --deny-self-connections-on-all-ports         Deny connections to local interface addresses on every port. (default: true)
+   --allow-self-connections                    Allow connections to local interface addresses on other ports, subject to normal IP and ACL checks. (default: false)
    --deny-range RANGE                          Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
    --allow-range RANGE                         Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
    --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
@@ -159,14 +159,14 @@ by default, even if an address is explicitly allowed. `StartWithConfig` populate
 `LocalIPs` from the host's network interfaces unless it is already set.
 
 To restrict the self-connection check to Smokescreen's configured listening port,
-set `--deny-self-connections-on-all-ports=false`, use the YAML setting below, or set
-`Config.DenySelfConnectionsOnAllPorts = false` after calling `NewConfig()`:
+set `--allow-self-connections`, use the YAML setting below, or set
+`Config.AllowSelfConnections = true` after calling `NewConfig()`:
 
 ```yaml
-deny_self_connections_on_all_ports: false  # defaults to true
+allow_self_connections: true  # defaults to false
 ```
 
-With this setting disabled, other ports on the proxy host still undergo normal
+With this setting enabled, other ports on the proxy host still undergo normal
 IP and hostname ACL checks and may be allowed. Connections to local addresses on
 the configured listening port remain denied.
 
