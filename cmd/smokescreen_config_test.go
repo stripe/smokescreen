@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewConfigurationSelfConnectionPorts(t *testing.T) {
+func TestNewConfigurationAllowSelfConnections(t *testing.T) {
 	tests := []struct {
 		name                 string
 		yaml                 string

@@ -65,7 +65,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		&cli.BoolFlag{
 			Name:  "allow-self-connections",
-			Usage: "Allow connections to local interface addresses on ports other than the listening port, subject to normal IP and ACL checks (default: false).",
+			Usage: "Allow connections to local interface addresses on all ports, subject to normal IP and ACL checks (default: false).",
 		},
 		&cli.StringSliceFlag{
 			Name:  "deny-range",
