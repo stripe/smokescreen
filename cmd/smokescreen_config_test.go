@@ -5,8 +5,54 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewConfigurationAllowSelfConnections(t *testing.T) {
+	tests := []struct {
+		name                 string
+		yaml                 string
+		flags                []string
+		allowSelfConnections bool
+	}{
+		{name: "default", allowSelfConnections: false},
+		{name: "omitted in YAML", yaml: "{}", allowSelfConnections: false},
+		{name: "enabled in YAML", yaml: "allow_self_connections: true", allowSelfConnections: true},
+		{name: "disabled in YAML", yaml: "allow_self_connections: false", allowSelfConnections: false},
+		{name: "enabled by CLI", flags: []string{"--allow-self-connections=true"}, allowSelfConnections: true},
+		{name: "disabled by CLI", flags: []string{"--allow-self-connections=false"}, allowSelfConnections: false},
+		{
+			name:                 "CLI enables over YAML",
+			yaml:                 "allow_self_connections: false",
+			flags:                []string{"--allow-self-connections"},
+			allowSelfConnections: true,
+		},
+		{
+			name:                 "CLI disables over YAML",
+			yaml:                 "allow_self_connections: true",
+			flags:                []string{"--allow-self-connections=false"},
+			allowSelfConnections: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"smokescreen"}
+			if tt.yaml != "" {
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, []byte(tt.yaml), 0600))
+				args = append(args, "--config-file="+path)
+			}
+			args = append(args, tt.flags...)
+
+			config, err := NewConfiguration(args, nil)
+			require.NoError(t, err)
+			require.NotNil(t, config)
+			assert.Equal(t, tt.allowSelfConnections, config.AllowSelfConnections)
+		})
+	}
+}
 
 const aclWithOpenDefaultRule = `
 version: v1

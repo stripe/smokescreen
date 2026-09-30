@@ -310,7 +310,7 @@ func addrIsLocalIp(config *Config, addr *net.TCPAddr) bool {
 
 func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 
-	if addrIsLocalIp(config, addr) {
+	if !config.AllowSelfConnections && addrIsLocalIp(config, addr) {
 		return ipDenySelfConnection
 	}
 

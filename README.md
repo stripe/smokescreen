@@ -77,6 +77,7 @@ Here are the options you can give Smokescreen:
                                                  This argument is ignored when running under Einhorn. (default: 4750)
    --timeout DURATION                          Time out after DURATION when connecting. (default: 10s)
    --proxy-protocol                            Enable PROXY protocol support.
+   --allow-self-connections                    Allow connections to local interface addresses on all ports, subject to normal IP and ACL checks. (default: false)
    --deny-range RANGE                          Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
    --allow-range RANGE                         Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
    --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
@@ -152,6 +153,22 @@ func main() {
 ### IP Filtering
 
 To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config. 
+
+Smokescreen denies connections to addresses in `Config.LocalIPs` on every port
+by default, even if an address is explicitly allowed. `StartWithConfig` populates
+`LocalIPs` from the host's network interfaces unless it is already set.
+
+To disable the self-connection guard,
+set `--allow-self-connections`, use the YAML setting below, or set
+`Config.AllowSelfConnections = true` after calling `NewConfig()`:
+
+```yaml
+allow_self_connections: true  # defaults to false
+```
+
+With this setting enabled, connections to the proxy host on all ports, including
+Smokescreen's listening port, follow normal IP and hostname ACL checks and may be
+allowed.
 
 ### Rate Limiting
 

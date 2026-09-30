@@ -35,6 +35,7 @@ type yamlConfig struct {
 	StatsdAddress        string   `yaml:"statsd_address"`
 	EgressAclFile        string   `yaml:"acl_file"`
 	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
+	AllowSelfConnections bool     `yaml:"allow_self_connections"`
 	DenyMessageExtra     string   `yaml:"deny_message_extra"`
 	AllowMissingRole     bool     `yaml:"allow_missing_role"`
 	Network              string   `yaml:"network"`
@@ -149,6 +150,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	c.SupportProxyProtocol = yc.SupportProxyProtocol
+	c.AllowSelfConnections = yc.AllowSelfConnections
 
 	if yc.StatsSocketDir != "" {
 		c.StatsSocketDir = yc.StatsSocketDir

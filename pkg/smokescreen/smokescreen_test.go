@@ -162,6 +162,70 @@ func TestClassifyAddr(t *testing.T) {
 	}
 }
 
+func TestClassifyAddrAllowSelfConnections(t *testing.T) {
+	modes := []struct {
+		name                 string
+		allowSelfConnections bool
+	}{
+		{name: "self-connection guard enabled", allowSelfConnections: false},
+		{name: "self-connection guard disabled", allowSelfConnections: true},
+	}
+	tests := []struct {
+		name             string
+		ip               string
+		port             int
+		wantWithGuard    ipType
+		wantWithoutGuard ipType
+	}{
+		{"local IPv4 listening port", "192.0.2.1", 4750, ipDenySelfConnection, ipAllowDefault},
+		{"local IPv4 other port", "192.0.2.1", 8080, ipDenySelfConnection, ipAllowDefault},
+		{"local IPv6 listening port", "2001:db8::1", 4750, ipDenySelfConnection, ipAllowDefault},
+		{"local IPv6 other port", "2001:db8::1", 8080, ipDenySelfConnection, ipAllowDefault},
+		{"mapped local IPv4 other port", "::ffff:192.0.2.1", 8080, ipDenySelfConnection, ipAllowDefault},
+		{"allowed IPv4 loopback listening port", "127.0.0.1", 4750, ipDenySelfConnection, ipAllowUserConfigured},
+		{"allowed IPv4 loopback other port", "127.0.0.1", 8080, ipDenySelfConnection, ipAllowUserConfigured},
+		{"allowed IPv6 loopback listening port", "::1", 4750, ipDenySelfConnection, ipAllowUserConfigured},
+		{"allowed IPv6 loopback other port", "::1", 8080, ipDenySelfConnection, ipAllowUserConfigured},
+		{"unallowed loopback listening port", "127.0.0.2", 4750, ipDenySelfConnection, ipDenyNotGlobalUnicast},
+		{"private local IPv4 listening port", "10.0.0.1", 4750, ipDenySelfConnection, ipDenyPrivateRange},
+		{"private local IPv4 other port", "10.0.0.1", 8080, ipDenySelfConnection, ipDenyPrivateRange},
+		{"explicitly denied local IPv4 listening port", "192.0.2.2", 4750, ipDenySelfConnection, ipDenyUserConfigured},
+		{"explicitly denied local IPv4 other port", "192.0.2.2", 8080, ipDenySelfConnection, ipDenyUserConfigured},
+		{"nonlocal IPv4 listening port", "8.8.8.8", 4750, ipAllowDefault, ipAllowDefault},
+		{"nonlocal IPv6 listening port", "2001:4860:4860::8888", 4750, ipAllowDefault, ipAllowDefault},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			config := NewConfig()
+			config.AllowSelfConnections = mode.allowSelfConnections
+			config.Port = 4750
+			config.LocalIPs = []net.IP{
+				net.ParseIP("192.0.2.1"),
+				net.ParseIP("2001:db8::1"),
+				net.ParseIP("127.0.0.1"),
+				net.ParseIP("127.0.0.2"),
+				net.ParseIP("::1"),
+				net.ParseIP("10.0.0.1"),
+				net.ParseIP("192.0.2.2"),
+			}
+			require.NoError(t, config.SetAllowRanges([]string{"127.0.0.1/32", "::1/128"}))
+			require.NoError(t, config.SetDenyAddresses([]string{"192.0.2.2"}))
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					addr := &net.TCPAddr{IP: net.ParseIP(tt.ip), Port: tt.port}
+					want := tt.wantWithGuard
+					if mode.allowSelfConnections {
+						want = tt.wantWithoutGuard
+					}
+					assert.Equal(t, want, classifyAddr(config, addr))
+				})
+			}
+		})
+	}
+}
+
 func TestInitializeSelfConnectionDetection(t *testing.T) {
 	r := require.New(t)
 

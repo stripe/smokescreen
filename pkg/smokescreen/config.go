@@ -211,6 +211,11 @@ type Config struct {
 	// LocalIPs contains all IP addresses assigned to network interfaces on this host
 	LocalIPs []net.IP
 
+	// AllowSelfConnections disables the self-connection guard on every port,
+	// including the listening port. Normal IP and ACL checks still apply.
+	// Defaults to false.
+	AllowSelfConnections bool
+
 	// aclFilePath is the file most recently passed to SetupEgressAcl, if any.
 	aclFilePath string
 }
