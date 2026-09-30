@@ -158,7 +158,7 @@ Smokescreen denies connections to addresses in `Config.LocalIPs` on every port
 by default, even if an address is explicitly allowed. `StartWithConfig` populates
 `LocalIPs` from the host's network interfaces unless it is already set.
 
-To restrict the self-connection check to Smokescreen's actual listening port,
+To restrict the self-connection check to Smokescreen's configured listening port,
 set `--allow-self-connections`, use the YAML setting below, or set
 `Config.AllowSelfConnections = true` after calling `NewConfig()`:
 
@@ -168,10 +168,7 @@ allow_self_connections: true  # defaults to false
 
 With this setting enabled, other ports on the proxy host still undergo normal
 IP and hostname ACL checks and may be allowed. Connections to local addresses on
-the actual listening port remain denied, including when Einhorn supplies an
-inherited socket or a custom `Config.Listener` is provided. Callers using
-`BuildProxy` directly should set `Config.Listener` to their listener; without a
-TCP listener, the check falls back to `Config.Port`.
+the configured listening port remain denied.
 
 ### Rate Limiting
 

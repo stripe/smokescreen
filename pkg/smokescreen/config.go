@@ -211,9 +211,8 @@ type Config struct {
 	// LocalIPs contains all IP addresses assigned to network interfaces on this host
 	LocalIPs []net.IP
 
-	// AllowSelfConnections lets destinations in LocalIPs on ports other than the
-	// active TCP listener's port undergo normal IP and ACL checks. Connections to
-	// the listening port remain denied. Without a TCP listener, Port is used.
+	// AllowSelfConnections lets destinations in LocalIPs on ports other than Port
+	// undergo normal IP and ACL checks. Connections to Port remain denied.
 	// Defaults to false, which blocks connections to LocalIPs on every port.
 	AllowSelfConnections bool
 
@@ -418,17 +417,6 @@ func NewConfig() *Config {
 	}
 }
 
-// listeningPort uses the active TCP listener, whose port can differ from Port
-// for inherited listeners, custom listeners, and dynamically assigned ports.
-func (config *Config) listeningPort() int {
-	if config.Listener != nil {
-		if addr, ok := config.Listener.Addr().(*net.TCPAddr); ok {
-			return addr.Port
-		}
-	}
-	return int(config.Port)
-}
-
 // Gathers all local IP addresses to prevent recursive proxy attacks.
 // Skipped if config.LocalIPs is already set.
 func (config *Config) InitializeSelfConnectionDetection() error {
@@ -448,7 +436,7 @@ func (config *Config) InitializeSelfConnectionDetection() error {
 	}
 	config.Log.WithFields(log.Fields{
 		"listening_ip":   config.Ip,
-		"listening_port": config.listeningPort(),
+		"listening_port": config.Port,
 		"local_ips":      ipStrings,
 	}).Info("Self-connection detection initialized")
 

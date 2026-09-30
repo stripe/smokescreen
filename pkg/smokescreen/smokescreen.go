@@ -300,7 +300,7 @@ func addrIsTemporarilyDeferred(temporarilyDeferredIPs []string, addr *net.TCPAdd
 // Check for self-connection: prevent proxy from connecting to itself
 // This blocks recursive proxy attacks where destination resolves to proxy's own IP
 func addrIsLocalIp(config *Config, addr *net.TCPAddr) bool {
-	if config.AllowSelfConnections && addr.Port != config.listeningPort() {
+	if config.AllowSelfConnections && addr.Port != int(config.Port) {
 		return false
 	}
 
@@ -1068,6 +1068,12 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 		config.Log.Fatal("invalid config", err)
 	}
 
+	// Initialize self-connection detection to prevent recursive proxy attacks
+	if err = config.InitializeSelfConnectionDetection(); err != nil {
+		config.Log.WithError(err).Warn("Failed to initialize self-connection detection - continuing with reduced protection")
+	}
+
+	proxy := BuildProxy(config)
 	listener := config.Listener
 
 	if listener == nil {
@@ -1076,14 +1082,6 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 			config.Log.Fatal("can't find listener", err)
 		}
 	}
-	config.Listener = listener
-
-	// Initialize self-connection detection after selecting the actual listener.
-	if err = config.InitializeSelfConnectionDetection(); err != nil {
-		config.Log.WithError(err).Warn("Failed to initialize self-connection detection - continuing with reduced protection")
-	}
-
-	proxy := BuildProxy(config)
 
 	if config.SupportProxyProtocol {
 		listener = proxyProtocolListener(listener)
