@@ -1,0 +1,126 @@
+name: Release
+
+# Builds static binaries when a release tag is created and attaches them, with
+# checksums and build provenance, to the tag's GitHub Release. Branch pushes
+# never trigger it; tags created from the GitHub release UI do.
+#
+# To backfill a release that predates this workflow (such as v0.1.0), run it
+# manually from master with the tag as input. A manual run on the tag itself
+# would fail, because GitHub reads the workflow file from the selected ref.
+#
+# Published assets are never replaced: a rerun on a release that already has
+# them fails instead.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  binaries:
+    name: Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GOFLAGS: -mod=vendor
+      CGO_ENABLED: "0"
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Test
+        run: go test -timeout 5m ./...
+      - name: Build
+        run: |
+          set -euo pipefail
+          # Outside the checkout: untracked files there would stamp the version as "+dirty".
+          DIST="${RUNNER_TEMP}/dist"
+          echo "DIST=${DIST}" >> "$GITHUB_ENV"
+          mkdir "$DIST"
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}" arch="${target#*/}"
+            name="smokescreen_${TAG}_${os}_${arch}"
+            mkdir "${DIST}/${name}"
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "${DIST}/${name}/smokescreen" .
+            # The version comes from Go's VCS stamping; refuse to ship a binary that does not report the tag.
+            go version -m "${DIST}/${name}/smokescreen" | grep -qE "^[[:space:]]+mod[[:space:]]+github.com/stripe/smokescreen[[:space:]]+${TAG}([[:space:]]|$)"
+            cp LICENSE.txt README.md "${DIST}/${name}/"
+            tar -C "$DIST" -czf "${DIST}/${name}.tar.gz" "${name}"
+            rm -r "${DIST:?}/${name}"
+          done
+          (cd "$DIST" && sha256sum ./*.tar.gz > SHA256SUMS)
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          # Exercise the shipped linux/amd64 artifact rather than the build tree.
+          work="$(mktemp -d)"
+          tar -C "$work" -xzf "${DIST}/smokescreen_${TAG}_linux_amd64.tar.gz"
+          bin="${work}/smokescreen_${TAG}_linux_amd64/smokescreen"
+
+          version="$("$bin" --version)"
+          echo "$version"
+          # v0.1.0 appends "-rev-<commit>"; later versions print the tag alone.
+          grep -qxE "smokescreen version ${TAG//./\\.}(-rev-[0-9a-f]{7})?" <<<"$version"
+
+          "$bin" --listen-ip 127.0.0.1 --listen-port 4750 >"${work}/smokescreen.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 50); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "smokescreen exited during startup"
+              cat "${work}/smokescreen.log"
+              exit 1
+            fi
+            # A denied request to loopback proves smokescreen itself is answering,
+            # not just that something holds the port, without touching the network.
+            if curl -s -o /dev/null -D - --max-time 2 -x http://127.0.0.1:4750 http://127.0.0.1:9/ 2>/dev/null |
+              grep -qi '^x-smokescreen-error:'; then
+              echo "smokescreen is up and answering"
+              kill "$pid"
+              exit 0
+            fi
+            sleep 0.2
+          done
+          echo "smokescreen did not start answering within 10s"
+          cat "${work}/smokescreen.log"
+          kill "$pid"
+          exit 1
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dist/*.tar.gz
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DIST"/*
+          else
+            flags=(--verify-tag --generate-notes)
+            if [[ "$TAG" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$TAG" "$DIST"/* "${flags[@]}"
+          fi
