@@ -266,6 +266,7 @@ func TestSetupCrls(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile() error = %v", err)
 		}
+		//lint:ignore SA1019 the test mutates the pkix.CertificateList that SetupCrls exposes.
 		certList, err := x509.ParseCRL(crlBytes)
 		if err != nil {
 			t.Fatalf("ParseCRL() error = %v", err)

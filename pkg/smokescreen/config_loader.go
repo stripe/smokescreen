@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
@@ -245,7 +244,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 func LoadConfig(filePath string) (*Config, error) {
-	yamlBytes, err := ioutil.ReadFile(filePath)
+	yamlBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}

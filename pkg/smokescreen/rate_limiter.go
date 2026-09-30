@@ -102,4 +102,3 @@ func (r *RateLimitedHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	r.handler.ServeHTTP(w, req)
 }
-

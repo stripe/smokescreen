@@ -360,7 +360,6 @@ func TestHostMatchesGlob(t *testing.T) {
 	}
 }
 
-
 func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
@@ -416,16 +415,16 @@ func TestInvalidMitmComfig(t *testing.T) {
 // TestIDNValidation tests Internationalized Domain Name handling
 func TestIDNValidation(t *testing.T) {
 	acl := &ACL{}
-	
+
 	// Unicode domain should be rejected with punycode suggestion
 	err := acl.ValidateDomainGlob("test", "тест.example.com")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "use \"xn--e1aybc.example.com\"")
-	
+
 	// Punycode domain should be valid
 	err = acl.ValidateDomainGlob("test", "xn--e1aybc.example.com")
 	assert.NoError(t, err)
-	
+
 	// Unicode with wildcard should be rejected
 	err = acl.ValidateDomainGlob("test", "*.тест.example.com")
 	assert.Error(t, err)
@@ -436,10 +435,10 @@ func TestIDNValidation(t *testing.T) {
 func TestIDNHostMatching(t *testing.T) {
 	// Unicode hostname should match punycode glob
 	assert.True(t, HostMatchesGlob("тест.example.com", "xn--e1aybc.example.com"))
-	
+
 	// Punycode hostname should match unicode glob
 	assert.True(t, HostMatchesGlob("xn--e1aybc.example.com", "тест.example.com"))
-	
+
 	// Wildcard matching with IDN
 	assert.True(t, HostMatchesGlob("sub.тест.example.com", "*.xn--e1aybc.example.com"))
 	assert.False(t, HostMatchesGlob("тест.example.com", "*.xn--e1aybc.example.com"))
@@ -448,14 +447,14 @@ func TestIDNHostMatching(t *testing.T) {
 // TestExternalProxyGlobValidation tests external proxy glob validation
 func TestExternalProxyGlobValidation(t *testing.T) {
 	acl := &ACL{}
-	
+
 	// Valid external proxy globs
 	validRule := Rule{
 		DomainGlobs:        []string{"example.com"},
 		ExternalProxyGlobs: []string{"proxy.example.com", "*.proxies.com"},
 	}
 	assert.NoError(t, acl.ValidateRule("test", validRule))
-	
+
 	// Invalid external proxy glob
 	invalidRule := Rule{
 		DomainGlobs:        []string{"example.com"},
@@ -477,7 +476,7 @@ func TestDecisionWithProxyHost(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Allowed proxy and target
 	decision, err := acl.Decide(DecideArgs{Service: "proxy-service", Host: "example.com", ConnectProxyHost: "proxy.example.com"})
 	assert.NoError(t, err)

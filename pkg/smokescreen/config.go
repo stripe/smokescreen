@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -485,11 +484,12 @@ func getAllLocalIPs() ([]net.IP, error) {
 
 func (config *Config) SetupCrls(crlFiles []string) error {
 	for _, crlFile := range crlFiles {
-		crlBytes, err := ioutil.ReadFile(crlFile)
+		crlBytes, err := os.ReadFile(crlFile)
 		if err != nil {
 			return err
 		}
 
+		//lint:ignore SA1019 CrlByAuthorityKeyId exposes *pkix.CertificateList; migrating to x509.RevocationList changes public API.
 		certList, err := x509.ParseCRL(crlBytes)
 		if err != nil {
 			return fmt.Errorf("failed to parse CRL %q: %w", crlFile, err)
@@ -522,6 +522,7 @@ func (config *Config) SetupCrls(crlFiles []string) error {
 		}
 
 		// At this point, we have the CA certificate and the CRL. All that's left before evicting the CRL we currently trust is to verify the new CRL's signature
+		//lint:ignore SA1019 see ParseCRL above.
 		err = caCert.CheckCRLSignature(certList)
 		if err != nil {
 			return fmt.Errorf("failed to verify signature for CRL %q: %w", crlFile, err)
@@ -598,7 +599,7 @@ func (config *Config) ReloadEgressAcl() error {
 }
 
 func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) error {
-	data, err := ioutil.ReadFile(fileName)
+	data, err := os.ReadFile(fileName)
 
 	//TODO this is a bit awkward
 	config.populateClientCaMap(data)
@@ -608,7 +609,7 @@ func addCertsFromFile(config *Config, pool *x509.CertPool, fileName string) erro
 	}
 	ok := pool.AppendCertsFromPEM(data)
 	if !ok {
-		return fmt.Errorf("Failed to load any certificates from file '%s'", fileName)
+		return fmt.Errorf("failed to load any certificates from file '%s'", fileName)
 	}
 	return nil
 }
@@ -659,8 +660,7 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 					cert := chain[i]
 					issuer := chain[i+1]
 
-					issuerKeyId := string(issuer.SubjectKeyId)
-					serials, ok := config.revokedCertSerials[issuerKeyId]
+					serials, ok := config.revokedCertSerials[string(issuer.SubjectKeyId)]
 					if !ok {
 						continue
 					}
