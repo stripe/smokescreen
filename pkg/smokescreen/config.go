@@ -211,6 +211,11 @@ type Config struct {
 	// LocalIPs contains all IP addresses assigned to network interfaces on this host
 	LocalIPs []net.IP
 
+	// DenySelfConnectionsOnAllPorts blocks destinations in LocalIPs on every port.
+	// NewConfig defaults this to true. When false, only Port is blocked by the
+	// self-connection check; other ports still undergo normal IP classification.
+	DenySelfConnectionsOnAllPorts bool
+
 	// aclFilePath is the file most recently passed to SetupEgressAcl, if any.
 	aclFilePath string
 }
@@ -404,6 +409,9 @@ func NewConfig() *Config {
 		ShuttingDown:            atomic.Value{},
 		MetricsClient:           metrics.NewNoOpMetricsClient(),
 		Network:                 DefaultNetwork,
+
+		DenySelfConnectionsOnAllPorts: true,
+
 		// Set secure defaults to prevent DoS attacks
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
 		ReadTimeout:       DefaultReadTimeout,

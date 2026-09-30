@@ -5,8 +5,54 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewConfigurationSelfConnectionPorts(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		flags    []string
+		allPorts bool
+	}{
+		{name: "default", allPorts: true},
+		{name: "omitted in YAML", yaml: "{}", allPorts: true},
+		{name: "enabled in YAML", yaml: "deny_self_connections_on_all_ports: true", allPorts: true},
+		{name: "disabled in YAML", yaml: "deny_self_connections_on_all_ports: false", allPorts: false},
+		{name: "enabled by CLI", flags: []string{"--deny-self-connections-on-all-ports=true"}, allPorts: true},
+		{name: "disabled by CLI", flags: []string{"--deny-self-connections-on-all-ports=false"}, allPorts: false},
+		{
+			name:     "CLI enables over YAML",
+			yaml:     "deny_self_connections_on_all_ports: false",
+			flags:    []string{"--deny-self-connections-on-all-ports"},
+			allPorts: true,
+		},
+		{
+			name:     "CLI disables over YAML",
+			yaml:     "deny_self_connections_on_all_ports: true",
+			flags:    []string{"--deny-self-connections-on-all-ports=false"},
+			allPorts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"smokescreen"}
+			if tt.yaml != "" {
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, []byte(tt.yaml), 0600))
+				args = append(args, "--config-file="+path)
+			}
+			args = append(args, tt.flags...)
+
+			config, err := NewConfiguration(args, nil)
+			require.NoError(t, err)
+			require.NotNil(t, config)
+			assert.Equal(t, tt.allPorts, config.DenySelfConnectionsOnAllPorts)
+		})
+	}
+}
 
 const aclWithOpenDefaultRule = `
 version: v1
