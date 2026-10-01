@@ -127,8 +127,8 @@ func (ic *InstrumentedConn) Close() error {
 	}
 
 	ic.logger.WithFields(logrus.Fields{
-		LogFieldBytesIn:      ic.BytesIn,
-		LogFieldBytesOut:     ic.BytesOut,
+		LogFieldBytesIn:      atomic.LoadUint64(ic.BytesIn),
+		LogFieldBytesOut:     atomic.LoadUint64(ic.BytesOut),
 		LogFieldEndTime:      end.UTC(),
 		LogFieldDuration:     duration,
 		LogFieldError:        errorMessage,
