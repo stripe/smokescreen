@@ -739,6 +739,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		goproxy.WithAddServerIpHeader(config.AddServerIpHeader),
 	)
 	proxy.Verbose = false
+	proxy.KeepAcceptEncoding = true
 	configureTransport(proxy.Tr, config)
 
 	// dialContext will be invoked for both CONNECT and traditional proxy requests
