@@ -6,12 +6,85 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestSetupTLSClientCertificateRequired(t *testing.T) {
+	pkiDir := filepath.Join("..", "..", "cmd", "testdata", "pki")
+	clientCert, err := tls.LoadX509KeyPair(filepath.Join(pkiDir, "enforce-client.pem"), filepath.Join(pkiDir, "enforce-client-key.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, version := range []uint16{tls.VersionTLS12, tls.VersionTLS13} {
+		t.Run(fmt.Sprintf("TLS-%x", version), func(t *testing.T) {
+			for _, tt := range []struct {
+				name             string
+				clientCA         bool
+				clientCert       bool
+				allowMissingRole bool
+				wantFail         bool
+			}{
+				{name: "client CA requires certificate", clientCA: true, wantFail: true},
+				{name: "allow missing role does not bypass client CA", clientCA: true, allowMissingRole: true, wantFail: true},
+				{name: "valid certificate accepted", clientCA: true, clientCert: true},
+				{name: "valid certificate accepted with missing roles allowed", clientCA: true, clientCert: true, allowMissingRole: true},
+				{name: "no client CA permits missing certificate"},
+				{name: "no client CA permits missing certificate with missing roles allowed", allowMissingRole: true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					config := NewConfig()
+					config.AllowMissingRole = tt.allowMissingRole
+					var caFiles []string
+					if tt.clientCA {
+						caFiles = []string{filepath.Join(pkiDir, "ca.pem")}
+					}
+					if err := config.SetupTls(filepath.Join(pkiDir, "server-bundle.pem"), filepath.Join(pkiDir, "server-key.pem"), caFiles); err != nil {
+						t.Fatal(err)
+					}
+					// Use a handler without role or ACL checks to verify rejection by TLS itself.
+					server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusNoContent)
+					}))
+					server.TLS = config.TlsConfig
+					server.StartTLS()
+					defer server.Close()
+
+					clientTLS := &tls.Config{InsecureSkipVerify: true, MinVersion: version, MaxVersion: version}
+					if tt.clientCert {
+						clientTLS.Certificates = []tls.Certificate{clientCert}
+					}
+					transport := &http.Transport{TLSClientConfig: clientTLS}
+					defer transport.CloseIdleConnections()
+					client := &http.Client{Transport: transport}
+					resp, err := client.Get(server.URL)
+					if resp != nil {
+						defer resp.Body.Close()
+					}
+					if tt.wantFail {
+						if err == nil || resp != nil {
+							t.Fatalf("expected TLS rejection, got response %v, error %v", resp, err)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if resp.StatusCode != http.StatusNoContent {
+						t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestVerifyConnection(t *testing.T) {
 	certificate := func(serial int64, authorityKeyID, subjectKeyID string, isCA bool) *x509.Certificate {
