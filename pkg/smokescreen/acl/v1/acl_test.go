@@ -19,7 +19,7 @@ var testCases = map[string]struct {
 	expectProject           string
 }{
 	"allowed by list when enforcing": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"enforce-dummy-srv",
 		"example1.com",
 		Allow,
@@ -27,7 +27,7 @@ var testCases = map[string]struct {
 		"usersec",
 	},
 	"disallowed when enforcing": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"enforce-dummy-srv",
 		"www.example1.com",
 		Deny,
@@ -35,7 +35,7 @@ var testCases = map[string]struct {
 		"usersec",
 	},
 	"allowed by list when reporting": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"report-dummy-srv",
 		"example3.com",
 		Allow,
@@ -43,7 +43,7 @@ var testCases = map[string]struct {
 		"security",
 	},
 	"reported when reporting": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"report-dummy-srv",
 		"example1.com",
 		AllowAndReport,
@@ -51,7 +51,7 @@ var testCases = map[string]struct {
 		"security",
 	},
 	"allowed when open": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"open-dummy-srv",
 		"anythingisgoodreally.com",
 		Allow,
@@ -59,7 +59,7 @@ var testCases = map[string]struct {
 		"automation",
 	},
 	"deny by glob": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"dummy-glob",
 		"shouldbreak.com",
 		Deny,
@@ -67,7 +67,7 @@ var testCases = map[string]struct {
 		"phony",
 	},
 	"deny by glob missing subdomain": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"dummy-glob",
 		"example.com",
 		Deny,
@@ -75,7 +75,7 @@ var testCases = map[string]struct {
 		"phony",
 	},
 	"allow by glob": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"dummy-glob",
 		"api.example.com",
 		Allow,
@@ -83,7 +83,7 @@ var testCases = map[string]struct {
 		"phony",
 	},
 	"deny from default": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"unknown-service",
 		"nope.example.com",
 		Deny,
@@ -91,7 +91,7 @@ var testCases = map[string]struct {
 		"other",
 	},
 	"allow from default list": {
-		"sample_config.yaml",
+		"acl_sample_config.yaml",
 		"unknown-service",
 		"default.example.com",
 		Allow,
@@ -99,7 +99,7 @@ var testCases = map[string]struct {
 		"other",
 	},
 	"allow from global allowlist enforce service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"enforce-dummy-srv",
 		"goodexample1.com",
 		Allow,
@@ -107,7 +107,7 @@ var testCases = map[string]struct {
 		"usersec",
 	},
 	"allow from global allowlist unknown service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"unknown-service",
 		"goodexample2.com",
 		Allow,
@@ -115,7 +115,7 @@ var testCases = map[string]struct {
 		"other",
 	},
 	"allow despite global denylist with allowed domains override": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"enforce-dummy-srv",
 		"badexample1.com",
 		Allow,
@@ -123,7 +123,7 @@ var testCases = map[string]struct {
 		"usersec",
 	},
 	"deny from global denylist report service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"report-dummy-srv",
 		"badexample1.com",
 		Deny,
@@ -131,7 +131,7 @@ var testCases = map[string]struct {
 		"security",
 	},
 	"deny from global denylist unknown service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"unknown-service",
 		"badexample2.com",
 		Deny,
@@ -139,7 +139,7 @@ var testCases = map[string]struct {
 		"other",
 	},
 	"deny from global denylist open service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"badexample2.com",
 		Deny,
@@ -147,7 +147,7 @@ var testCases = map[string]struct {
 		"automation",
 	},
 	"deny from global denylist trailing dot open service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"badexample2.com.",
 		Deny,
@@ -155,7 +155,7 @@ var testCases = map[string]struct {
 		"automation",
 	},
 	"deny from global denylist case mismatch open service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"bAdExAmPlE2.cOm",
 		Deny,
@@ -163,7 +163,7 @@ var testCases = map[string]struct {
 		"automation",
 	},
 	"deny from conflicting lists open service": {
-		"sample_config_with_global.yaml",
+		"acl_sample_config_with_global.yaml",
 		"open-dummy-srv",
 		"conflictingexample.com",
 		Deny,
@@ -198,7 +198,7 @@ func TestACLDecision(t *testing.T) {
 func TestACLUnknownServiceWithoutDefault(t *testing.T) {
 	a := assert.New(t)
 
-	yl := NewYAMLLoader("testdata/no_default.yaml")
+	yl := NewYAMLLoader("testdata/acl_no_default.yaml")
 	acl, err := New(logrus.New(), yl, []string{})
 
 	a.NoError(err)
@@ -232,7 +232,7 @@ func TestACLAddPolicyDisabled(t *testing.T) {
 func TestACLMalformedPolicyDisable(t *testing.T) {
 	_, err := New(
 		logrus.New(),
-		NewYAMLLoader("testdata/no_default.yaml"), // any file will do
+		NewYAMLLoader("testdata/acl_no_default.yaml"), // any file will do
 		[]string{"sillystring"},
 	)
 	assert.Error(t, err)
@@ -363,7 +363,7 @@ func TestHostMatchesGlob(t *testing.T) {
 func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
-	yl := NewYAMLLoader(path.Join("testdata", "mitm_config.yaml"))
+	yl := NewYAMLLoader(path.Join("testdata", "acl_mitm_config.yaml"))
 	acl, err := New(logrus.New(), yl, []string{})
 
 	a.NoError(err)
@@ -559,7 +559,7 @@ func TestDefaultRuleValidationWithDisableActions(t *testing.T) {
 	logger := logrus.New()
 
 	// Config with open default rule
-	yamlFilePath := path.Join("testdata", "sample_default_bypass_config.yaml")
+	yamlFilePath := path.Join("testdata", "acl_sample_default_bypass_config.yaml")
 	yl := NewYAMLLoader(yamlFilePath)
 
 	// Attempt to load the ACL with "open" policy disabled
@@ -574,7 +574,7 @@ func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
 	logger := logrus.New()
 
 	// Config with open default rule
-	yamlFilePath := path.Join("testdata", "contains_invalid_glob_default.yaml")
+	yamlFilePath := path.Join("testdata", "acl_contains_invalid_glob_default.yaml")
 	yl := NewYAMLLoader(yamlFilePath)
 
 	// Attempt to load the ACL with "open" policy disabled

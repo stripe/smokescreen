@@ -345,7 +345,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 	// This generates all the permutations for the common test cases
 	// * proxy requests using CONNECT and regular HTTP proxy
 	// * TLS and non-TLS proxy targets
-	// * hosts authorized and not authorized by the config in testdata/sample_config.yaml
+	// * hosts authorized and not authorized by the config in testdata/acl_sample_config.yaml
 	// * enforce, report, and open enforcement policies
 	for _, overConnect := range overConnectOptions {
 		for _, overTLS := range overTLSOptions {
@@ -669,7 +669,7 @@ func startSmokescreen(t *testing.T, useTLS bool, logHook logrus.Hook, httpProxyA
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
-		"--egress-acl-file=testdata/sample_config.yaml",
+		"--egress-acl-file=testdata/acl_sample_config.yaml",
 		"--additional-error-message-on-deny=additional_error_message_validation_key",
 		"--deny-range=1.1.1.1/32",
 		"--allow-range=127.0.0.1/32",
@@ -726,7 +726,7 @@ func startSmokescreenWithProxyProtocol(t *testing.T, logHook logrus.Hook) string
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
-		"--egress-acl-file=testdata/sample_config.yaml",
+		"--egress-acl-file=testdata/acl_sample_config.yaml",
 		"--allow-range=127.0.0.1/32",
 		"--proxy-protocol",
 	}
