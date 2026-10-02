@@ -29,7 +29,7 @@ func TestPrometheusMetricsEndpoint(t *testing.T) {
 	args := []string{
 		"smokescreen",
 		"--listen-ip=127.0.0.1",
-		"--egress-acl-file=testdata/sample_config.yaml",
+		"--egress-acl-file=testdata/acl_sample_config.yaml",
 		"--expose-prometheus-metrics",
 		fmt.Sprintf("--prometheus-endpoint=%s", endpoint),
 		"--prometheus-listen-ip=127.0.0.1",
