@@ -10,7 +10,8 @@ import (
 )
 
 // This default implementation of RoleFromRequest uses the CommonName of the
-// client's certificate.  If no certificate is provided, the AllowMissingRole
+// client's certificate. When a client CA is configured, TLS requires a client
+// certificate. Otherwise, if no certificate is provided, the AllowMissingRole
 // configuration option will control whether the request is rejected, or the
 // default ACL is applied.
 func defaultRoleFromRequest(req *http.Request) (string, error) {
