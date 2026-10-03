@@ -186,3 +186,18 @@ default:
 	require.NotNil(t, conf)
 	require.NotNil(t, conf.EgressACL)
 }
+
+func TestIPFilterBypassedDomainsConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("unsafe_ip_filter_bypassed_domains: [yaml.example.com]"), 0600))
+	config, err := NewConfiguration([]string{"smokescreen", "--config-file=" + path}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"yaml.example.com"}, config.UnsafeIPFilterBypassedDomains)
+	config, err = NewConfiguration([]string{"smokescreen", "--config-file=" + path, "--unsafe-ip-filter-bypassed-domain=cli.example.com", "--unsafe-ip-filter-bypassed-domain=*.internal.example.com"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cli.example.com", "*.internal.example.com"}, config.UnsafeIPFilterBypassedDomains)
+	for _, invalid := range []string{"*", "127.0.0.1", "*.127.0.0.1", "Example.com", "example.com:80"} {
+		_, err := NewConfiguration([]string{"smokescreen", "--unsafe-ip-filter-bypassed-domain=" + invalid}, nil)
+		require.Error(t, err, invalid)
+	}
+}

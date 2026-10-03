@@ -308,6 +308,25 @@ func addrIsLocalIp(config *Config, addr *net.TCPAddr) bool {
 	return false
 }
 
+func bypassIPFiltersForHost(config *Config, host string) bool {
+	if net.ParseIP(host) != nil {
+		return false
+	}
+	for _, domain := range config.UnsafeIPFilterBypassedDomains {
+		if acl.HostMatchesGlob(host, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+func classifyAddrWithIPFilterBypass(config *Config, addr *net.TCPAddr, bypass bool) ipType {
+	if bypass && (config.AllowSelfConnections || !addrIsLocalIp(config, addr)) {
+		return ipAllowUserConfigured
+	}
+	return classifyAddr(config, addr)
+}
+
 func classifyAddr(config *Config, addr *net.TCPAddr) ipType {
 
 	if !config.AllowSelfConnections && addrIsLocalIp(config, addr) {
@@ -368,7 +387,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	}
 
 	// Select the best IP using prioritization logic
-	selectedAddr, err := selectTargetAddr(config, ips, resolvedPort)
+	selectedAddr, err := selectTargetAddrWithIPFilterBypass(config, ips, resolvedPort, bypassIPFiltersForHost(config, host))
 	if err != nil {
 		return nil, err
 	}
@@ -413,6 +432,10 @@ func selectFallbackAddr(config *Config, fallbackTargets []*net.TCPAddr) *net.TCP
 // If no preferred addresses are available, it falls back to temporarily deferred addresses.
 // Returns an error if no valid addresses are found.
 func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, error) {
+	return selectTargetAddrWithIPFilterBypass(config, ips, port, false)
+}
+
+func selectTargetAddrWithIPFilterBypass(config *Config, ips []net.IP, port int, bypass bool) (*net.TCPAddr, error) {
 	var fallbackTargets []*net.TCPAddr
 	var denialReasons []string
 
@@ -423,9 +446,9 @@ func selectTargetAddr(config *Config, ips []net.IP, port int) (*net.TCPAddr, err
 			Port: port,
 		}
 
-		classification := classifyAddr(config, targetAddr)
+		classification := classifyAddrWithIPFilterBypass(config, targetAddr, bypass)
 		if classification.IsAllowed() {
-			if len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
+			if !bypass && len(config.TemporarilyDeferredIPs) > 0 && addrIsTemporarilyDeferred(config.TemporarilyDeferredIPs, targetAddr) {
 				// IP is allowed but temporarily deferred, save for fallback
 				config.Log.WithFields(logrus.Fields{
 					"ip":     targetAddr.IP.String(),
@@ -470,7 +493,8 @@ func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, er
 	config.MetricsClient.Timing("resolver.lookup_time", resolveDuration, 0.5)
 
 	// The classification is already done in resolveTCPAddr, so we just need to log it
-	classification := classifyAddr(config, resolved)
+	host, _, _ := net.SplitHostPort(addr)
+	classification := classifyAddrWithIPFilterBypass(config, resolved, bypassIPFiltersForHost(config, host))
 	config.MetricsClient.Incr(classification.statsdString(), 1)
 
 	return resolved, classification.String(), nil

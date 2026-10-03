@@ -264,3 +264,30 @@ See [Development.md](Development.md)
 - Marc-André Tremblay
 - Ryan Koppenhaver
 - Harold Simpson
+
+### Hostname-specific IP filter exceptions
+
+Use the repeatable `--unsafe-ip-filter-bypassed-domain` flag, or the main
+configuration setting below, to bypass IP filtering for trusted destination
+hostnames:
+
+```yaml
+unsafe_ip_filter_bypassed_domains:
+  - login.internal.example.com
+  - "*.internal.example.com"
+```
+
+These entries do not grant access: existing egress ACL rules still authorize the
+hostname for the requesting role. Matching destinations bypass both default IP
+restrictions (including private, loopback, link-local, CGNAT, and IPv6 embedding
+ranges) and explicit `deny_ranges` / `deny_addresses`, as well as temporary IP deferral. Self-connection protection
+still applies unless `allow_self_connections` is enabled. Only configure domains
+whose DNS you trust: their DNS controller can direct requests to otherwise blocked
+addresses, including internal services.
+
+Entries use existing ACL domain glob semantics; `*.example.com` matches subdomains,
+not the apex. IP literals and catch-all wildcards are rejected. Exceptions apply
+to the hostname being resolved, including independently resolved upstream proxies;
+a destination exception does not transfer to another hostname. An explicit CLI
+list replaces the configuration-file list. This setting belongs in the main
+configuration, not the egress ACL file.

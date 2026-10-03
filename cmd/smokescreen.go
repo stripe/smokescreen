@@ -72,6 +72,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Add `RANGE`(in CIDR notation) to list of blocked IP ranges.  Repeatable.",
 		},
 		&cli.StringSliceFlag{
+			Name:  "unsafe-ip-filter-bypassed-domain",
+			Usage: "Bypass IP filters for destination hostname or *.domain glob; ACL and self-connection checks still apply. Trust this domain's DNS. Repeatable.",
+		},
+		&cli.StringSliceFlag{
 			Name:  "allow-range",
 			Usage: "Add `RANGE` (in CIDR notation) to list of allowed IP ranges.  Repeatable.",
 		},
@@ -251,6 +255,12 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if c.IsSet("deny-range") {
 			if err := conf.SetDenyRanges(c.StringSlice("deny-range")); err != nil {
+				return err
+			}
+		}
+
+		if c.IsSet("unsafe-ip-filter-bypassed-domain") {
+			if err := conf.SetUnsafeIPFilterBypassedDomains(c.StringSlice("unsafe-ip-filter-bypassed-domain")); err != nil {
 				return err
 			}
 		}
