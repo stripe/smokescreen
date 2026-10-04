@@ -154,7 +154,7 @@ func TestClassifyAddr(t *testing.T) {
 			Port: test.port,
 		}
 
-		got := classifyAddr(conf, &localAddr)
+		got := classifyAddr(conf, &localAddr, "")
 		if got != test.expected {
 			t.Errorf("Misclassified IP (%s:%d): should be %s, but is instead %s.", localIP, test.port, test.expected, got)
 		}
@@ -218,11 +218,60 @@ func TestClassifyAddrAllowSelfConnections(t *testing.T) {
 					if mode.allowSelfConnections {
 						want = tt.wantWithoutGuard
 					}
-					assert.Equal(t, want, classifyAddr(config, addr))
+					assert.Equal(t, want, classifyAddr(config, addr, ""))
 				})
 			}
 		})
 	}
+}
+
+func TestClassifyAddrIPFilterBypassedDomains(t *testing.T) {
+	addresses := []struct {
+		name string
+		ip   string
+		port int
+		want ipType
+	}{
+		{"private IPv4", "10.0.0.1", 443, ipDenyPrivateRange},
+		{"private IPv6", "fd00::1", 443, ipDenyPrivateRange},
+		{"loopback IPv4", "127.0.0.2", 443, ipDenyNotGlobalUnicast},
+		{"loopback IPv6", "::1", 443, ipDenyNotGlobalUnicast},
+		{"link-local IPv4", "169.254.169.254", 443, ipDenyNotGlobalUnicast},
+		{"link-local IPv6", "fe80::1", 443, ipDenyNotGlobalUnicast},
+		{"CGNAT", "100.64.0.1", 443, ipDenyCGNAT},
+		{"NAT64", "64:ff9b::a00:1", 443, ipDenyIPv6Embedding},
+		{"6to4", "2002:a00:1::1", 443, ipDenyIPv6Embedding},
+		{"Teredo", "2001:0::1", 443, ipDenyIPv6Embedding},
+		{"explicit deny range", "192.0.2.1", 443, ipDenyUserConfigured},
+		{"explicit deny address", "198.51.100.1", 443, ipDenyUserConfigured},
+	}
+	config := NewConfig()
+	require.NoError(t, config.SetIPFilterBypassedDomains([]string{"login.internal.example.com"}))
+	require.NoError(t, config.SetDenyRanges([]string{"192.0.2.0/24"}))
+	require.NoError(t, config.SetDenyAddresses([]string{"198.51.100.1:443"}))
+	for _, address := range addresses {
+		t.Run(address.name, func(t *testing.T) {
+			addr := &net.TCPAddr{IP: net.ParseIP(address.ip), Port: address.port}
+			require.NotNil(t, addr.IP)
+			assert.Equal(t, address.want, classifyAddr(config, addr, "other.example.com"))
+			assert.Equal(t, ipAllowUserConfigured, classifyAddr(config, addr, "login.internal.example.com"))
+		})
+	}
+
+	t.Run("self-connection protection takes precedence", func(t *testing.T) {
+		config := NewConfig()
+		require.NoError(t, config.SetIPFilterBypassedDomains([]string{"login.internal.example.com"}))
+		for _, ip := range []string{"10.0.0.1", "fd00::1"} {
+			t.Run(ip, func(t *testing.T) {
+				addr := &net.TCPAddr{IP: net.ParseIP(ip), Port: 443}
+				config.LocalIPs = []net.IP{addr.IP}
+				config.AllowSelfConnections = false
+				assert.Equal(t, ipDenySelfConnection, classifyAddr(config, addr, "login.internal.example.com"))
+				config.AllowSelfConnections = true
+				assert.Equal(t, ipAllowUserConfigured, classifyAddr(config, addr, "login.internal.example.com"))
+			})
+		}
+	})
 }
 
 func TestInitializeSelfConnectionDetection(t *testing.T) {
@@ -424,7 +473,7 @@ func TestSelectTargetAddr(t *testing.T) {
 			}
 
 			// Test the function
-			selectedAddr, err := selectTargetAddr(config, ips, tt.port)
+			selectedAddr, err := selectTargetAddr(config, ips, tt.port, "")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -454,7 +503,7 @@ func TestSelectTargetAddrFallbackPriority(t *testing.T) {
 	// All IPs are deferred, should select based on priority in deferred list
 	ips := []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")}
 
-	selectedAddr, err := selectTargetAddr(config, ips, 80)
+	selectedAddr, err := selectTargetAddr(config, ips, 80, "")
 
 	require.NoError(t, err)
 	// Should select 8.8.4.4 because it's first in the TemporarilyDeferredIPs list
@@ -525,7 +574,7 @@ func TestUnsafeAllowPrivateRanges(t *testing.T) {
 			Port: test.port,
 		}
 
-		got := classifyAddr(conf, &localAddr)
+		got := classifyAddr(conf, &localAddr, "")
 		if got != test.expected {
 			t.Errorf("Misclassified IP (%s): should be %s, but is instead %s.", localIP, test.expected, got)
 		}

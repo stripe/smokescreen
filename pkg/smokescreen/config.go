@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -96,6 +97,9 @@ type Config struct {
 	ConnTracker                  conntrack.TrackerInterface
 	Healthcheck                  http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown                 atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
+
+	// IPFilterBypassedDomains bypass IP filters, but not ACLs or self-connection protection.
+	IPFilterBypassedDomains []string
 
 	// Network type to use when performing DNS lookups. Must be one of "ip", "ip4" or "ip6".
 	Network string
@@ -688,7 +692,30 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 	return nil
 }
 
+func (config *Config) SetIPFilterBypassedDomains(domains []string) error {
+	if err := validateIPFilterBypassedDomains(domains); err != nil {
+		return err
+	}
+	config.IPFilterBypassedDomains = append([]string(nil), domains...)
+	return nil
+}
+
+func validateIPFilterBypassedDomains(domains []string) error {
+	for _, domain := range domains {
+		if err := acl.ValidateDomainGlob("unsafe_ip_filter_bypassed_domains", domain); err != nil {
+			return err
+		}
+		if net.ParseIP(strings.TrimPrefix(domain, "*.")) != nil {
+			return fmt.Errorf("unsafe_ip_filter_bypassed_domains must contain hostnames, not IP addresses: %q", domain)
+		}
+	}
+	return nil
+}
+
 func (config *Config) Validate() error {
+	if err := validateIPFilterBypassedDomains(config.IPFilterBypassedDomains); err != nil {
+		return err
+	}
 	if config.RejectResponseHandler != nil && config.RejectResponseHandlerWithCtx != nil {
 		return errors.New("RejectResponseHandler and RejectResponseHandlerWithCtx cannot be used together")
 	}

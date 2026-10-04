@@ -24,20 +24,21 @@ type yamlConfigTls struct {
 // Port and ExitTimeout use a pointer so we can distinguish unset vs explicit
 // zero, to avoid overriding a non-zero default when the value is not set.
 type yamlConfig struct {
-	Ip                   string
-	Port                 *uint16
-	DenyRanges           []string `yaml:"deny_ranges"`
-	AllowRanges          []string `yaml:"allow_ranges"`
-	DenyAddresses        []string `yaml:"deny_addresses"`
-	AllowAddresses       []string `yaml:"allow_addresses"`
-	Resolvers            []string `yaml:"resolver_addresses"`
-	StatsdAddress        string   `yaml:"statsd_address"`
-	EgressAclFile        string   `yaml:"acl_file"`
-	SupportProxyProtocol bool     `yaml:"support_proxy_protocol"`
-	AllowSelfConnections bool     `yaml:"allow_self_connections"`
-	DenyMessageExtra     string   `yaml:"deny_message_extra"`
-	AllowMissingRole     bool     `yaml:"allow_missing_role"`
-	Network              string   `yaml:"network"`
+	Ip                      string
+	Port                    *uint16
+	DenyRanges              []string `yaml:"deny_ranges"`
+	AllowRanges             []string `yaml:"allow_ranges"`
+	DenyAddresses           []string `yaml:"deny_addresses"`
+	AllowAddresses          []string `yaml:"allow_addresses"`
+	IPFilterBypassedDomains []string `yaml:"unsafe_ip_filter_bypassed_domains"`
+	Resolvers               []string `yaml:"resolver_addresses"`
+	StatsdAddress           string   `yaml:"statsd_address"`
+	EgressAclFile           string   `yaml:"acl_file"`
+	SupportProxyProtocol    bool     `yaml:"support_proxy_protocol"`
+	AllowSelfConnections    bool     `yaml:"allow_self_connections"`
+	DenyMessageExtra        string   `yaml:"deny_message_extra"`
+	AllowMissingRole        bool     `yaml:"allow_missing_role"`
+	Network                 string   `yaml:"network"`
 
 	ConnectTimeout *time.Duration `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
@@ -83,6 +84,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
+	if err := c.SetIPFilterBypassedDomains(yc.IPFilterBypassedDomains); err != nil {
+		return err
+	}
 	c.Ip = yc.Ip
 
 	if yc.Port != nil {
