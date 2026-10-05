@@ -244,7 +244,7 @@ func (acl *ACL) Validate() error {
 
 	// Validate global deny list
 	for _, d := range acl.GlobalDenyList {
-		err := acl.ValidateDomainGlob("global_deny_list", d)
+		err := ValidateDomainGlob("global_deny_list", d)
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,7 @@ func (acl *ACL) Validate() error {
 
 	// Validate global allow list
 	for _, d := range acl.GlobalAllowList {
-		err := acl.ValidateDomainGlob("global_allow_list", d)
+		err := ValidateDomainGlob("global_allow_list", d)
 		if err != nil {
 			return err
 		}
@@ -264,13 +264,13 @@ func (acl *ACL) Validate() error {
 func (acl *ACL) ValidateRule(svc string, r Rule) error {
 	var err error
 	for _, d := range r.DomainGlobs {
-		err = acl.ValidateDomainGlob(svc, d)
+		err = ValidateDomainGlob(svc, d)
 		if err != nil {
 			return err
 		}
 	}
 	for _, d := range r.MitmDomains {
-		err = acl.ValidateDomainGlob(svc, d.Domain)
+		err = ValidateDomainGlob(svc, d.Domain)
 		if err != nil {
 			return err
 		}
@@ -282,12 +282,16 @@ func (acl *ACL) ValidateRule(svc string, r Rule) error {
 	}
 	// Validate external proxy globs
 	for _, d := range r.ExternalProxyGlobs {
-		err = acl.ValidateDomainGlob(svc, d)
+		err = ValidateDomainGlob(svc, d)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (*ACL) ValidateDomainGlob(svc string, glob string) error {
+	return ValidateDomainGlob(svc, glob)
 }
 
 // ValidateDomainGlob takes a domain glob and verifies they conform to smokescreen's
@@ -296,8 +300,8 @@ func (acl *ACL) ValidateRule(svc string, r Rule) error {
 // Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
 // pattern is allowed. Globs must include text after a wildcard.
 //
-// Domains must use their normalized form (e.g., Punycode)
-func (*ACL) ValidateDomainGlob(svc string, glob string) error {
+// Domains must use their normalized form (e.g., Punycode).
+func ValidateDomainGlob(svc string, glob string) error {
 	if glob == "" {
 		return fmt.Errorf("glob cannot be empty")
 	}

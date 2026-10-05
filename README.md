@@ -4,11 +4,11 @@ Smokescreen is a HTTP CONNECT proxy. It proxies most traffic from Stripe to the
 external world (e.g., webhooks).
 
 Smokescreen restricts which URLs it connects to:
-- It uses a pre-configured hostname ACL to only allow requests addressed to certain allow-listed hostnames, 
+- It uses a pre-configured hostname ACL to only allow requests addressed to certain allow-listed hostnames,
 to ensure that no malicious code is attempting to make requests to unexpected services.
-- It also resolves each domain name that is requested, and ensures that it is a publicly routable 
-IP address and not an internal IP address. This prevents a class of attacks where, for instance, 
-our own webhooks infrastructure is used to scan Stripe’s internal network. Smokescreen 
+- It also resolves each domain name that is requested, and ensures that it is a publicly routable
+IP address and not an internal IP address. This prevents a class of attacks where, for instance,
+our own webhooks infrastructure is used to scan Stripe’s internal network. Smokescreen
 can also be further configured to allow or deny specific IP addresses or ranges.
 
 Smokescreen also allows us to centralize egress from Stripe, allowing us to give
@@ -152,7 +152,7 @@ func main() {
 ```
 ### IP Filtering
 
-To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config. 
+To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config.
 
 Smokescreen denies connections to addresses in `Config.LocalIPs` on every port
 by default, even if an address is explicitly allowed. `StartWithConfig` populates
@@ -169,6 +169,18 @@ allow_self_connections: true  # defaults to false
 With this setting enabled, connections to the proxy host on all ports, including
 Smokescreen's listening port, follow normal IP and hostname ACL checks and may be
 allowed.
+
+Use the repeatable `--unsafe-ip-filter-bypassed-domain` flag, or the main
+configuration setting below, to bypass IP filtering for trusted destination
+hostnames:
+
+```yaml
+unsafe_ip_filter_bypassed_domains:
+  - login.internal.example.com
+  - "*.internal.example.com"
+```
+
+This does not bypass ACL checks and doesn't allow self-connections unless `allow_self_connections` is also true.
 
 ### Rate Limiting
 
