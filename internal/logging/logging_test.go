@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stripe/smokescreen/internal/testlog"
+	"github.com/stripe/smokescreen/v2/internal/testlog"
 )
 
 func TestJSONTimestampPrecision(t *testing.T) {

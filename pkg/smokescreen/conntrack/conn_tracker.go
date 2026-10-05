@@ -9,7 +9,7 @@ import (
 	"time"
 
 	cache "github.com/patrickmn/go-cache"
-	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 	"golang.org/x/net/publicsuffix"
 )
 

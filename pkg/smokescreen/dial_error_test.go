@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
-	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
-	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
 
 // Embed the real tracker to retain connection wrapping, and record attempt calls.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/stripe/smokescreen/pkg/smokescreen"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
 )
 
 func main() {

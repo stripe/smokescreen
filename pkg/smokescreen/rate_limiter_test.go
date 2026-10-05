@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
 
 func TestRateLimiter(t *testing.T) {
