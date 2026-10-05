@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stripe/smokescreen/internal/testlog"
+	"github.com/stripe/smokescreen/v2/internal/testlog"
 )
 
 func TestCallerRedactionWithReplaceAttr(t *testing.T) {

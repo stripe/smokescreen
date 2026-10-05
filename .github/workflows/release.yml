@@ -66,7 +66,7 @@ jobs:
             mkdir "${DIST}/${name}"
             GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "${DIST}/${name}/smokescreen" .
             # The version comes from Go's VCS stamping; refuse to ship a binary that does not report the tag.
-            go version -m "${DIST}/${name}/smokescreen" | grep -qE "^[[:space:]]+mod[[:space:]]+github.com/stripe/smokescreen[[:space:]]+${TAG}([[:space:]]|$)"
+            go version -m "${DIST}/${name}/smokescreen" | grep -qE "^[[:space:]]+mod[[:space:]]+github.com/stripe/smokescreen/v2[[:space:]]+${TAG}([[:space:]]|$)"
             cp LICENSE.txt README.md "${DIST}/${name}/"
             tar -C "$DIST" -czf "${DIST}/${name}.tar.gz" "${name}"
             rm -r "${DIST:?}/${name}"

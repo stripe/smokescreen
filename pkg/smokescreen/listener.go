@@ -4,7 +4,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/stripe/smokescreen/internal/einhorn"
+	"github.com/stripe/smokescreen/v2/internal/einhorn"
 )
 
 // einhornListener is a net.Listener that will send an ACK to the einhorn

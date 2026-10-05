@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/stripe/goproxy"
-	"github.com/stripe/smokescreen/internal/logging"
-	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
-	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
-	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"github.com/stripe/smokescreen/v2/internal/logging"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
 
 // Configuration defaults

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/stripe/goproxy"
-	"github.com/stripe/smokescreen/internal/logging"
+	"github.com/stripe/smokescreen/v2/internal/logging"
 	"go.yaml.in/yaml/v3"
 )
 

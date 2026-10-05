@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/stripe/smokescreen/internal/logging"
-	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
+	"github.com/stripe/smokescreen/v2/internal/logging"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/hostport"
 )
 
 // DecideArgs holds the arguments for an ACL decision. Using a struct keeps the
