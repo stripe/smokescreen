@@ -109,3 +109,35 @@ func TestFatalConfigExit(t *testing.T) {
 	require.Equal(t, 1, exit.ExitCode())
 	require.Contains(t, string(out), "invalid config")
 }
+
+func TestLogAttrsIncludesBoundAndDialAttrs(t *testing.T) {
+	var out bytes.Buffer
+	cfg := NewConfig()
+	cfg.Log = slog.New(slog.NewJSONHandler(&out, nil))
+	pctx := canonicalFixture(cfg)
+	sctx := pctx.UserData.(*SmokescreenContext)
+	sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
+	sctx.dialAttrs = []slog.Attr{slog.Int64(LogFieldConnEstablishMS, 7)}
+
+	got := map[string]slog.Value{}
+	for _, attr := range sctx.LogAttrs() {
+		got[attr.Key] = attr.Value
+	}
+	require.Equal(t, "client-trace", got[LogFieldTraceID].String())
+	require.Equal(t, "service", got[LogFieldRole].String())
+	require.Equal(t, "project", got[LogFieldProject].String())
+	require.Equal(t, int64(7), got[LogFieldConnEstablishMS].Int64())
+	require.NotEmpty(t, got[LogFieldID].String())
+
+	// The accessor mirrors what Logger itself attaches.
+	sctx.Logger.Info("probe")
+	var record map[string]interface{}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &record))
+	require.Equal(t, "service", record[LogFieldRole])
+	require.Equal(t, "client-trace", record[LogFieldTraceID])
+
+	// Callers get a copy.
+	attrs := sctx.LogAttrs()
+	attrs[0] = slog.String("mutated", "x")
+	require.NotEqual(t, "mutated", sctx.LogAttrs()[0].Key)
+}
