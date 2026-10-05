@@ -638,7 +638,7 @@ func (config *Config) SetupTls(certFile, keyFile string, clientCAFiles []string)
 	clientCAs := x509.NewCertPool()
 
 	if len(clientCAFiles) != 0 {
-		clientAuth = tls.RequireAndVerifyClientCert
+		clientAuth = tls.VerifyClientCertIfGiven
 		for _, caFile := range clientCAFiles {
 			err = addCertsFromFile(config, clientCAs, caFile)
 			if err != nil {
