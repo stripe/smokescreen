@@ -61,6 +61,7 @@ func TestURL(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
+	//lint:ignore SA1007 the fixture must fail to parse so redaction of parse errors is exercised
 	_, parseErr := url.Parse("https://alice:sec/ret@proxy.example")
 	if parseErr == nil {
 		t.Fatal("fixture must produce a URL parse error")
