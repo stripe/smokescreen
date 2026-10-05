@@ -60,6 +60,7 @@ func TestCallerRedactionWithReplaceAttr(t *testing.T) {
 }
 
 func TestURLDiagnosticsBeforeCallerHandler(t *testing.T) {
+	//lint:ignore SA1007 the fixture must fail to parse so redaction of parse errors is exercised
 	_, parseErr := url.Parse("https://alice:sec/ret@proxy.example")
 	require.Error(t, parseErr)
 	transportErr := &url.Error{
