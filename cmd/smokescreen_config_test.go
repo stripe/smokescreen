@@ -186,3 +186,40 @@ default:
 	require.NotNil(t, conf)
 	require.NotNil(t, conf.EgressACL)
 }
+
+func TestNewConfigurationMostSpecificIPRules(t *testing.T) {
+	for _, tt := range []struct {
+		name, yaml string
+		flags      []string
+		want       bool
+		invalid    bool
+	}{
+		{name: "default"},
+		{name: "omitted YAML", yaml: "{}"},
+		{name: "enabled YAML", yaml: "most_specific_ip_rules: true", want: true},
+		{name: "disabled YAML", yaml: "most_specific_ip_rules: false"},
+		{name: "enabled CLI", flags: []string{"--most-specific-ip-rules"}, want: true},
+		{name: "disabled CLI", flags: []string{"--most-specific-ip-rules=false"}},
+		{name: "CLI disables YAML", yaml: "most_specific_ip_rules: true", flags: []string{"--most-specific-ip-rules=false"}},
+		{name: "CLI enables YAML", yaml: "most_specific_ip_rules: false", flags: []string{"--most-specific-ip-rules"}, want: true},
+		{name: "invalid YAML", yaml: "most_specific_ip_rules: typo", invalid: true},
+		{name: "invalid CLI", flags: []string{"--most-specific-ip-rules=typo"}, invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"smokescreen"}
+			if tt.yaml != "" {
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, []byte(tt.yaml), 0600))
+				args = append(args, "--config-file="+path)
+			}
+			args = append(args, tt.flags...)
+			config, err := NewConfiguration(args, nil)
+			if tt.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, config.MostSpecificIPRules)
+			}
+		})
+	}
+}

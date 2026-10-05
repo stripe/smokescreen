@@ -324,6 +324,9 @@ func classifyAddr(config *Config, addr *net.TCPAddr, host string) ipType {
 	if bypassIPFiltersForHost(config, host) {
 		return ipAllowUserConfigured
 	}
+	if config.MostSpecificIPRules {
+		return mostSpecificIPPolicy{}.classify(config, addr)
+	}
 	return allowFirstIPPolicy{}.classify(config, addr)
 }
 
