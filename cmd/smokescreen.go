@@ -12,8 +12,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/stripe/smokescreen/pkg/smokescreen"
-	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 )
 
 // Process command line args into a configuration object.  If the "--help" or

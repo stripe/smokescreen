@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/stripe/smokescreen/cmd"
-	"github.com/stripe/smokescreen/internal/logging"
-	"github.com/stripe/smokescreen/pkg/smokescreen"
+	"github.com/stripe/smokescreen/v2/cmd"
+	"github.com/stripe/smokescreen/v2/internal/logging"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
 )
 
 // This default implementation of RoleFromRequest uses the CommonName of the

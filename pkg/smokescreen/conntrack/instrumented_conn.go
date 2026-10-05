@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stripe/smokescreen/internal/logging"
-	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
+	"github.com/stripe/smokescreen/v2/internal/logging"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
 
 const (

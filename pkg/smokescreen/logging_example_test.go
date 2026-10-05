@@ -11,9 +11,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/stripe/smokescreen/pkg/smokescreen"
-	acl "github.com/stripe/smokescreen/pkg/smokescreen/acl/v1"
-	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 )
 
 func ExampleConfig_Log() {
