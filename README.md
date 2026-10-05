@@ -227,7 +227,7 @@ A host can be specified with or without a globbing prefix. The host (without the
 | `éxämple.com`       | no      |
 | `example.*`         | hell no |
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config.yaml) is a sample ACL.
+[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/acl_sample_config.yaml) is a sample ACL.
 
 #### Global Hostname Allow/Deny Lists
 
@@ -244,7 +244,7 @@ However, if the host specifies `malicious.com` in its `allowed_domains`, traffic
 
 If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/sample_config_with_global.yaml) is a sample ACL specifying these options.
+[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/acl_sample_config_with_global.yaml) is a sample ACL specifying these options.
 
 # Development and Testing
 
