@@ -1,4 +1,4 @@
-module github.com/stripe/smokescreen
+module github.com/stripe/smokescreen/v2
 
 go 1.26.0
 
