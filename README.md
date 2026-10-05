@@ -84,6 +84,7 @@ Here are the options you can give Smokescreen:
    --allow-address value                       Add IP[:PORT] to list of allowed IPs.  Repeatable.
    --egress-acl-file FILE                      Validate egress traffic against FILE
    --expose-prometheus-metrics                 Exposes metrics via a Prometheus scrapable endpoint.
+   --prometheus-metrics-format FORMAT          Metric format: legacy, dual, or v2. (default: "legacy")
    --prometheus-endpoint ENDPOINT              Specify endpoint to host Prometheus metrics on. (default: "/metrics")
                                                  Requires `--expose-prometheus-metrics` to be set.
    --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default "9810")
@@ -108,6 +109,21 @@ Here are the options you can give Smokescreen:
    --dns-timeout DURATION                      Maximum time to wait for DNS resolution (default: 5s)
    --version, -v                               print the version
 ```
+
+### Prometheus metrics
+
+Enable scraping with `--expose-prometheus-metrics`. Select the format with
+`--prometheus-metrics-format=legacy|dual|v2`:
+
+- `legacy` (default) preserves existing names, units, and histogram buckets.
+- `v2` uses the `smokescreen_` prefix, seconds for timings, and appropriate byte
+  and connection-duration buckets. See the
+  [metric definitions](pkg/smokescreen/metrics/metric_definitions.go) for mappings.
+- `dual` publishes both formats so you can deploy first and migrate your observability
+  stack later.
+
+Embedded users can pass `"dual"` or `"v2"` as the optional final argument to `SetupPrometheus` or
+`NewPrometheusMetricsClient`.
 
 ### Client Identification
 

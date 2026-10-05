@@ -8,43 +8,14 @@ import (
 	"time"
 )
 
-// metrics contains all of the metric names contained within the smokescreen package.
-// These are used to determine if a given metric name is valid before associating
-// a persistent tag with the metric. This list must be updated with new metric names
-// if the metric should support persistent tagging.
-var metrics = []string{
-	// ACL decision statistics
-	"acl.allow",
-	"acl.decide_error",
-	"acl.deny",
-	"acl.report",
-	"acl.role_not_determined",
-	"acl.unknown_error",
-
-	// Connection statistics (cn.atpt == connection attempt)
-	"cn.atpt.total",            // Total connection attempts, tagged by success
-	"cn.atpt.connect.err",      // Connection failures, tagged by failure type
-	"cn.atpt.connect.time",     // Connect time in ms
-	"cn.close",                 // Number of times open/idle connections were closed
-	"cn.duration",              // Connection duration in seconds
-	"cn.bytes_in",              // Total bytes received
-	"cn.bytes_out",             // Total bytes sent
-	"cn.active_at_termination", // Number of open connections at shutdown
-
-	// The following are only emitted if Smokescreen is configured to use a ConnSuccessRateTracker.
-	"cn.atpt.distinct_domains",              // Number of distinct domains seen by ConnSuccessRateTracker in computation window
-	"cn.atpt.distinct_domains_success_rate", // Domain connection success rate computed by ConnSuccessRateTracker
-
-	// DNS resolution statistics
-	"resolver.allow.default",
-	"resolver.allow.user_configured",
-	"resolver.attempts_total",
-	"resolver.deny.not_global_unicast",
-	"resolver.deny.private_range",
-	"resolver.deny.user_configured",
-	"resolver.lookup_time", // DNS lookup time in ms, not tagged
-	"resolver.errors_total",
-}
+// metrics contains the internal metric names eligible for persistent tags.
+var metrics = func() []string {
+	names := make([]string, 0, len(prometheusDefinitions))
+	for name := range prometheusDefinitions {
+		names = append(names, name)
+	}
+	return names
+}()
 
 type MetricsClientInterface interface {
 	AddMetricTags(string, map[string]string) error

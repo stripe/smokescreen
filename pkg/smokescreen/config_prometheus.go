@@ -4,8 +4,8 @@ package smokescreen
 
 import "github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 
-func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr string) error {
-	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port, listenAddr)
+func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr string, formats ...string) error {
+	metricsClient, err := metrics.NewPrometheusMetricsClient(endpoint, port, listenAddr, formats...)
 	if err != nil {
 		return err
 	}
