@@ -18,6 +18,7 @@ import (
 // PrometheusMetricsClient attempts to replicate the functionality of the StatsdMetricsClient, but exposing
 // the metrics via a http endpoint
 type PrometheusMetricsClient struct {
+	format      string
 	endpoint    string
 	metricsTags map[string]map[string]string
 	mu          sync.RWMutex
@@ -29,7 +30,19 @@ type PrometheusMetricsClient struct {
 	timings    map[string]prometheus.HistogramVec
 }
 
-func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string) (*PrometheusMetricsClient, error) {
+// NewPrometheusMetricsClient exposes legacy metrics by default. An optional
+// format argument selects "legacy", "dual", or "v2" for the lifetime of the client.
+func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string, formats ...string) (*PrometheusMetricsClient, error) {
+	format := "legacy"
+	if len(formats) > 1 {
+		return nil, fmt.Errorf("expected at most one Prometheus metrics format")
+	}
+	if len(formats) == 1 {
+		format = formats[0]
+	}
+	if format != "legacy" && format != "dual" && format != "v2" {
+		return nil, fmt.Errorf("unknown Prometheus metrics format: %q", format)
+	}
 	mux := http.NewServeMux()
 	mux.Handle(endpoint, promhttp.Handler())
 	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), mux)
@@ -40,6 +53,7 @@ func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string)
 	}
 
 	return &PrometheusMetricsClient{
+		format:      format,
 		metricsTags: metricsTags,
 		endpoint:    endpoint,
 		counters:    map[string]prometheus.CounterVec{},
@@ -52,13 +66,12 @@ func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string)
 func (mc *PrometheusMetricsClient) AddMetricTags(
 	metric string,
 	additionalTags map[string]string) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
 	if mc.started.Load() != nil {
 		return fmt.Errorf("cannot add metrics tags after starting smokescreen")
 	}
-	if _, ok := mc.metricsTags[sanitisedMetric]; ok {
+	if _, ok := mc.metricsTags[metric]; ok {
 		for k, v := range additionalTags {
-			mc.metricsTags[sanitisedMetric][k] = v
+			mc.metricsTags[metric][k] = v
 		}
 		return nil
 	}
@@ -66,8 +79,7 @@ func (mc *PrometheusMetricsClient) AddMetricTags(
 }
 
 func (mc *PrometheusMetricsClient) GetMetricTags(metric string) map[string]string {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-	if tags, ok := mc.metricsTags[sanitisedMetric]; ok {
+	if tags, ok := mc.metricsTags[metric]; ok {
 		return tags
 	}
 	return nil
@@ -83,11 +95,11 @@ func (mc *PrometheusMetricsClient) IncrWithTags(
 	metric string,
 	additionalTags map[string]string,
 	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
+	baseTags := mc.GetMetricTags(metric)
 	mergeMaps(additionalTags, baseTags)
-	mc.incrementPrometheusCounter(sanitisedMetric, additionalTags)
+	for _, format := range mc.emissionFormats() {
+		mc.incrementPrometheusCounter(metric, additionalTags, format)
+	}
 
 	return nil
 }
@@ -96,10 +108,10 @@ func (mc *PrometheusMetricsClient) Gauge(
 	metric string,
 	value float64,
 	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
-	mc.updatePrometheusGauge(sanitisedMetric, value, baseTags)
+	baseTags := mc.GetMetricTags(metric)
+	for _, format := range mc.emissionFormats() {
+		mc.updatePrometheusGauge(metric, value, baseTags, format)
+	}
 
 	return nil
 }
@@ -116,11 +128,11 @@ func (mc *PrometheusMetricsClient) HistogramWithTags(
 	value float64,
 	additionalTags map[string]string,
 	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
+	baseTags := mc.GetMetricTags(metric)
 	mergeMaps(additionalTags, baseTags)
-	mc.observeValuePrometheusHistogram(sanitisedMetric, value, additionalTags)
+	for _, format := range mc.emissionFormats() {
+		mc.observeValuePrometheusHistogram(metric, value, additionalTags, format)
+	}
 
 	return nil
 }
@@ -137,11 +149,11 @@ func (mc *PrometheusMetricsClient) TimingWithTags(
 	d time.Duration,
 	additionalTags map[string]string,
 	_ float64) error {
-	sanitisedMetric := sanitisePrometheusMetricName(metric)
-
-	baseTags := mc.GetMetricTags(sanitisedMetric)
+	baseTags := mc.GetMetricTags(metric)
 	mergeMaps(additionalTags, baseTags)
-	mc.observeValuePrometheusTimer(sanitisedMetric, d, additionalTags)
+	for _, format := range mc.emissionFormats() {
+		mc.observeValuePrometheusTimer(metric, d, additionalTags, format)
+	}
 
 	return nil
 }
@@ -155,9 +167,11 @@ var _ MetricsClientInterface = &PrometheusMetricsClient{}
 
 func (mc *PrometheusMetricsClient) incrementPrometheusCounter(
 	metric string,
-	tags map[string]string) {
+	tags map[string]string,
+	format string) {
+	name := mc.metricName(metric, "counter", format)
 	mc.mu.RLock()
-	counter, ok := mc.counters[metric]
+	counter, ok := mc.counters[name]
 	mc.mu.RUnlock()
 
 	if ok {
@@ -167,11 +181,12 @@ func (mc *PrometheusMetricsClient) incrementPrometheusCounter(
 
 	mc.mu.Lock()
 	// double check just in case it was created between the RLock and Lock
-	if counter, ok = mc.counters[metric]; !ok {
+	if counter, ok = mc.counters[name]; !ok {
 		counter = *promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: metric,
+			Name: name,
+			Help: mc.metricHelp(metric, format),
 		}, mapKeys(tags))
-		mc.counters[metric] = counter
+		mc.counters[name] = counter
 	}
 	mc.mu.Unlock()
 
@@ -181,9 +196,11 @@ func (mc *PrometheusMetricsClient) incrementPrometheusCounter(
 func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 	metric string,
 	value float64,
-	tags map[string]string) {
+	tags map[string]string,
+	format string) {
+	name := mc.metricName(metric, "gauge", format)
 	mc.mu.RLock()
-	gauge, ok := mc.gauges[metric]
+	gauge, ok := mc.gauges[name]
 	mc.mu.RUnlock()
 
 	if ok {
@@ -193,11 +210,12 @@ func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 
 	mc.mu.Lock()
 	// double check just in case it was created between the RLock and Lock
-	if gauge, ok = mc.gauges[metric]; !ok {
+	if gauge, ok = mc.gauges[name]; !ok {
 		gauge = *promauto.NewGaugeVec(prometheus.GaugeOpts{
-			Name: metric,
+			Name: name,
+			Help: mc.metricHelp(metric, format),
 		}, mapKeys(tags))
-		mc.gauges[metric] = gauge
+		mc.gauges[name] = gauge
 	}
 	mc.mu.Unlock()
 
@@ -207,9 +225,11 @@ func (mc *PrometheusMetricsClient) updatePrometheusGauge(
 func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 	metric string,
 	value float64,
-	tags map[string]string) {
+	tags map[string]string,
+	format string) {
+	name := mc.metricName(metric, "histogram", format)
 	mc.mu.RLock()
-	histogram, ok := mc.histograms[metric]
+	histogram, ok := mc.histograms[name]
 	mc.mu.RUnlock()
 
 	if ok {
@@ -219,11 +239,13 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 
 	mc.mu.Lock()
 	// double check just in case it was created between the RLock and Lock
-	if histogram, ok = mc.histograms[metric]; !ok {
+	if histogram, ok = mc.histograms[name]; !ok {
 		histogram = *promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name: metric,
+			Name:    name,
+			Help:    mc.metricHelp(metric, format),
+			Buckets: mc.metricBuckets(metric, format),
 		}, mapKeys(tags))
-		mc.histograms[metric] = histogram
+		mc.histograms[name] = histogram
 	}
 	mc.mu.Unlock()
 
@@ -233,14 +255,15 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusHistogram(
 func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
 	metric string,
 	duration time.Duration,
-	tags map[string]string) {
-	timerMetric := metric + "_timer"
+	tags map[string]string,
+	format string) {
+	timerMetric := mc.metricName(metric, "timer", format)
 	mc.mu.RLock()
 	histogram, ok := mc.timings[timerMetric]
 	mc.mu.RUnlock()
 
 	if ok {
-		histogram.With(tags).Observe(float64(duration.Milliseconds()))
+		histogram.With(tags).Observe(mc.timerValue(duration, format))
 		return
 	}
 
@@ -248,13 +271,15 @@ func (mc *PrometheusMetricsClient) observeValuePrometheusTimer(
 	// double check just in case it was created between the RLock and Lock
 	if histogram, ok = mc.timings[timerMetric]; !ok {
 		histogram = *promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name: timerMetric,
+			Name:    timerMetric,
+			Help:    mc.metricHelp(metric, format),
+			Buckets: mc.metricBuckets(metric, format),
 		}, mapKeys(tags))
 		mc.timings[timerMetric] = histogram
 	}
 	mc.mu.Unlock()
 
-	histogram.With(tags).Observe(float64(duration.Milliseconds()))
+	histogram.With(tags).Observe(mc.timerValue(duration, format))
 }
 
 func mapKeys[T comparable, U any](inputMap map[T]U) []T {

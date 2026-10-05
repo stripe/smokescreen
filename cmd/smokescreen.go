@@ -92,6 +92,11 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Usage: "Expose metrics via prometheus.",
 		},
 		&cli.StringFlag{
+			Name:  "prometheus-metrics-format",
+			Value: "legacy",
+			Usage: "Prometheus metrics format: legacy, dual, or v2. Requires --expose-prometheus-metrics.",
+		},
+		&cli.StringFlag{
 			Name:  "prometheus-endpoint",
 			Value: smokescreen.DefaultPrometheusEndpoint,
 			Usage: "Expose prometheus metrics on `ENDPOINT`. Requires --expose-prometheus-metrics to be set.",
@@ -286,7 +291,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		}
 
 		if c.IsSet("expose-prometheus-metrics") {
-			if err := conf.SetupPrometheus(c.String("prometheus-endpoint"), c.String("prometheus-port"), c.String("prometheus-listen-ip")); err != nil {
+			if err := conf.SetupPrometheus(c.String("prometheus-endpoint"), c.String("prometheus-port"), c.String("prometheus-listen-ip"), c.String("prometheus-metrics-format")); err != nil {
 				return err
 			}
 		}
