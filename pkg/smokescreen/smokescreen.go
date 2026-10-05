@@ -88,8 +88,10 @@ type SmokescreenContext struct {
 	ProxyType     string
 	Logger        *slog.Logger
 	RequestedHost string
-	dialAttrs     []slog.Attr
-	statusCode    int
+	// logAttrs mirrors the attributes Smokescreen binds to Logger.
+	logAttrs   []slog.Attr
+	dialAttrs  []slog.Attr
+	statusCode int
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
@@ -102,6 +104,24 @@ type SmokescreenContext struct {
 	// tunnelSlotAcquired indicates whether a tunnel limiter slot was acquired for this connection.
 	// If true, the slot must be released when the connection closes.
 	tunnelSlotAcquired bool
+}
+
+// LogAttrs returns a copy of the request attributes Smokescreen attaches to
+// this context's records: those bound to Logger, followed by the latest dial
+// results once an upstream connection has been attempted.
+func (sctx *SmokescreenContext) LogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, len(sctx.logAttrs)+len(sctx.dialAttrs))
+	attrs = append(attrs, sctx.logAttrs...)
+	return append(attrs, sctx.dialAttrs...)
+}
+
+// withLogAttrs binds attrs to Logger for all future records.
+func (sctx *SmokescreenContext) withLogAttrs(attrs []slog.Attr) {
+	if len(attrs) == 0 {
+		return
+	}
+	sctx.logAttrs = append(sctx.logAttrs, attrs...)
+	sctx.Logger = slog.New(sctx.Logger.Handler().WithAttrs(attrs))
 }
 
 // diagnosticLogger snapshots changing fields without binding them to Logger.
@@ -726,7 +746,7 @@ func configureTransport(tr *http.Transport, cfg *Config) {
 func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenContext {
 	start := time.Now()
 
-	fields := []any{
+	fields := []slog.Attr{
 		slog.String(LogFieldID, xid.New().String()),
 		slog.String(LogFieldInRemoteAddr, req.RemoteAddr),
 		slog.String(LogFieldProxyType, proxyType),
@@ -744,15 +764,16 @@ func newContext(cfg *Config, proxyType string, req *http.Request) *SmokescreenCo
 		}
 	}
 
-	logger := logging.OrDefault(cfg.Log).With(fields...)
-	return &SmokescreenContext{
+	sctx := &SmokescreenContext{
 		cfg:           cfg,
-		Logger:        logger,
+		Logger:        logging.OrDefault(cfg.Log),
 		ProxyType:     proxyType,
 		start:         start,
 		RequestedHost: req.Host,
 		req:           req,
 	}
+	sctx.withLogAttrs(fields)
+	return sctx
 }
 
 func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
@@ -843,7 +864,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		setUpstreamProxyHeader(req, sctx.Decision.SelectedUpstreamProxy)
 
 		// add context fields to all future log messages sent using this smokescreen context's Logger
-		sctx.Logger = sctx.Logger.With(extractContextLogFields(pctx, sctx)...)
+		sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
 
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
@@ -965,8 +986,8 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 	sctx.Logger.LogAttrs(context.Background(), level, CanonicalProxyDecision, attrs...)
 }
 
-func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) []any {
-	fields := []any{}
+func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) []slog.Attr {
+	var fields []slog.Attr
 
 	// Retrieve information from the ACL decision
 	decision := sctx.Decision
@@ -995,7 +1016,7 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	setUpstreamProxyHeader(pctx.Req, sctx.Decision.SelectedUpstreamProxy)
 
 	// add context fields to all future log messages sent using this smokescreen context's Logger
-	sctx.Logger = sctx.Logger.With(extractContextLogFields(pctx, sctx)...)
+	sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
 	if pctx.Error != nil {
 		// DNS resolution failure
 		return nil, "", pctx.Error
