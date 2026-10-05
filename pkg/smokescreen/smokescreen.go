@@ -629,18 +629,14 @@ func rejectResponse(pctx *goproxy.ProxyCtx, err error) *http.Response {
 			code = http.StatusGatewayTimeout
 			msg = "Timed out connecting to remote host: " + e.Error()
 
-		} else if e, ok := err.(*net.DNSError); ok {
+		} else if dnsErr, ok := err.(*net.DNSError); ok {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			msg = "Failed to resolve remote hostname: " + e.Error()
+			msg = "Failed to resolve remote hostname: " + dnsErr.Error()
 		} else {
 			status = "Bad gateway"
 			code = http.StatusBadGateway
-			errMsg := e.Error()
-			if errMsg == "<nil>" {
-				errMsg = fmt.Sprintf("<nil> (%T)", err)
-			}
-			msg = "Failed to connect to remote host: " + errMsg
+			msg = "Failed to connect to remote host: " + e.Error()
 		}
 	} else if e, ok := err.(denyError); ok {
 		status = "Request rejected by proxy"
