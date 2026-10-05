@@ -36,3 +36,37 @@ func defaultIPClassification(config *Config, addr *net.TCPAddr) ipType {
 		return ipAllowDefault
 	}
 }
+
+type mostSpecificIPPolicy struct{}
+
+func (mostSpecificIPPolicy) classify(config *Config, addr *net.TCPAddr) ipType {
+	bestPrefix, bestPort := -1, false
+	result := ipDenyUserConfigured
+	for _, rules := range []struct {
+		ranges []RuleRange
+		action ipType
+	}{{config.AllowRanges, ipAllowUserConfigured}, {config.DenyRanges, ipDenyUserConfigured}} {
+		for _, rule := range rules.ranges {
+			if (rule.Port != 0 && rule.Port != addr.Port) || !rule.Net.Contains(addr.IP) {
+				continue
+			}
+			prefix, bits := rule.Net.Mask.Size()
+			// Normalize mapped IPv4 prefixes so equivalent mapped and native rules tie.
+			if bits == 128 && rule.Net.IP.To4() != nil && prefix >= 96 {
+				prefix -= 96
+			}
+			port := rule.Port != 0
+			if prefix > bestPrefix || (prefix == bestPrefix && port && !bestPort) ||
+				(prefix == bestPrefix && port == bestPort && rules.action == ipDenyUserConfigured) {
+				bestPrefix, bestPort, result = prefix, port, rules.action
+			}
+		}
+	}
+	if bestPrefix >= 0 {
+		return result
+	}
+	if !addr.IP.IsGlobalUnicast() || addr.IP.IsLoopback() {
+		return ipDenyNotGlobalUnicast
+	}
+	return defaultIPClassification(config, addr)
+}
