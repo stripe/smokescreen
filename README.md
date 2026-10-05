@@ -92,7 +92,7 @@ Here are the options you can give Smokescreen:
    --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
    --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
-   --tls-client-ca-file FILE                   Require and validate client certificates using Certificate Authority from FILE
+   --tls-client-ca-file FILE                   Validate client certificates using Certificate Authority from FILE
    --tls-crl-file FILE                         Verify validity of client certificates against Certificate Revocation List from FILE
    --additional-error-message-on-deny MESSAGE  Display MESSAGE in the HTTP response if proxying request is denied
    --disable-acl-policy-action POLICY ACTION   Disable usage of a POLICY ACTION such as "open" in the egress ACL

@@ -130,7 +130,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 		},
 		&cli.StringSliceFlag{
 			Name:  "tls-client-ca-file",
-			Usage: "Require and validate client certificates using Certificate Authority from `FILE`",
+			Usage: "Validate client certificates using Certificate Authority from `FILE`",
 		},
 		&cli.StringSliceFlag{
 			Name:  "tls-crl-file",
