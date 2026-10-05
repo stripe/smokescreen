@@ -119,3 +119,19 @@ func TestIPRulePrecedenceDefaultsAndSelfConnections(t *testing.T) {
 		require.Equal(t, want, classifyAddr(c, addr, ""))
 	}
 }
+
+func TestIPRulePrecedenceHostnameBypass(t *testing.T) {
+	for _, mostSpecific := range []bool{false, true} {
+		c := NewConfig()
+		c.MostSpecificIPRules = mostSpecific
+		require.NoError(t, c.SetIPFilterBypassedDomains([]string{"*.internal.example.com"}))
+		require.NoError(t, c.SetDenyAddresses([]string{"10.0.0.5"}))
+		addr := &net.TCPAddr{IP: net.ParseIP("10.0.0.5"), Port: 443}
+		require.Equal(t, ipDenyUserConfigured, classifyAddr(c, addr, "other.example.com"))
+		require.Equal(t, ipAllowUserConfigured, classifyAddr(c, addr, "login.internal.example.com"))
+		c.LocalIPs = []net.IP{addr.IP}
+		require.Equal(t, ipDenySelfConnection, classifyAddr(c, addr, "login.internal.example.com"))
+		c.AllowSelfConnections = true
+		require.Equal(t, ipAllowUserConfigured, classifyAddr(c, addr, "login.internal.example.com"))
+	}
+}
