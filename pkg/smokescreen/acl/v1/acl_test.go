@@ -4,6 +4,7 @@
 package acl
 
 import (
+	"fmt"
 	"net/http"
 	"path"
 	"testing"
@@ -723,6 +724,103 @@ func TestLabelWildcardRegistrableDomain(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.result, d.Result)
 			assert.Equal(t, tc.reason, d.Reason)
+		})
+	}
+}
+
+func TestPublicSuffixHintAndOptOut(t *testing.T) {
+	newACL := func(unsafe bool) *ACL {
+		acl := &ACL{
+			Rules:                                    make(map[string]Rule),
+			GlobalAllowList:                          []string{"kms.*.amazonaws.com"},
+			DefaultRule:                              &Rule{Policy: Enforce, DomainGlobs: []string{"sts.*.amazonaws.com"}},
+			UnsafeAllowWildcardsAcrossPublicSuffixes: unsafe,
+		}
+		require.NoError(t, acl.Add("enforce", Rule{
+			Policy:             Enforce,
+			DomainGlobs:        []string{"sts.*.amazonaws.com", "access-analyzer.*.amazonaws.com", "s3.*.amazonaws.com"},
+			ExternalProxyGlobs: []string{"proxy.*.amazonaws.com"},
+		}))
+		require.NoError(t, acl.Add("report", Rule{Policy: Report, DomainGlobs: []string{"sts.*.amazonaws.com"}}))
+		require.NoError(t, acl.Validate())
+		return acl
+	}
+	const hint = "; wildcard '%s' was not applied because '%s' is on the public suffix list"
+	type decision struct {
+		result DecisionResult
+		reason string
+	}
+
+	for _, tc := range []struct {
+		name      string
+		service   string
+		host      string
+		proxyHost string
+		strict    decision
+		unsafe    decision
+	}{
+		{
+			name: "same registrable domain", service: "enforce", host: "sts.us-west-2.amazonaws.com",
+			strict: decision{Allow, "host matched allowed domain in rule"},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host under a public suffix", service: "enforce", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host in another registrable domain", service: "enforce", host: "access-analyzer.s3.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "access-analyzer.*.amazonaws.com", "s3.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host is a public suffix", service: "enforce", host: "s3.us-west-2.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "s3.*.amazonaws.com", "s3.us-west-2.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host is not normalized", service: "enforce", host: "STS.US-EAST-1.AMAZONAWS.COM.",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "global allow list", service: "enforce", host: "kms.us-east-1.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "kms.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched rule in global allow list"},
+		},
+		{
+			name: "report policy", service: "report", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{AllowAndReport, "rule has allow and report policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "default rule", service: "unknown", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{Deny, "default rule policy used" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "connect proxy host", service: "enforce", host: "sts.us-west-2.amazonaws.com", proxyHost: "proxy.us-east-1.amazonaws.com",
+			strict: decision{Deny, "connect proxy host not allowed in rule" + fmt.Sprintf(hint, "proxy.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "no wildcard would match", service: "enforce", host: "sts.example.com",
+			strict: decision{Deny, "rule has enforce policy"},
+			unsafe: decision{Deny, "rule has enforce policy"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, unsafe := range []bool{false, true} {
+				want := tc.strict
+				if unsafe {
+					want = tc.unsafe
+				}
+				d, err := newACL(unsafe).Decide(DecideArgs{Service: tc.service, Host: tc.host, ConnectProxyHost: tc.proxyHost})
+				require.NoError(t, err)
+				assert.Equal(t, want.result, d.Result, "unsafe=%v", unsafe)
+				assert.Equal(t, want.reason, d.Reason, "unsafe=%v", unsafe)
+			}
 		})
 	}
 }

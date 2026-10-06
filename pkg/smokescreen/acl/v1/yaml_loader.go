@@ -23,6 +23,8 @@ type YAMLConfig struct {
 	Version         string     `yaml:"version"`
 	GlobalDenyList  []string   `yaml:"global_deny_list"`  // domains which will be blocked even in report mode
 	GlobalAllowList []string   `yaml:"global_allow_list"` // domains which will be allowed for every host type
+
+	UnsafeAllowWildcardsAcrossPublicSuffixes bool `yaml:"unsafe_allow_wildcards_across_public_suffixes"`
 }
 
 type YAMLRule struct {
@@ -73,7 +75,8 @@ func (yl *YAMLLoader) Load() (*ACL, error) {
 
 func (cfg *YAMLConfig) Load() (*ACL, error) {
 	acl := ACL{
-		Rules: make(map[string]Rule),
+		Rules:                                    make(map[string]Rule),
+		UnsafeAllowWildcardsAcrossPublicSuffixes: cfg.UnsafeAllowWildcardsAcrossPublicSuffixes,
 	}
 
 	if cfg.Services == nil {

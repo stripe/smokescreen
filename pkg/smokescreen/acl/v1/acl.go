@@ -35,6 +35,10 @@ type ACL struct {
 	GlobalDenyList   []string
 	GlobalAllowList  []string
 	DisabledPolicies []EnforcementPolicy
+	// UnsafeAllowWildcardsAcrossPublicSuffixes lets label wildcards in allow
+	// lists match hosts outside the glob's registrable domain, as they always
+	// do in GlobalDenyList. See HostMatchesGlob.
+	UnsafeAllowWildcardsAcrossPublicSuffixes bool
 	*logrus.Logger
 }
 
@@ -134,7 +138,7 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 	if args.ConnectProxyHost != "" {
 		shouldDeny := true
 		for _, dg := range rule.ExternalProxyGlobs {
-			if HostMatchesGlob(args.ConnectProxyHost, dg) {
+			if acl.hostMatchesAllowGlob(args.ConnectProxyHost, dg) {
 				shouldDeny = false
 				break
 			}
@@ -145,18 +149,19 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 		// continue to check it below (unless we know we should deny it already)
 		if shouldDeny {
 			d.Result = Deny
-			d.Reason = "connect proxy host not allowed in rule"
+			d.Reason = "connect proxy host not allowed in rule" +
+				acl.publicSuffixHint(args.ConnectProxyHost, rule.ExternalProxyGlobs)
 			return d, nil
 		}
 	}
 
 	// if the host matches any of the rule's allowed domains, allow
 	for _, dg := range rule.DomainGlobs {
-		if HostMatchesGlob(args.Host, dg) {
+		if acl.hostMatchesAllowGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
 			// Check if we can find a matching MITM config
 			for _, dg := range rule.MitmDomains {
-				if HostMatchesGlob(args.Host, dg.Domain) {
+				if acl.hostMatchesAllowGlob(args.Host, dg.Domain) {
 					d.MitmConfig = &MitmConfig{
 						AddHeaders:                  dg.AddHeaders,
 						DetailedHttpLogs:            dg.DetailedHttpLogs,
@@ -179,7 +184,7 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 
 	// if the host matches any of the global allow list, allow
 	for _, dg := range acl.GlobalAllowList {
-		if HostMatchesGlob(args.Host, dg) {
+		if acl.hostMatchesAllowGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched rule in global allow list"
 			return d, nil
 		}
@@ -202,7 +207,42 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 		d.Reason = "default rule policy used"
 	}
 
+	if d.Result != Allow {
+		d.Reason += acl.publicSuffixHint(args.Host, rule.DomainGlobs, acl.GlobalAllowList)
+	}
+
 	return d, err
+}
+
+// hostMatchesAllowGlob matches host against a glob from one of the ACL's allow
+// lists, honoring UnsafeAllowWildcardsAcrossPublicSuffixes.
+func (acl *ACL) hostMatchesAllowGlob(host string, glob string) bool {
+	return hostMatchesGlob(host, glob, !acl.UnsafeAllowWildcardsAcrossPublicSuffixes)
+}
+
+// publicSuffixHint explains why host was not allowed when a glob in one of
+// globLists would have matched it but for the registrable domain check, so
+// that operators can tell the public suffix list apart from a missing entry.
+// It returns "" if no such glob exists. Callers must only use it once none of
+// globLists matched host.
+func (acl *ACL) publicSuffixHint(host string, globLists ...[]string) string {
+	if acl.UnsafeAllowWildcardsAcrossPublicSuffixes {
+		return ""
+	}
+	for _, globs := range globLists {
+		for _, g := range globs {
+			if !hostMatchesGlob(host, g, false) {
+				continue
+			}
+			normalizedHost, err := hostport.NormalizeHost(host, false)
+			if err != nil {
+				return ""
+			}
+			suffix, _ := publicsuffix.PublicSuffix(strings.TrimRight(normalizedHost, "."))
+			return fmt.Sprintf("; wildcard '%s' was not applied because '%s' is on the public suffix list", g, suffix)
+		}
+	}
+	return ""
 }
 
 // DisablePolicies takes a slice of actions (open, report, enforce), maps them
