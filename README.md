@@ -170,6 +170,32 @@ func main() {
 
 To control the routing of requests to specific IP addresses or IP blocks, use the `deny-address`, `allow-address`, `deny-range`, and `allow-range` options in the config.
 
+Overlapping explicit rules default to `allow-first`: any matching allow rule
+wins over every matching deny rule. To opt into specificity-based precedence:
+
+```yaml
+most_specific_ip_rules: true
+```
+
+The equivalent CLI flag is `--most-specific-ip-rules`. Go consumers can set
+`Config.MostSpecificIPRules = true`. The default is false, preserving allow-first.
+An explicitly supplied CLI value overrides YAML, including
+`--most-specific-ip-rules=false` to disable a YAML-enabled setting.
+
+In `most-specific` mode, the longest matching CIDR prefix wins. At equal prefix
+lengths, a port-specific rule wins over an all-port rule; deny wins remaining
+ties. Address rules are single-IP networks (`/32` or `/128`). Rule order has no
+effect. For example, denying `10.0.0.5` overrides allowing `10.0.0.0/24`, while
+allowing `10.0.0.5:443` overrides denying `10.0.0.0/8` for that IP and port.
+
+Ranges match all ports; addresses accept an optional port (IPv6 with a port
+uses brackets, e.g. `[fd00::5]:443`). Explicit allows can bypass default IP safety
+blocks, but hostname ACL checks still apply. Allow rules do not create an
+exclusive allowlist: unmatched destinations follow the default safety checks.
+Each DNS answer is evaluated separately; another eligible answer can still be
+selected when one answer is denied. The self-connection guard takes precedence
+under both policies.
+
 Smokescreen denies connections to addresses in `Config.LocalIPs` on every port
 by default, even if an address is explicitly allowed. `StartWithConfig` populates
 `LocalIPs` from the host's network interfaces unless it is already set.

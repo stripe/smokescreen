@@ -24,6 +24,7 @@ type yamlConfigTls struct {
 // Port and ExitTimeout use a pointer so we can distinguish unset vs explicit
 // zero, to avoid overriding a non-zero default when the value is not set.
 type yamlConfig struct {
+	MostSpecificIPRules     bool `yaml:"most_specific_ip_rules"`
 	Ip                      string
 	Port                    *uint16
 	DenyRanges              []string `yaml:"deny_ranges"`
@@ -87,6 +88,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := c.SetIPFilterBypassedDomains(yc.IPFilterBypassedDomains); err != nil {
 		return err
 	}
+	c.MostSpecificIPRules = yc.MostSpecificIPRules
 	c.Ip = yc.Ip
 
 	if yc.Port != nil {

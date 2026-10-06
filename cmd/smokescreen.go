@@ -67,6 +67,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Name:  "allow-self-connections",
 			Usage: "Allow connections to local interface addresses on all ports, subject to normal IP and ACL checks (default: false).",
 		},
+		&cli.BoolFlag{
+			Name:  "most-specific-ip-rules",
+			Usage: "Resolve overlapping IP rules by longest prefix, then port specificity; deny wins ties (default: false).",
+		},
 		&cli.StringSliceFlag{
 			Name:  "deny-range",
 			Usage: "Add `RANGE`(in CIDR notation) to list of blocked IP ranges.  Repeatable.",
@@ -256,6 +260,10 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 				return err
 			}
 			conf.StatsSocketFileMode = os.FileMode(filemode)
+		}
+
+		if c.IsSet("most-specific-ip-rules") {
+			conf.MostSpecificIPRules = c.Bool("most-specific-ip-rules")
 		}
 
 		if c.IsSet("deny-range") {
