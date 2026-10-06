@@ -4,12 +4,14 @@
 package acl
 
 import (
+	"fmt"
 	"net/http"
 	"path"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var testCases = map[string]struct {
@@ -245,7 +247,7 @@ func TestACLAddInvalidGlob(t *testing.T) {
 	}{
 		"multiple wildcards": {
 			"*.*.stripe.com",
-			"domain globs are only supported as prefix",
+			"only one wildcard is allowed per domain glob",
 		},
 		"matches everything (*)": {
 			"*",
@@ -258,6 +260,46 @@ func TestACLAddInvalidGlob(t *testing.T) {
 		"non-normalized domain": {
 			"éxämple.com",
 			"incorrect ACL entry; use \"xn--xmple-gra7a.com\"",
+		},
+		"label wildcard and leading wildcard": {
+			"*.api*.example.com",
+			"only one wildcard is allowed per domain glob",
+		},
+		"whole label wildcard under a public suffix": {
+			"login.*.com",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"wildcard under a wildcard public suffix rule": {
+			"api.*.compute.amazonaws.com",
+			"wildcard must not match a public suffix",
+		},
+		"label wildcard without literal prefix": {
+			"*bob.example.com",
+			"domain glob must represent a full prefix (sub)domain",
+		},
+		"label wildcard under a public suffix": {
+			"ex*ample.com",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"label wildcard under a private public suffix": {
+			"foo*.github.io",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"label wildcard in top-level domain": {
+			"example.c*",
+			"wildcard must not be in the top-level domain",
+		},
+		"label wildcard matching IP addresses": {
+			"10.0.0.1*.1",
+			"domain glob must not match IP addresses",
+		},
+		"label wildcard in Punycode label": {
+			"xn--*.example.com",
+			"wildcards are not supported in Punycode labels",
+		},
+		"label wildcard with non-normalized suffix": {
+			"api*.Example.com",
+			"incorrect ACL entry; \"Example.com\" must be in normalized form \"example.com\"",
 		},
 	}
 
@@ -325,6 +367,21 @@ func TestHostMatchesGlob(t *testing.T) {
 		"wildcard after leading component": {
 			"login.eu.example.com",
 			"login.*.example.com",
+			true,
+		},
+		"wildcard after leading component does not cross labels": {
+			"login.a.b.example.com",
+			"login.*.example.com",
+			false,
+		},
+		"wildcard after leading component matches region": {
+			"access-analyzer.us-west-2.amazonaws.com",
+			"access-analyzer.*.amazonaws.com",
+			true,
+		},
+		"wildcard after leading component does not match another registrable domain": {
+			"access-analyzer.s3.amazonaws.com",
+			"access-analyzer.*.amazonaws.com",
 			false,
 		},
 		"trailing dot": {
@@ -347,6 +404,41 @@ func TestHostMatchesGlob(t *testing.T) {
 			"example.com",
 			false,
 		},
+		"label wildcard matches within label": {
+			"api-east.example.com",
+			"api*.example.com",
+			true,
+		},
+		"label wildcard requires at least one character": {
+			"api.example.com",
+			"api*.example.com",
+			false,
+		},
+		"label wildcard does not cross labels": {
+			"api.evil.example.com",
+			"api*.example.com",
+			false,
+		},
+		"label wildcard does not match subdomains": {
+			"a.api-east.example.com",
+			"api*.example.com",
+			false,
+		},
+		"label wildcard after leading component": {
+			"web.qa-east.internal.example.com",
+			"web.qa-*.internal.example.com",
+			true,
+		},
+		"label wildcard with literal suffix": {
+			"web42-canary.example.com",
+			"web*-canary.example.com",
+			true,
+		},
+		"label wildcard with uppercase host": {
+			"API-EAST.EXAMPLE.COM.",
+			"api*.example.com",
+			true,
+		},
 	}
 
 	a := assert.New(t)
@@ -356,6 +448,23 @@ func TestHostMatchesGlob(t *testing.T) {
 				g.match,
 				HostMatchesGlob(g.hostname, g.glob),
 			)
+		})
+	}
+}
+
+func TestInvalidLabelWildcardNeverMatches(t *testing.T) {
+	globs := map[string]string{
+		"1*.0.0.1":          "10.0.0.1",
+		"x.*.com":           "x.y.com",
+		"foo*.github.io":    "foo1.github.io",
+		"API*.example.com":  "api1.example.com",
+		"xn--*.example.com": "xn--e1aybc.example.com",
+	}
+	for glob, host := range globs {
+		t.Run(glob, func(t *testing.T) {
+			require.Error(t, ValidateDomainGlob("svc", glob))
+			assert.False(t, HostMatchesGlob(host, glob))
+			assert.False(t, hostMatchesGlob(host, glob, false))
 		})
 	}
 }
@@ -582,4 +691,136 @@ func TestDefaultRuleValidationWithInvalidGlob(t *testing.T) {
 
 	a.Error(err, "ACL loading should have errored due to invalid default rule.")
 	a.Nil(acl, "ACL should not be loaded when the default rule is invalid.")
+}
+
+// TestLabelWildcardRegistrableDomain checks that label wildcards in allow lists stay
+// within the glob's registrable domain, while the global deny list stays as broad
+// as the glob reads.
+func TestLabelWildcardRegistrableDomain(t *testing.T) {
+	// access-analyzer.s3.amazonaws.com is an S3 bucket, not part of amazonaws.com.
+	const glob = "access-analyzer.*.amazonaws.com"
+	acl := &ACL{
+		Rules:          make(map[string]Rule),
+		GlobalDenyList: []string{glob},
+	}
+	require.NoError(t, acl.Add("enforce", Rule{Policy: Enforce, DomainGlobs: []string{glob}}))
+	require.NoError(t, acl.Add("open", Rule{Policy: Open}))
+	require.NoError(t, acl.Validate())
+
+	for _, tc := range []struct {
+		service string
+		host    string
+		result  DecisionResult
+		reason  string
+	}{
+		{"enforce", "access-analyzer.us-west-2.amazonaws.com", Allow, "host matched allowed domain in rule"},
+		{"enforce", "access-analyzer.s3.amazonaws.com", Deny, "host matched rule in global deny list"},
+		{"open", "access-analyzer.us-west-2.amazonaws.com", Deny, "host matched rule in global deny list"},
+		{"open", "access-analyzer.s3.amazonaws.com", Deny, "host matched rule in global deny list"},
+		{"open", "access-analyzer.a.b.amazonaws.com", Allow, "rule has open enforcement policy"},
+	} {
+		t.Run(tc.service+"/"+tc.host, func(t *testing.T) {
+			d, err := acl.Decide(DecideArgs{Service: tc.service, Host: tc.host})
+			require.NoError(t, err)
+			assert.Equal(t, tc.result, d.Result)
+			assert.Equal(t, tc.reason, d.Reason)
+		})
+	}
+}
+
+func TestPublicSuffixHintAndOptOut(t *testing.T) {
+	newACL := func(unsafe bool) *ACL {
+		acl := &ACL{
+			Rules:                                    make(map[string]Rule),
+			GlobalAllowList:                          []string{"kms.*.amazonaws.com"},
+			DefaultRule:                              &Rule{Policy: Enforce, DomainGlobs: []string{"sts.*.amazonaws.com"}},
+			UnsafeAllowWildcardsAcrossPublicSuffixes: unsafe,
+		}
+		require.NoError(t, acl.Add("enforce", Rule{
+			Policy:             Enforce,
+			DomainGlobs:        []string{"sts.*.amazonaws.com", "access-analyzer.*.amazonaws.com", "s3.*.amazonaws.com"},
+			ExternalProxyGlobs: []string{"proxy.*.amazonaws.com"},
+		}))
+		require.NoError(t, acl.Add("report", Rule{Policy: Report, DomainGlobs: []string{"sts.*.amazonaws.com"}}))
+		require.NoError(t, acl.Validate())
+		return acl
+	}
+	const hint = "; wildcard '%s' was not applied because '%s' is on the public suffix list"
+	type decision struct {
+		result DecisionResult
+		reason string
+	}
+
+	for _, tc := range []struct {
+		name      string
+		service   string
+		host      string
+		proxyHost string
+		strict    decision
+		unsafe    decision
+	}{
+		{
+			name: "same registrable domain", service: "enforce", host: "sts.us-west-2.amazonaws.com",
+			strict: decision{Allow, "host matched allowed domain in rule"},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host under a public suffix", service: "enforce", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host in another registrable domain", service: "enforce", host: "access-analyzer.s3.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "access-analyzer.*.amazonaws.com", "s3.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host is a public suffix", service: "enforce", host: "s3.us-west-2.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "s3.*.amazonaws.com", "s3.us-west-2.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "host is not normalized", service: "enforce", host: "STS.US-EAST-1.AMAZONAWS.COM.",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "global allow list", service: "enforce", host: "kms.us-east-1.amazonaws.com",
+			strict: decision{Deny, "rule has enforce policy" + fmt.Sprintf(hint, "kms.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched rule in global allow list"},
+		},
+		{
+			name: "report policy", service: "report", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{AllowAndReport, "rule has allow and report policy" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "default rule", service: "unknown", host: "sts.us-east-1.amazonaws.com",
+			strict: decision{Deny, "default rule policy used" + fmt.Sprintf(hint, "sts.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "connect proxy host", service: "enforce", host: "sts.us-west-2.amazonaws.com", proxyHost: "proxy.us-east-1.amazonaws.com",
+			strict: decision{Deny, "connect proxy host not allowed in rule" + fmt.Sprintf(hint, "proxy.*.amazonaws.com", "us-east-1.amazonaws.com")},
+			unsafe: decision{Allow, "host matched allowed domain in rule"},
+		},
+		{
+			name: "no wildcard would match", service: "enforce", host: "sts.example.com",
+			strict: decision{Deny, "rule has enforce policy"},
+			unsafe: decision{Deny, "rule has enforce policy"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, unsafe := range []bool{false, true} {
+				want := tc.strict
+				if unsafe {
+					want = tc.unsafe
+				}
+				d, err := newACL(unsafe).Decide(DecideArgs{Service: tc.service, Host: tc.host, ConnectProxyHost: tc.proxyHost})
+				require.NoError(t, err)
+				assert.Equal(t, want.result, d.Result, "unsafe=%v", unsafe)
+				assert.Equal(t, want.reason, d.Reason, "unsafe=%v", unsafe)
+			}
+		})
+	}
 }

@@ -85,3 +85,19 @@ func TestYAMLLoaderDisabledAclAction(t *testing.T) {
 	a.NotNil(err)
 	a.Nil(acl)
 }
+
+func TestYAMLLoaderUnsafeWildcardsAcrossPublicSuffixes(t *testing.T) {
+	a := assert.New(t)
+
+	acl, err := New(logrus.New(), NewYAMLLoader("testdata/acl_sample_config.yaml"), []string{})
+	a.NoError(err)
+	a.False(acl.UnsafeAllowWildcardsAcrossPublicSuffixes)
+
+	acl, err = New(logrus.New(), NewYAMLLoader("testdata/acl_unsafe_wildcards_across_public_suffixes.yaml"), []string{})
+	a.NoError(err)
+	a.True(acl.UnsafeAllowWildcardsAcrossPublicSuffixes)
+
+	d, err := acl.Decide(DecideArgs{Service: "enforce-dummy-srv", Host: "sts.us-east-1.amazonaws.com"})
+	a.NoError(err)
+	a.Equal(Allow, d.Result)
+}

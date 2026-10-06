@@ -1,0 +1,10 @@
+---
+version: v1
+services:
+  - name: enforce-dummy-srv
+    project: usersec
+    action: enforce
+    allowed_domains:
+      - sts.*.amazonaws.com
+
+unsafe_allow_wildcards_across_public_suffixes: true

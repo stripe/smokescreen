@@ -1,12 +1,14 @@
 package acl
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
+	"golang.org/x/net/publicsuffix"
 )
 
 // DecideArgs holds the arguments for an ACL decision. Using a struct keeps the
@@ -33,6 +35,10 @@ type ACL struct {
 	GlobalDenyList   []string
 	GlobalAllowList  []string
 	DisabledPolicies []EnforcementPolicy
+	// UnsafeAllowWildcardsAcrossPublicSuffixes lets label wildcards in allow
+	// lists match hosts outside the glob's registrable domain, as they always
+	// do in GlobalDenyList. See HostMatchesGlob.
+	UnsafeAllowWildcardsAcrossPublicSuffixes bool
 	*logrus.Logger
 }
 
@@ -132,7 +138,7 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 	if args.ConnectProxyHost != "" {
 		shouldDeny := true
 		for _, dg := range rule.ExternalProxyGlobs {
-			if HostMatchesGlob(args.ConnectProxyHost, dg) {
+			if acl.hostMatchesAllowGlob(args.ConnectProxyHost, dg) {
 				shouldDeny = false
 				break
 			}
@@ -143,18 +149,19 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 		// continue to check it below (unless we know we should deny it already)
 		if shouldDeny {
 			d.Result = Deny
-			d.Reason = "connect proxy host not allowed in rule"
+			d.Reason = "connect proxy host not allowed in rule" +
+				acl.publicSuffixHint(args.ConnectProxyHost, rule.ExternalProxyGlobs)
 			return d, nil
 		}
 	}
 
 	// if the host matches any of the rule's allowed domains, allow
 	for _, dg := range rule.DomainGlobs {
-		if HostMatchesGlob(args.Host, dg) {
+		if acl.hostMatchesAllowGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched allowed domain in rule"
 			// Check if we can find a matching MITM config
 			for _, dg := range rule.MitmDomains {
-				if HostMatchesGlob(args.Host, dg.Domain) {
+				if acl.hostMatchesAllowGlob(args.Host, dg.Domain) {
 					d.MitmConfig = &MitmConfig{
 						AddHeaders:                  dg.AddHeaders,
 						DetailedHttpLogs:            dg.DetailedHttpLogs,
@@ -169,7 +176,7 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 
 	// if the host matches any of the global deny list, deny
 	for _, dg := range acl.GlobalDenyList {
-		if HostMatchesGlob(args.Host, dg) {
+		if hostMatchesGlob(args.Host, dg, false) {
 			d.Result, d.Reason = Deny, "host matched rule in global deny list"
 			return d, nil
 		}
@@ -177,7 +184,7 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 
 	// if the host matches any of the global allow list, allow
 	for _, dg := range acl.GlobalAllowList {
-		if HostMatchesGlob(args.Host, dg) {
+		if acl.hostMatchesAllowGlob(args.Host, dg) {
 			d.Result, d.Reason = Allow, "host matched rule in global allow list"
 			return d, nil
 		}
@@ -200,7 +207,42 @@ func (acl *ACL) Decide(args DecideArgs) (Decision, error) {
 		d.Reason = "default rule policy used"
 	}
 
+	if d.Result != Allow {
+		d.Reason += acl.publicSuffixHint(args.Host, rule.DomainGlobs, acl.GlobalAllowList)
+	}
+
 	return d, err
+}
+
+// hostMatchesAllowGlob matches host against a glob from one of the ACL's allow
+// lists, honoring UnsafeAllowWildcardsAcrossPublicSuffixes.
+func (acl *ACL) hostMatchesAllowGlob(host string, glob string) bool {
+	return hostMatchesGlob(host, glob, !acl.UnsafeAllowWildcardsAcrossPublicSuffixes)
+}
+
+// publicSuffixHint explains why host was not allowed when a glob in one of
+// globLists would have matched it but for the registrable domain check, so
+// that operators can tell the public suffix list apart from a missing entry.
+// It returns "" if no such glob exists. Callers must only use it once none of
+// globLists matched host.
+func (acl *ACL) publicSuffixHint(host string, globLists ...[]string) string {
+	if acl.UnsafeAllowWildcardsAcrossPublicSuffixes {
+		return ""
+	}
+	for _, globs := range globLists {
+		for _, g := range globs {
+			if !hostMatchesGlob(host, g, false) {
+				continue
+			}
+			normalizedHost, err := hostport.NormalizeHost(host, false)
+			if err != nil {
+				return ""
+			}
+			suffix, _ := publicsuffix.PublicSuffix(strings.TrimRight(normalizedHost, "."))
+			return fmt.Sprintf("; wildcard '%s' was not applied because '%s' is on the public suffix list", g, suffix)
+		}
+	}
+	return ""
 }
 
 // DisablePolicies takes a slice of actions (open, report, enforce), maps them
@@ -297,10 +339,22 @@ func (*ACL) ValidateDomainGlob(svc string, glob string) error {
 // ValidateDomainGlob takes a domain glob and verifies they conform to smokescreen's
 // domain glob policy.
 //
-// Wildcards are valid only at the beginning of a domain glob, and only a single wildcard per glob
-// pattern is allowed. Globs must include text after a wildcard.
+// Only a single wildcard per glob is allowed, in one of these forms:
 //
-// Domains must use their normalized form (e.g., Punycode).
+//   - A leading "*." matches one or more subdomain labels (e.g., "*.example.com").
+//   - A "*" spanning a label other than the leftmost one matches exactly one label
+//     (e.g., "access-analyzer.*.amazonaws.com").
+//   - A "*" after a literal prefix within a label matches one or more characters
+//     within that label (e.g., "api*.example.com" or "web*-canary.example.com").
+//
+// Wildcards other than the leading "*." never cross a ".". The labels to the right
+// of such a wildcard must be literal and form a registrable domain, so the wildcard
+// can't reach into a public suffix such as "com", "co.uk", or "github.io". See
+// HostMatchesGlob for how matches that cross into another registrable domain are
+// handled.
+//
+// Globs must include text after a wildcard, and domains must use their normalized
+// form (e.g., Punycode).
 func ValidateDomainGlob(svc string, glob string) error {
 	if glob == "" {
 		return fmt.Errorf("glob cannot be empty")
@@ -310,16 +364,16 @@ func ValidateDomainGlob(svc string, glob string) error {
 		return fmt.Errorf("%v: %v: domain glob must not match everything", svc, glob)
 	}
 
-	if !strings.HasPrefix(glob, "*.") && strings.HasPrefix(glob, "*") {
-		return fmt.Errorf("%v: %v: domain glob must represent a full prefix (sub)domain", svc, glob)
+	if strings.Count(glob, "*") > 1 {
+		return fmt.Errorf("%v: %v: only one wildcard is allowed per domain glob", svc, glob)
+	}
+
+	if !strings.HasPrefix(glob, "*.") && strings.Contains(glob, "*") {
+		return validateLabelWildcardGlob(svc, glob)
 	}
 
 	// Extract domain part for validation (remove wildcard prefix if present)
 	domainToCheck := strings.TrimPrefix(glob, "*.")
-
-	if strings.Contains(domainToCheck, "*") {
-		return fmt.Errorf("%v: %v: domain globs are only supported as prefix", svc, glob)
-	}
 
 	normalizedDomain, err := hostport.NormalizeHost(domainToCheck, false)
 
@@ -334,6 +388,126 @@ func ValidateDomainGlob(svc string, glob string) error {
 		return fmt.Errorf("%v: %v: incorrect ACL entry; use %q", svc, glob, normalizedDomain)
 	}
 	return nil
+}
+
+// validateLabelWildcardGlob validates a glob whose single wildcard sits inside a
+// label (e.g., "api*.example.com"), as opposed to a leading "*." wildcard.
+func validateLabelWildcardGlob(svc string, glob string) error {
+	g, err := parseLabelWildcardGlob(glob)
+	if err == nil {
+		_, err = g.check()
+	}
+	if err != nil {
+		return fmt.Errorf("%v: %v: %v", svc, glob, err)
+	}
+	return nil
+}
+
+// labelWildcardGlob is a domain glob whose single wildcard sits inside a label.
+type labelWildcardGlob struct {
+	labels []string // the glob's labels, without a trailing dot
+	idx    int      // index of the label containing the wildcard
+	prefix string   // literal text before the wildcard in labels[idx]
+	suffix string   // literal text after the wildcard in labels[idx]
+}
+
+// parseLabelWildcardGlob parses glob and runs the validation checks that only
+// need string operations. Callers must also call check, which is more expensive.
+func parseLabelWildcardGlob(glob string) (labelWildcardGlob, error) {
+	if strings.Count(glob, "*") != 1 {
+		return labelWildcardGlob{}, errors.New("only one wildcard is allowed per domain glob")
+	}
+	labels := strings.Split(strings.TrimSuffix(glob, "."), ".")
+	idx := -1
+	for i, l := range labels {
+		if l == "" {
+			return labelWildcardGlob{}, errors.New("domain glob must not contain empty labels")
+		}
+		if strings.Contains(l, "*") {
+			idx = i
+		}
+	}
+
+	label := labels[idx]
+	prefix, suffix, _ := strings.Cut(label, "*")
+	// A leftmost whole-label wildcard is the leading "*." form, which isn't a label
+	// wildcard. A leading "*" glued to a label is most likely a typo for "*." (e.g.,
+	// "*bob.example.com" for "*.bob.example.com"), so require a literal prefix.
+	if prefix == "" && (suffix != "" || idx == 0) {
+		return labelWildcardGlob{}, errors.New("domain glob must represent a full prefix (sub)domain")
+	}
+	if strings.HasPrefix(label, "xn--") {
+		return labelWildcardGlob{}, errors.New("wildcards are not supported in Punycode labels")
+	}
+	for _, r := range prefix + suffix {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return labelWildcardGlob{}, errors.New("wildcard label may only contain lowercase ASCII letters, digits, '-' and '_'")
+		}
+	}
+	// The wildcard matches at least one character.
+	if len(label) > 63 {
+		return labelWildcardGlob{}, errors.New("wildcard label can never match a label of at most 63 characters")
+	}
+
+	if idx == len(labels)-1 {
+		return labelWildcardGlob{}, errors.New("wildcard must not be in the top-level domain")
+	}
+	if strings.Trim(labels[len(labels)-1], "0123456789") == "" {
+		return labelWildcardGlob{}, errors.New("domain glob must not match IP addresses")
+	}
+	return labelWildcardGlob{labels: labels, idx: idx, prefix: prefix, suffix: suffix}, nil
+}
+
+// check runs the validation checks that need normalization or the public suffix
+// list, and returns the registrable domain of the labels after the wildcard.
+func (g labelWildcardGlob) check() (string, error) {
+	rest := strings.Join(g.labels[g.idx+1:], ".")
+	parts := []string{rest}
+	if g.idx > 0 {
+		parts = append(parts, strings.Join(g.labels[:g.idx], "."))
+	}
+	for _, part := range parts {
+		normalized, err := hostport.NormalizeHost(part, false)
+		if err != nil {
+			return "", fmt.Errorf("incorrect ACL entry: %v", err)
+		}
+		if normalized != part {
+			return "", fmt.Errorf("incorrect ACL entry; %q must be in normalized form %q", part, normalized)
+		}
+	}
+
+	// A wildcard directly under a public suffix would span registrable domains owned
+	// by unrelated parties (e.g., "foo*.com" or "foo*.github.io").
+	registrable, err := publicsuffix.EffectiveTLDPlusOne(rest)
+	if err != nil {
+		return "", errors.New("wildcard label must be followed by a registrable domain, not a public suffix")
+	}
+	// Reject globs whose wildcard sits under a wildcard public suffix rule (e.g.,
+	// "*.compute.amazonaws.com"), since they could never match.
+	example := strings.Replace(strings.Join(g.labels, "."), "*", "x", 1)
+	if r, err := publicsuffix.EffectiveTLDPlusOne(example); err != nil || r != registrable {
+		return "", errors.New("wildcard must not match a public suffix")
+	}
+	return registrable, nil
+}
+
+// matchLabels reports whether hostLabels, the labels of a normalized host, match
+// g's labels.
+func (g labelWildcardGlob) matchLabels(hostLabels []string) bool {
+	if len(hostLabels) != len(g.labels) {
+		return false
+	}
+	for i, gl := range g.labels {
+		hl := hostLabels[i]
+		if i != g.idx {
+			if hl != gl {
+				return false
+			}
+		} else if len(hl) <= len(g.prefix)+len(g.suffix) || !strings.HasPrefix(hl, g.prefix) || !strings.HasSuffix(hl, g.suffix) {
+			return false
+		}
+	}
+	return true
 }
 
 // PolicyDisabled checks if an EnforcementPolicy is disabled at the ACL level
@@ -367,8 +541,20 @@ func (acl *ACL) Rule(service string) *Rule {
 // HostMatchesGlob matches a hostname string against a domain glob after
 // converting both to a canonical form (punycode normalization, lowercase with trailing dots removed).
 //
+// For globs with a wildcard other than the leading "*.", the host must also have
+// the same registrable domain as the glob's literal suffix, according to the public
+// suffix list. This keeps "access-analyzer.*.amazonaws.com" from matching
+// "access-analyzer.s3.amazonaws.com", which is an S3 bucket that anyone can own.
+//
 // domainGlob should already have been passed through ACL.Validate().
 func HostMatchesGlob(host string, domainGlob string) bool {
+	return hostMatchesGlob(host, domainGlob, true)
+}
+
+// hostMatchesGlob implements HostMatchesGlob. If sameRegistrableDomain is false,
+// a label wildcard also matches hosts in another registrable domain, which is what
+// deny lists need to stay as broad as they read.
+func hostMatchesGlob(host string, domainGlob string, sameRegistrableDomain bool) bool {
 	if host == "" {
 		return false
 	}
@@ -378,6 +564,10 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 	normalizedHost, err := hostport.NormalizeHost(host, false)
 	if err != nil {
 		return false
+	}
+
+	if !strings.HasPrefix(domainGlob, "*.") && strings.Contains(domainGlob, "*") {
+		return hostMatchesLabelWildcard(normalizedHost, domainGlob, sameRegistrableDomain)
 	}
 
 	hasWildcard := strings.HasPrefix(domainGlob, "*.")
@@ -405,6 +595,34 @@ func HostMatchesGlob(host string, domainGlob string) bool {
 	}
 	return false
 }
+
+// hostMatchesLabelWildcard reports whether the normalized host matches glob, a
+// glob with a single wildcard confined to one label. A whole-label wildcard
+// matches any one label, and a wildcard after a literal prefix matches one or
+// more characters. The host must have exactly as many labels as glob, and every
+// other label must match exactly. Globs that ValidateDomainGlob rejects never
+// match.
+func hostMatchesLabelWildcard(host string, glob string, sameRegistrableDomain bool) bool {
+	g, err := parseLabelWildcardGlob(glob)
+	if err != nil {
+		return false
+	}
+	h := strings.TrimRight(host, ".")
+	if !g.matchLabels(strings.Split(h, ".")) {
+		return false
+	}
+	// Only run the more expensive checks once the labels match.
+	registrable, err := g.check()
+	if err != nil {
+		return false
+	}
+	if !sameRegistrableDomain {
+		return true
+	}
+	got, err := publicsuffix.EffectiveTLDPlusOne(h)
+	return err == nil && got == registrable
+}
+
 func containsString(slice []string, str string) bool {
 	for _, item := range slice {
 		if item == str {
