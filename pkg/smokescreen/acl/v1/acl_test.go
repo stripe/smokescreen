@@ -451,6 +451,23 @@ func TestHostMatchesGlob(t *testing.T) {
 	}
 }
 
+func TestInvalidLabelWildcardNeverMatches(t *testing.T) {
+	globs := map[string]string{
+		"1*.0.0.1":          "10.0.0.1",
+		"x.*.com":           "x.y.com",
+		"foo*.github.io":    "foo1.github.io",
+		"API*.example.com":  "api1.example.com",
+		"xn--*.example.com": "xn--e1aybc.example.com",
+	}
+	for glob, host := range globs {
+		t.Run(glob, func(t *testing.T) {
+			require.Error(t, ValidateDomainGlob("svc", glob))
+			assert.False(t, HostMatchesGlob(host, glob))
+			assert.False(t, hostMatchesGlob(host, glob, false))
+		})
+	}
+}
+
 func TestMitmComfig(t *testing.T) {
 	a := assert.New(t)
 
