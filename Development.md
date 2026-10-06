@@ -2,9 +2,28 @@
 # Development and Testing
 
 ## Testing
+Dependencies are vendored. Run the unit suite with:
+
 ```bash
-go test ./...
+GOFLAGS=-mod=vendor go test ./...
 ```
+
+The hermetic integration suite is enabled with the `integration` build tag:
+
+```bash
+GOFLAGS=-mod=vendor go test -race -v -timeout 2m -failfast -tags=integration ./cmd/...
+```
+
+For the other CI checks:
+
+```bash
+GOFLAGS=-mod=vendor go vet ./...
+GOFLAGS=-mod=vendor go mod verify
+GOFLAGS=-mod=vendor go test -race -timeout 2m -failfast ./...
+```
+
+See [the CI workflow](.github/workflows/test.yml) for the Go version matrix and
+additional build variants.
 
 ## Running locally
 

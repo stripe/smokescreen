@@ -66,10 +66,11 @@ fails during startup configuration if `--expose-prometheus-metrics` is set.
 
 ### CLI
 
-Here are the options you can give Smokescreen:
+Run `go run . --help` (or `smokescreen --help` for an installed binary) for the
+current CLI reference. Here are the available options:
 
 ```
-   --help                                      Show this help text.
+   --help, -h                                  Show this help text.
    --config-file FILE                          Load configuration from FILE.  Command line options override values in the file.
    --listen-ip IP                              Listen on interface with address IP.
                                                  This argument is ignored when running under Einhorn. (default: any)
@@ -78,6 +79,9 @@ Here are the options you can give Smokescreen:
    --timeout DURATION                          Time out after DURATION when connecting. (default: 10s)
    --proxy-protocol                            Enable PROXY protocol support.
    --allow-self-connections                    Allow connections to local interface addresses on all ports, subject to normal IP and ACL checks. (default: false)
+   --most-specific-ip-rules                    Resolve overlapping IP rules by longest prefix, then port specificity; deny wins ties. (default: false)
+   --unsafe-ip-filter-bypassed-domain DOMAIN    Bypass IP filters for a destination hostname or *.domain glob. Repeatable.
+                                                 ACL and self-connection checks still apply. Trust this domain's DNS.
    --deny-range RANGE                          Add RANGE(in CIDR notation) to list of blocked IP ranges.  Repeatable.
    --allow-range RANGE                         Add RANGE (in CIDR notation) to list of allowed IP ranges.  Repeatable.
    --deny-address value                        Add IP[:PORT] to list of blocked IPs.  Repeatable.
@@ -85,9 +89,12 @@ Here are the options you can give Smokescreen:
    --egress-acl-file FILE                      Validate egress traffic against FILE
    --expose-prometheus-metrics                 Exposes metrics via a Prometheus scrapable endpoint.
    --prometheus-metrics-format FORMAT          Metric format: legacy, dual, or v2. (default: "legacy")
+                                                 Requires `--expose-prometheus-metrics` to be set.
    --prometheus-endpoint ENDPOINT              Specify endpoint to host Prometheus metrics on. (default: "/metrics")
                                                  Requires `--expose-prometheus-metrics` to be set.
-   --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default "9810")
+   --prometheus-listen-ip IP                   Listen for Prometheus metrics on interface with address IP. (default: "0.0.0.0")
+                                                 Requires `--expose-prometheus-metrics` to be set.
+   --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default: "9810")
                                                  Requires `--expose-prometheus-metrics` to be set.
    --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
@@ -99,6 +106,9 @@ Here are the options you can give Smokescreen:
    --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
                                                  This should be an absolute path with all symlinks, if any, resolved.
    --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
+   --unsafe-allow-private-ranges               Allow private IP ranges by default. (default: false)
+   --upstream-http-proxy-addr ADDRESS           Set Smokescreen's upstream HTTP proxy address.
+   --upstream-https-proxy-addr ADDRESS          Set Smokescreen's upstream HTTPS proxy address.
    --max-concurrent-requests value             Maximum simultaneous requests. 0 = unlimited (default: 0)
    --max-request-rate value                    Maximum requests per second. 0 = unlimited (default: 0)
    --max-request-burst value                   Maximum burst capacity. Must be > max-request-rate when specified.
@@ -110,10 +120,39 @@ Here are the options you can give Smokescreen:
    --version, -v                               print the version
 ```
 
+### Configuration files
+
+Load the main YAML configuration with `--config-file`. Explicit CLI options
+override values in the file. Unknown YAML fields are rejected. YAML names can
+differ from CLI flags: for example, `--listen-ip` maps to `ip`,
+`--listen-port` to `port`, `--timeout` to `connect_timeout`, and
+`--egress-acl-file` to `acl_file`. The main configuration and hostname ACL are
+separate files; the ACL has its own `version`, `services`, and `default` fields.
+
+```yaml
+ip: "127.0.0.1"
+port: 4750
+connect_timeout: 10s
+acl_file: "acl.yaml"
+```
+
+See the [YAML configuration fields](pkg/smokescreen/config_loader.go) for supported
+keys and [Development.md](Development.md) for complete local examples. Prometheus
+and upstream proxy settings are configured through CLI flags or the Go API;
+the main YAML loader does not accept them.
+
 ### Prometheus metrics
 
-Enable scraping with `--expose-prometheus-metrics`. Select the format with
-`--prometheus-metrics-format=legacy|dual|v2`:
+Enable scraping with `--expose-prometheus-metrics`. The metrics listener defaults
+to `0.0.0.0:9810` with path `/metrics`, independently of the proxy's listen address.
+Use `--prometheus-listen-ip`, `--prometheus-port`, and `--prometheus-endpoint` to
+change it. For example, to bind metrics to loopback:
+
+```sh
+smokescreen --expose-prometheus-metrics --prometheus-listen-ip=127.0.0.1
+```
+
+Select the format with `--prometheus-metrics-format=legacy|dual|v2`:
 
 - `legacy` (default) preserves existing names, units, and histogram buckets.
 - `v2` uses the `smokescreen_` prefix, seconds for timings, and appropriate byte
