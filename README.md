@@ -243,17 +243,33 @@ Three policies are supported:
 
 > :warning: **The ACL is only applied to hostnames *as they appear in the request*!** If you want to allow or deny traffic based on the destination IP address *after DNS resolution*, you should be using the config options instead (see the `IP Filtering` section above).
 
-A host can be specified with or without a globbing prefix. The host (without the globbing prefix) must be in Punycode to prevent ambiguity.
+A host can be specified with or without a wildcard, and a glob may contain at most one wildcard. The host must be in Punycode to prevent ambiguity.
 
-| host                | valid   |
-| ------------------- | ------- |
-| `example.com`       | yes     |
-| `*.example.com`     | yes     |
-| `api.*.example.com` | no      |
-| `*example.com`      | no      |
-| `ex*ample.com`      | no      |
-| `éxämple.com`       | no      |
-| `example.*`         | hell no |
+- A leading `*.` matches one or more subdomain labels: `*.example.com` matches `api.example.com` and `a.b.example.com`, but not `example.com`.
+- A `*` spanning a label other than the leftmost one matches exactly one label: `access-analyzer.*.amazonaws.com` matches `access-analyzer.us-west-2.amazonaws.com`, but not `access-analyzer.a.b.amazonaws.com`.
+- A `*` after a literal prefix within a label matches one or more characters in that label: `api*.example.com` matches `api-east.example.com`, but not `api.example.com`, `api.a.example.com`, or `a.api-east.example.com`.
+
+Apart from the leading `*.`, a wildcard never crosses a `.`. The labels to its right must form a registrable domain rather than a [public suffix](https://publicsuffix.org/) such as `com`, `co.uk`, or `github.io`, and the wildcard label must be lowercase ASCII.
+
+Outside of the `global_deny_list`, these wildcards also only match hosts in the same registrable domain as the labels to their right, according to the public suffix list. This prevents `access-analyzer.*.amazonaws.com` from matching `access-analyzer.s3.amazonaws.com`, an S3 bucket that anyone can claim. It also means that `access-analyzer.us-east-1.amazonaws.com` doesn't match, because `us-east-1.amazonaws.com` is listed as a public suffix; specify such hosts explicitly. The `global_deny_list` ignores this restriction so that denied globs block every host they read as.
+
+| host                              | valid   |
+| --------------------------------- | ------- |
+| `example.com`                     | yes     |
+| `*.example.com`                   | yes     |
+| `access-analyzer.*.amazonaws.com` | yes     |
+| `api*.example.com`                | yes     |
+| `web*-canary.example.com`         | yes     |
+| `web.qa-*.internal.example.com`   | yes     |
+| `*.*.example.com`                 | no      |
+| `*.api*.example.com`              | no      |
+| `*example.com`                    | no      |
+| `*-canary.example.com`            | no      |
+| `ex*ample.com`                    | no      |
+| `login.*.com`                     | no      |
+| `foo*.github.io`                  | no      |
+| `éxämple.com`                     | no      |
+| `example.*`                       | hell no |
 
 [Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/acl_sample_config.yaml) is a sample ACL.
 
