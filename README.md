@@ -367,6 +367,47 @@ If a domain matches both the `global_allow_list` and the `global_deny_list`, the
 
 See [Development.md](Development.md)
 
+# Releases
+
+Smokescreen releases include standalone binaries and container images.
+
+## Standalone Binaries
+
+Pre-built binaries are available on the [GitHub Releases](https://github.com/stripe/smokescreen/releases) page:
+
+- **Linux**: amd64 and arm64
+- **macOS**: amd64 and arm64
+
+## Container Images
+
+Container images are available at `ghcr.io/stripe/smokescreen:<version>`.
+Replace `<version>` with a published release tag, such as `v0.2.0`.
+
+### Supported Platforms
+
+- `linux/amd64` - Intel/AMD 64-bit
+- `linux/arm64` - ARM 64-bit
+
+### Running the Container
+
+```bash
+docker run --rm -p 4750:4750 ghcr.io/stripe/smokescreen:<version>
+```
+
+Smokescreen can then be used with `curl --proxy localhost:4750 http://example.com`.
+
+To use a local ACL and a different port, mount the file and pass CLI arguments:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v "$PWD/acl.yaml:/config/acl.yaml:ro" \
+  ghcr.io/stripe/smokescreen:<version> \
+  --egress-acl-file /config/acl.yaml \
+  --listen-ip 0.0.0.0 --listen-port 8080
+```
+
+The container runs as a non-root user; mounted files must be readable by it.
+
 # Contributors
 
 - Aditya Mukerjee
