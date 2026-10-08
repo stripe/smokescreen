@@ -4,6 +4,7 @@
 package smokescreen
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -1983,6 +1984,38 @@ func TestMitm(t *testing.T) {
 
 		r.NoError(err)
 		a.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
+	})
+
+	t.Run("CONNECT proxy rejects unparseable MITM request target", func(t *testing.T) {
+		r := require.New(t)
+
+		cfg, err := testConfig("test-mitm")
+		r.NoError(err)
+		mitmCa, err := tls.X509KeyPair(goproxy.CA_CERT, goproxy.CA_KEY)
+		r.NoError(err)
+		mitmCa.Leaf, err = x509.ParseCertificate(mitmCa.Certificate[0])
+		r.NoError(err)
+		cfg.MitmTLSConfig = goproxy.TLSConfigFromCA(&mitmCa)
+		r.NoError(cfg.SetAllowAddresses([]string{"127.0.0.1"}))
+
+		proxy := httptest.NewServer(BuildProxy(cfg))
+		defer proxy.Close()
+		conn, err := net.Dial("tcp", strings.TrimPrefix(proxy.URL, "http://"))
+		r.NoError(err)
+		defer conn.Close()
+
+		fmt.Fprint(conn, "CONNECT 127.0.0.1:443 HTTP/1.1\r\nHost: 127.0.0.1:443\r\n\r\n")
+		connectResp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		r.NoError(err)
+		r.Equal(http.StatusOK, connectResp.StatusCode)
+
+		// "OPTIONS *" leaves req.URL nil after goproxy re-parses the target, which
+		// used to crash the process.
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		fmt.Fprint(tlsConn, "OPTIONS * HTTP/1.1\r\nHost: 127.0.0.1:443\r\n\r\n")
+		resp, err := http.ReadResponse(bufio.NewReader(tlsConn), nil)
+		r.NoError(err)
+		r.Equal(http.StatusProxyAuthRequired, resp.StatusCode)
 	})
 }
 
