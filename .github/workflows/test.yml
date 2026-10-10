@@ -39,7 +39,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: "1.27"
+          # Go 1.27.2 export data is unsupported by Staticcheck v0.8.1.
+          # Remove this pin once a compatible Staticcheck release is available.
+          go-version: "1.27.1"
           cache: true
       - name: Check formatting
         run: |
@@ -52,7 +54,7 @@ jobs:
       - name: Install staticcheck
         env:
           GOFLAGS: ""
-        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 # 2026.1.1; 2026.1 cannot read Go 1.27 export data
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 # Staticcheck 2026.2.1
       - name: Staticcheck
         run: |
           staticcheck ./...
