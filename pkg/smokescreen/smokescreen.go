@@ -797,6 +797,10 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}()
 
 		sctx.Logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
+		if req.URL == nil {
+			pctx.Error = denyError{errors.New("could not determine destination URL")}
+			return req, rejectResponse(pctx, pctx.Error)
+		}
 		// Build an address parsable by net.ResolveTCPAddr
 		destination, err := hostport.NewWithScheme(req.Host, req.URL.Scheme, false)
 		if err != nil {
