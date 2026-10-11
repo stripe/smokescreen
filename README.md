@@ -96,7 +96,8 @@ current CLI reference. Here are the available options:
                                                  Requires `--expose-prometheus-metrics` to be set.
    --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default: "9810")
                                                  Requires `--expose-prometheus-metrics` to be set.
-   --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port).  Repeatable.
+   --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port). Repeatable. Each DNS exchange
+                                                 picks an address at random.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
    --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
    --tls-client-ca-file FILE                   Validate client certificates using Certificate Authority from FILE
