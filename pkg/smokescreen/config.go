@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -329,27 +330,24 @@ func (config *Config) SetAllowAddresses(addressStrings []string) error {
 }
 
 func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
-	// TODO: support round-robin between multiple addresses
-	if len(resolverAddresses) > 1 {
-		return fmt.Errorf("only one resolver address allowed, %d provided", len(resolverAddresses))
-	}
-
 	// No resolver specified, use the system resolver
 	if len(resolverAddresses) == 0 {
 		return nil
 	}
 
-	addr := resolverAddresses[0]
-	_, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return err
+	addrs := make([]string, len(resolverAddresses))
+	for i, addr := range resolverAddresses {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return fmt.Errorf("invalid resolver address %q: %w", addr, err)
+		}
+		addrs[i] = addr
 	}
 
 	r := net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			d := net.Dialer{}
-			return d.DialContext(ctx, "udp", addr)
+			return d.DialContext(ctx, "udp", addrs[rand.IntN(len(addrs))])
 		},
 	}
 	config.Resolver = &r

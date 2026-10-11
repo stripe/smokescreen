@@ -1,12 +1,15 @@
 package smokescreen
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -382,4 +385,82 @@ func TestSetupCrls(t *testing.T) {
 			t.Fatalf("SetupCrls() error = %v, want nil", err)
 		}
 	})
+}
+
+func TestSetResolverAddresses(t *testing.T) {
+	tests := []struct {
+		name      string
+		addresses []string
+		wantErr   bool
+	}{
+		{name: "system resolver"},
+		{name: "invalid first", addresses: []string{"127.0.0.1", "127.0.0.2:53"}, wantErr: true},
+		{name: "invalid second", addresses: []string{"127.0.0.1:53", "127.0.0.2"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := NewConfig()
+			original := config.Resolver
+			err := config.SetResolverAddresses(tt.addresses)
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "invalid resolver address") {
+					t.Fatalf("expected invalid resolver address error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Resolver != original {
+				t.Fatal("empty addresses replaced the system resolver")
+			}
+		})
+	}
+}
+
+func TestResolverAddressesDial(t *testing.T) {
+	for _, count := range []int{1, 2} {
+		t.Run(fmt.Sprintf("%d addresses", count), func(t *testing.T) {
+			addresses := make([]string, count)
+			expected := make(map[string]bool)
+			for i := range addresses {
+				listener, err := net.ListenPacket("udp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { listener.Close() })
+				addresses[i] = listener.LocalAddr().String()
+				expected[addresses[i]] = true
+			}
+			config := NewConfig()
+			if err := config.SetResolverAddresses(addresses); err != nil {
+				t.Fatal(err)
+			}
+			dial := config.Resolver.(*net.Resolver).Dial
+			results := make(chan string, 128)
+			for i := 0; i < cap(results); i++ {
+				go func() {
+					conn, err := dial(context.Background(), "udp", "192.0.2.1:53")
+					if err != nil {
+						results <- err.Error()
+						return
+					}
+					remote := conn.RemoteAddr().String()
+					conn.Close()
+					results <- remote
+				}()
+			}
+			seen := make(map[string]bool)
+			for i := 0; i < cap(results); i++ {
+				remote := <-results
+				if !expected[remote] {
+					t.Errorf("dial targeted unconfigured address: %s", remote)
+				}
+				seen[remote] = true
+			}
+			if len(seen) != count {
+				t.Errorf("expected all %d servers to be selected, saw %v", count, seen)
+			}
+		})
+	}
 }

@@ -223,3 +223,38 @@ func TestNewConfigurationMostSpecificIPRules(t *testing.T) {
 		})
 	}
 }
+
+func TestNewConfigurationResolverAddresses(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		flags   []string
+		wantErr bool
+	}{
+		{name: "system resolver"},
+		{name: "single CLI", flags: []string{"--resolver-address", "127.0.0.1:53"}},
+		{name: "multiple CLI", flags: []string{"--resolver-address", "127.0.0.1:53", "--resolver-address", "127.0.0.2:53"}},
+		{name: "multiple YAML", yaml: "resolver_addresses: [127.0.0.1:53, '127.0.0.2:53']"},
+		{name: "invalid CLI", flags: []string{"--resolver-address", "127.0.0.1:53", "--resolver-address", "invalid"}, wantErr: true},
+		{name: "invalid YAML", yaml: "resolver_addresses: [127.0.0.1:53, invalid]", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"smokescreen"}
+			if tt.yaml != "" {
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, []byte(tt.yaml), 0600))
+				args = append(args, "--config-file", path)
+			}
+			args = append(args, tt.flags...)
+			config, err := NewConfiguration(args, nil)
+			if tt.wantErr {
+				require.ErrorContains(t, err, "invalid resolver address")
+				require.Nil(t, config)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, config)
+		})
+	}
+}
