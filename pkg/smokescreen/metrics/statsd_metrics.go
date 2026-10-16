@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -17,6 +18,7 @@ type StatsdMetricsClient struct {
 	namespace    string
 	statsdClient statsd.ClientInterface
 	started      atomic.Value
+	globalTags   atomic.Value
 }
 
 // NewMetricsClient creates a new StatsdMetricsClient with the provided statsd address and
@@ -83,6 +85,41 @@ func (mc *StatsdMetricsClient) AddMetricTags(
 	return fmt.Errorf("unknown metric: %s", metric)
 }
 
+func (mc *StatsdMetricsClient) SetGlobalMetricTags(tags map[string]string) error {
+	copy, err := CopyAndValidateGlobalMetricTags(tags)
+	if err != nil {
+		return err
+	}
+	if mc.started.Load() != nil {
+		return fmt.Errorf("cannot set global metrics tags after starting smokescreen")
+	}
+	mc.globalTags.Store(copy)
+	return nil
+}
+
+func (mc *StatsdMetricsClient) globalAndSpecificTags(specific []string) []string {
+	var global []string
+	if tags := mc.globalTags.Load(); tags != nil {
+		global = constructTagArray(tags.(map[string]string))
+	}
+	if len(global) == 0 {
+		return specific
+	}
+	specificKeys := make(map[string]struct{}, len(specific))
+	for _, tag := range specific {
+		key, _, _ := strings.Cut(tag, ":")
+		specificKeys[key] = struct{}{}
+	}
+	combined := make([]string, 0, len(global)+len(specific))
+	for _, tag := range global {
+		key, _, _ := strings.Cut(tag, ":")
+		if _, exists := specificKeys[key]; !exists {
+			combined = append(combined, tag)
+		}
+	}
+	return append(combined, specific...)
+}
+
 // GetMetricTags returns the slice of metrics associated with a given metric.
 func (mc *StatsdMetricsClient) GetMetricTags(metric string) []string {
 	if tags, ok := mc.metricsTags[metric]; ok {
@@ -93,7 +130,7 @@ func (mc *StatsdMetricsClient) GetMetricTags(metric string) []string {
 
 func (mc *StatsdMetricsClient) Incr(metric string, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Incr(mc.metricName(metric), baseTags, rate)
+	return mc.statsdClient.Incr(mc.metricName(metric), mc.globalAndSpecificTags(baseTags), rate)
 }
 
 func (mc *StatsdMetricsClient) IncrWithTags(
@@ -102,14 +139,14 @@ func (mc *StatsdMetricsClient) IncrWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Incr(mc.metricName(metric), combinedTags, rate)
+	return mc.statsdClient.Incr(mc.metricName(metric), mc.globalAndSpecificTags(combinedTags), rate)
 }
 
 func (mc *StatsdMetricsClient) Gauge(
 	metric string,
 	value float64, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Gauge(mc.metricName(metric), value, baseTags, rate)
+	return mc.statsdClient.Gauge(mc.metricName(metric), value, mc.globalAndSpecificTags(baseTags), rate)
 }
 
 func (mc *StatsdMetricsClient) Histogram(
@@ -117,7 +154,7 @@ func (mc *StatsdMetricsClient) Histogram(
 	value float64,
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Histogram(mc.metricName(metric), value, baseTags, rate)
+	return mc.statsdClient.Histogram(mc.metricName(metric), value, mc.globalAndSpecificTags(baseTags), rate)
 }
 
 func (mc *StatsdMetricsClient) HistogramWithTags(
@@ -127,12 +164,12 @@ func (mc *StatsdMetricsClient) HistogramWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Histogram(mc.metricName(metric), value, combinedTags, rate)
+	return mc.statsdClient.Histogram(mc.metricName(metric), value, mc.globalAndSpecificTags(combinedTags), rate)
 }
 
 func (mc *StatsdMetricsClient) Timing(metric string, d time.Duration, rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
-	return mc.statsdClient.Timing(mc.metricName(metric), d, baseTags, rate)
+	return mc.statsdClient.Timing(mc.metricName(metric), d, mc.globalAndSpecificTags(baseTags), rate)
 }
 
 func (mc *StatsdMetricsClient) TimingWithTags(
@@ -142,7 +179,7 @@ func (mc *StatsdMetricsClient) TimingWithTags(
 	rate float64) error {
 	baseTags := mc.GetMetricTags(metric)
 	combinedTags := append(constructTagArray(additionalTags), baseTags...)
-	return mc.statsdClient.Timing(mc.metricName(metric), d, combinedTags, rate)
+	return mc.statsdClient.Timing(mc.metricName(metric), d, mc.globalAndSpecificTags(combinedTags), rate)
 }
 
 func (mc *StatsdMetricsClient) StatsdClient() statsd.ClientInterface {

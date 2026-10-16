@@ -1056,6 +1056,9 @@ func StartWithConfig(config *Config, quit <-chan interface{}) {
 	if err = config.Validate(); err != nil {
 		config.Log.Fatal("invalid config", err)
 	}
+	if err = config.applyGlobalMetricTags(config.MetricsClient); err != nil {
+		config.Log.Fatal("invalid config", err)
+	}
 
 	// Initialize self-connection detection to prevent recursive proxy attacks
 	if err = config.InitializeSelfConnectionDetection(); err != nil {

@@ -9,6 +9,9 @@ func (config *Config) SetupPrometheus(endpoint string, port string, listenAddr s
 	if err != nil {
 		return err
 	}
+	if err := config.applyGlobalMetricTags(metricsClient); err != nil {
+		return err
+	}
 	config.MetricsClient = metricsClient
 	return nil
 }

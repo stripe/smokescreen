@@ -5,6 +5,7 @@ package metrics
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
+	"google.golang.org/protobuf/proto"
 )
 
 // PrometheusMetricsClient attempts to replicate the functionality of the StatsdMetricsClient, but exposing
@@ -23,6 +26,7 @@ type PrometheusMetricsClient struct {
 	metricsTags map[string]map[string]string
 	mu          sync.RWMutex
 	started     atomic.Value
+	globalTags  atomic.Value // Immutable map[string]string snapshot.
 
 	counters   map[string]prometheus.CounterVec
 	gauges     map[string]prometheus.GaugeVec
@@ -43,16 +47,12 @@ func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string,
 	if format != "legacy" && format != "dual" && format != "v2" {
 		return nil, fmt.Errorf("unknown Prometheus metrics format: %q", format)
 	}
-	mux := http.NewServeMux()
-	mux.Handle(endpoint, promhttp.Handler())
-	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), mux)
-
 	metricsTags := make(map[string]map[string]string)
 	for _, m := range metrics {
 		metricsTags[m] = map[string]string{}
 	}
 
-	return &PrometheusMetricsClient{
+	mc := &PrometheusMetricsClient{
 		format:      format,
 		metricsTags: metricsTags,
 		endpoint:    endpoint,
@@ -60,7 +60,68 @@ func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string,
 		gauges:      map[string]prometheus.GaugeVec{},
 		histograms:  map[string]prometheus.HistogramVec{},
 		timings:     map[string]prometheus.HistogramVec{},
-	}, nil
+	}
+	mux := http.NewServeMux()
+	mux.Handle(endpoint, prometheusHandler(mc, prometheus.DefaultGatherer))
+	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), mux)
+	return mc, nil
+}
+
+func prometheusHandler(mc *PrometheusMetricsClient, gatherer prometheus.Gatherer) http.Handler {
+	return promhttp.InstrumentMetricHandler(
+		prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(globalTagsGatherer{client: mc, gatherer: gatherer}, promhttp.HandlerOpts{}),
+	)
+}
+
+type globalTagsGatherer struct {
+	client   *PrometheusMetricsClient
+	gatherer prometheus.Gatherer
+}
+
+func (g globalTagsGatherer) Gather() ([]*dto.MetricFamily, error) {
+	var globalTags map[string]string
+	if tags := g.client.globalTags.Load(); tags != nil {
+		globalTags = tags.(map[string]string)
+	}
+	metricFamilies, err := g.gatherer.Gather()
+	if len(globalTags) == 0 {
+		return metricFamilies, err
+	}
+
+	clonedFamilies := make([]*dto.MetricFamily, len(metricFamilies))
+	for index, family := range metricFamilies {
+		cloned := proto.Clone(family).(*dto.MetricFamily)
+		for _, metric := range cloned.Metric {
+			existing := make(map[string]struct{}, len(metric.Label))
+			for _, label := range metric.Label {
+				existing[label.GetName()] = struct{}{}
+			}
+			for name, value := range globalTags {
+				if _, exists := existing[name]; exists {
+					continue
+				}
+				metric.Label = append(metric.Label, &dto.LabelPair{Name: proto.String(name), Value: proto.String(value)})
+			}
+			sort.Slice(metric.Label, func(i, j int) bool {
+				return metric.Label[i].GetName() < metric.Label[j].GetName()
+			})
+		}
+		clonedFamilies[index] = cloned
+	}
+	return clonedFamilies, err
+}
+
+func (mc *PrometheusMetricsClient) SetGlobalMetricTags(tags map[string]string) error {
+	copy, err := CopyAndValidateGlobalMetricTags(tags)
+	if err != nil {
+		return err
+	}
+	if mc.started.Load() != nil {
+		return fmt.Errorf("cannot set global metrics tags after starting smokescreen")
+	}
+	mc.globalTags.Store(copy)
+	return nil
 }
 
 func (mc *PrometheusMetricsClient) AddMetricTags(
@@ -95,10 +156,10 @@ func (mc *PrometheusMetricsClient) IncrWithTags(
 	metric string,
 	additionalTags map[string]string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mergeMaps(additionalTags, baseTags)
+	tags := copyStringMap(additionalTags)
+	mergeMaps(tags, mc.GetMetricTags(metric))
 	for _, format := range mc.emissionFormats() {
-		mc.incrementPrometheusCounter(metric, additionalTags, format)
+		mc.incrementPrometheusCounter(metric, tags, format)
 	}
 
 	return nil
@@ -108,7 +169,7 @@ func (mc *PrometheusMetricsClient) Gauge(
 	metric string,
 	value float64,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
+	baseTags := copyStringMap(mc.GetMetricTags(metric))
 	for _, format := range mc.emissionFormats() {
 		mc.updatePrometheusGauge(metric, value, baseTags, format)
 	}
@@ -128,10 +189,10 @@ func (mc *PrometheusMetricsClient) HistogramWithTags(
 	value float64,
 	additionalTags map[string]string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mergeMaps(additionalTags, baseTags)
+	tags := copyStringMap(additionalTags)
+	mergeMaps(tags, mc.GetMetricTags(metric))
 	for _, format := range mc.emissionFormats() {
-		mc.observeValuePrometheusHistogram(metric, value, additionalTags, format)
+		mc.observeValuePrometheusHistogram(metric, value, tags, format)
 	}
 
 	return nil
@@ -149,10 +210,10 @@ func (mc *PrometheusMetricsClient) TimingWithTags(
 	d time.Duration,
 	additionalTags map[string]string,
 	_ float64) error {
-	baseTags := mc.GetMetricTags(metric)
-	mergeMaps(additionalTags, baseTags)
+	tags := copyStringMap(additionalTags)
+	mergeMaps(tags, mc.GetMetricTags(metric))
 	for _, format := range mc.emissionFormats() {
-		mc.observeValuePrometheusTimer(metric, d, additionalTags, format)
+		mc.observeValuePrometheusTimer(metric, d, tags, format)
 	}
 
 	return nil
@@ -294,6 +355,14 @@ func mergeMaps[T comparable, U any](leftMap map[T]U, rightMap map[T]U) {
 	for k, v := range rightMap {
 		leftMap[k] = v
 	}
+}
+
+func copyStringMap(input map[string]string) map[string]string {
+	copy := make(map[string]string, len(input))
+	for key, value := range input {
+		copy[key] = value
+	}
+	return copy
 }
 
 func sanitisePrometheusMetricName(metric string) string {
