@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"syscall"
 	"time"
 	"unicode"
@@ -16,6 +17,7 @@ var metrics = func() []string {
 	for name := range prometheusDefinitions {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }()
 
@@ -36,6 +38,44 @@ type MetricsClientInterface interface {
 // in Smokescreen v1 so existing custom clients remain source-compatible.
 type GlobalMetricTagsSetter interface {
 	SetGlobalMetricTags(map[string]string) error
+}
+
+// MetricNameOverride replaces a built-in metric's adapter-specific exported name.
+// Name is the complete name passed to the exporter. PublishAlongWithOriginal also emits the
+// adapter's existing name while migrating dashboards and alerts.
+type MetricNameOverride struct {
+	Name                     string
+	PublishAlongWithOriginal bool
+}
+
+// StatsdOptions configures per-metric StatsD names. Names are keyed by canonical
+// Smokescreen metric IDs and replace the namespace plus that ID.
+type StatsdOptions struct {
+	Names map[string]MetricNameOverride
+}
+
+// PrometheusOptions configures metric format and per-metric Prometheus names.
+// An empty Format retains the legacy format.
+type PrometheusOptions struct {
+	Format string
+	Names  map[string]MetricNameOverride
+}
+
+func copyMetricNameOverrides(names map[string]MetricNameOverride) (map[string]MetricNameOverride, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	copied := make(map[string]MetricNameOverride, len(names))
+	for metric, override := range names {
+		if _, ok := prometheusDefinitions[metric]; !ok {
+			return nil, fmt.Errorf("unknown metric name override key %q", metric)
+		}
+		if override.Name == "" {
+			return nil, fmt.Errorf("metric name override for %q cannot be empty", metric)
+		}
+		copied[metric] = override
+	}
+	return copied, nil
 }
 
 var globalMetricTagName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)

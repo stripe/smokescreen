@@ -169,6 +169,32 @@ Select the format with `--prometheus-metrics-format=legacy|dual|v2`:
 Embedded users can pass `"dual"` or `"v2"` as the optional final argument to `SetupPrometheus` or
 `NewPrometheusMetricsClient`.
 
+Go embedders can override specific built-in names with
+`NewPrometheusMetricsClientWithOptions` or `NewStatsdMetricsClientWithOptions`.
+The `Names` map uses canonical Smokescreen metric IDs, and each override is the
+complete name sent to that exporter. Assign the configured client before startup:
+
+```go
+client, err := metrics.NewPrometheusMetricsClientWithOptions(
+    "/metrics", "9810", "127.0.0.1",
+    metrics.PrometheusOptions{
+        Format: "dual",
+        Names: map[string]metrics.MetricNameOverride{
+            "acl.allow": {
+                Name: "service_acl_allowed_total",
+                PublishAlongWithOriginal: true,
+            },
+        },
+    },
+)
+if err != nil {
+    return err
+}
+cfg.MetricsClient = client
+```
+
+`PublishAlongWithOriginal` dual-publishes the configured and existing names during a migration.
+
 ### Global metric tags
 
 Use repeatable `--metric-tag` flags to set global defaults:
