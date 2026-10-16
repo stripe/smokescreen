@@ -79,6 +79,7 @@ func copyMetricNameOverrides(names map[string]MetricNameOverride) (map[string]Me
 }
 
 var globalMetricTagName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var dangerousTagValueChars = regexp.MustCompile(`[|@#:"}{\\[:cntrl:]]`)
 
 func CopyAndValidateGlobalMetricTags(tags map[string]string) (map[string]string, error) {
 	copied := make(map[string]string, len(tags))
@@ -126,7 +127,5 @@ func ReportConnError(mc MetricsClientInterface, err error) {
 // StatsD and Prometheus metrics. This removes or replaces characters that could
 // be used to inject malicious content through metric tags.
 func SanitizeTagValue(value string) string {
-	dangerousChars := regexp.MustCompile(`[|@#:"}{\\[:cntrl:]]`)
-
-	return dangerousChars.ReplaceAllString(value, "_")
+	return dangerousTagValueChars.ReplaceAllString(value, "_")
 }
