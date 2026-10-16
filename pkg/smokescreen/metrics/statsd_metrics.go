@@ -201,15 +201,16 @@ func (row *statsdMetricRow) tagsFor(dynamicTags map[string]string) []string {
 	if len(dynamicTags) == 0 {
 		return row.staticTags
 	}
-	dynamic := constructTagArray(dynamicTags)
-	tags := make([]string, 0, len(row.globalTags)+len(dynamic)+len(row.persistentTags))
+	tags := make([]string, 0, len(row.globalTags)+len(dynamicTags)+len(row.persistentTags))
 	for _, tag := range row.globalTags {
 		key, _, _ := strings.Cut(tag, ":")
 		if _, overridden := dynamicTags[key]; !overridden {
 			tags = append(tags, tag)
 		}
 	}
-	tags = append(tags, dynamic...)
+	for key, value := range dynamicTags {
+		tags = append(tags, key+":"+value)
+	}
 	return append(tags, row.persistentTags...)
 }
 
@@ -217,18 +218,17 @@ func (mc *StatsdMetricsClient) fallbackTags(dynamicTags map[string]string) []str
 	if len(dynamicTags) == 0 {
 		return mc.globalTags
 	}
-	dynamic := constructTagArray(dynamicTags)
-	if len(mc.globalTags) == 0 {
-		return dynamic
-	}
-	tags := make([]string, 0, len(mc.globalTags)+len(dynamic))
+	tags := make([]string, 0, len(mc.globalTags)+len(dynamicTags))
 	for _, tag := range mc.globalTags {
 		key, _, _ := strings.Cut(tag, ":")
 		if _, overridden := dynamicTags[key]; !overridden {
 			tags = append(tags, tag)
 		}
 	}
-	return append(tags, dynamic...)
+	for key, value := range dynamicTags {
+		tags = append(tags, key+":"+value)
+	}
+	return tags
 }
 
 func (mc *StatsdMetricsClient) Incr(metric string, rate float64) error {
@@ -299,9 +299,12 @@ func (mc *StatsdMetricsClient) SetStarted() {
 var _ MetricsClientInterface = &StatsdMetricsClient{}
 
 func constructTagArray(tags map[string]string) []string {
-	var tagArray []string
+	if len(tags) == 0 {
+		return nil
+	}
+	tagArray := make([]string, 0, len(tags))
 	for key, value := range tags {
-		tagArray = append(tagArray, fmt.Sprintf("%s:%s", key, value))
+		tagArray = append(tagArray, key+":"+value)
 	}
 	return tagArray
 }

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -796,7 +797,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 			req.Header.Del(traceHeader)
 		}()
 
-		sctx.Logger.WithField("url", req.RequestURI).Debug("received HTTP proxy request")
 		if req.URL == nil {
 			pctx.Error = denyError{errors.New("could not determine destination URL")}
 			return req, rejectResponse(pctx, pctx.Error)
@@ -1433,7 +1433,7 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 
 	tags := map[string]string{
 		"role":     metrics.SanitizeTagValue(decision.Role),
-		"def_rule": fmt.Sprintf("%t", ACLDecision.Default),
+		"def_rule": strconv.FormatBool(ACLDecision.Default),
 		"project":  ACLDecision.Project,
 	}
 
