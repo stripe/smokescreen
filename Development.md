@@ -115,6 +115,9 @@ HTTPS_PROXY=localhost:4750 curl https://api.github.com/zen
 ---
 allow_missing_role: true  # skip mTLS client validation (use default ACL)
 statsd_address: 127.0.0.1:8200
+metrics_tags:
+  environment: development
+  region: local
 ```
 
 ```yaml

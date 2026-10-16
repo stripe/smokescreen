@@ -99,6 +99,7 @@ current CLI reference. Here are the available options:
    --resolver-address ADDRESS                  Make DNS requests to ADDRESS (IP:port). Repeatable. Each DNS exchange
                                                  picks an address at random.
    --statsd-address ADDRESS                    Send metrics to statsd at ADDRESS (IP:port). (default: "127.0.0.1:8200")
+   --metric-tag KEY=VALUE                      Add a default tag to every metric. Repeatable; replaces metrics_tags from --config-file.
    --tls-server-bundle-file FILE               Authenticate to clients using key and certs from FILE
    --tls-client-ca-file FILE                   Validate client certificates using Certificate Authority from FILE
    --tls-crl-file FILE                         Verify validity of client certificates against Certificate Revocation List from FILE
@@ -135,6 +136,9 @@ ip: "127.0.0.1"
 port: 4750
 connect_timeout: 10s
 acl_file: "acl.yaml"
+metrics_tags:
+  environment: production
+  region: eu-west-1
 ```
 
 See the [YAML configuration fields](pkg/smokescreen/config_loader.go) for supported
@@ -164,6 +168,19 @@ Select the format with `--prometheus-metrics-format=legacy|dual|v2`:
 
 Embedded users can pass `"dual"` or `"v2"` as the optional final argument to `SetupPrometheus` or
 `NewPrometheusMetricsClient`.
+
+### Global metric tags
+
+Use repeatable `--metric-tag` flags to set global defaults:
+
+```sh
+smokescreen --metric-tag environment=production --metric-tag region=eu-west-1
+```
+
+Or set `metrics_tags` in YAML above. CLI tags replace the YAML map; repeated keys
+use their last value. Per-metric and per-emission tags override global defaults.
+
+Go embedders can call `Config.SetGlobalMetricTags` before startup.
 
 ### Client Identification
 

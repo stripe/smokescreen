@@ -27,19 +27,20 @@ type yamlConfig struct {
 	MostSpecificIPRules     bool `yaml:"most_specific_ip_rules"`
 	Ip                      string
 	Port                    *uint16
-	DenyRanges              []string `yaml:"deny_ranges"`
-	AllowRanges             []string `yaml:"allow_ranges"`
-	DenyAddresses           []string `yaml:"deny_addresses"`
-	AllowAddresses          []string `yaml:"allow_addresses"`
-	IPFilterBypassedDomains []string `yaml:"unsafe_ip_filter_bypassed_domains"`
-	Resolvers               []string `yaml:"resolver_addresses"`
-	StatsdAddress           string   `yaml:"statsd_address"`
-	EgressAclFile           string   `yaml:"acl_file"`
-	SupportProxyProtocol    bool     `yaml:"support_proxy_protocol"`
-	AllowSelfConnections    bool     `yaml:"allow_self_connections"`
-	DenyMessageExtra        string   `yaml:"deny_message_extra"`
-	AllowMissingRole        bool     `yaml:"allow_missing_role"`
-	Network                 string   `yaml:"network"`
+	DenyRanges              []string          `yaml:"deny_ranges"`
+	AllowRanges             []string          `yaml:"allow_ranges"`
+	DenyAddresses           []string          `yaml:"deny_addresses"`
+	AllowAddresses          []string          `yaml:"allow_addresses"`
+	IPFilterBypassedDomains []string          `yaml:"unsafe_ip_filter_bypassed_domains"`
+	Resolvers               []string          `yaml:"resolver_addresses"`
+	StatsdAddress           string            `yaml:"statsd_address"`
+	MetricTags              map[string]string `yaml:"metrics_tags"`
+	EgressAclFile           string            `yaml:"acl_file"`
+	SupportProxyProtocol    bool              `yaml:"support_proxy_protocol"`
+	AllowSelfConnections    bool              `yaml:"allow_self_connections"`
+	DenyMessageExtra        string            `yaml:"deny_message_extra"`
+	AllowMissingRole        bool              `yaml:"allow_missing_role"`
+	Network                 string            `yaml:"network"`
 
 	ConnectTimeout *time.Duration `yaml:"connect_timeout"`
 	IdleTimeout    time.Duration  `yaml:"idle_timeout"`
@@ -130,6 +131,11 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	c.TransportMaxIdleConns = yc.TransportMaxIdleConns
 	c.TransportMaxIdleConnsPerHost = yc.TransportMaxIdleConnsPerHost
+	if yc.MetricTags != nil {
+		if err := c.SetGlobalMetricTags(yc.MetricTags); err != nil {
+			return err
+		}
+	}
 
 	// Apply HTTP server timeouts if configured, otherwise keep defaults
 	if yc.ReadHeaderTimeout != 0 {

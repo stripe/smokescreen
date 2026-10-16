@@ -83,6 +83,7 @@ type Config struct {
 	ConnectTimeout               time.Duration
 	ExitTimeout                  time.Duration
 	MetricsClient                metrics.MetricsClientInterface
+	globalMetricTags             map[string]string
 	EgressACL                    acl.Decider
 	SupportProxyProtocol         bool
 	TlsConfig                    *tls.Config
@@ -570,8 +571,47 @@ func (config *Config) SetupStatsdWithNamespace(addr, namespace string) error {
 	if err != nil {
 		return err
 	}
+	if err := mc.SetGlobalMetricTags(config.globalMetricTags); err != nil {
+		mc.StatsdClient().Close()
+		return err
+	}
 	config.MetricsClient = mc
 	return nil
+}
+
+// SetGlobalMetricTags configures default tags for every metric emitted by the
+// active metrics client. The built-in StatsD and Prometheus clients support
+// this optional capability; custom clients must implement
+// metrics.GlobalMetricTagsSetter when nonempty tags are configured.
+func (config *Config) SetGlobalMetricTags(tags map[string]string) error {
+	copied, err := metrics.CopyAndValidateGlobalMetricTags(tags)
+	if err != nil {
+		return err
+	}
+	setter, ok := config.MetricsClient.(metrics.GlobalMetricTagsSetter)
+	if ok {
+		if err := setter.SetGlobalMetricTags(copied); err != nil {
+			return err
+		}
+	} else if len(copied) > 0 {
+		return fmt.Errorf("metrics client %T does not support global metric tags", config.MetricsClient)
+	}
+	config.globalMetricTags = copied
+	return nil
+}
+
+func (config *Config) applyGlobalMetricTags(client metrics.MetricsClientInterface) error {
+	if config.globalMetricTags == nil {
+		return nil
+	}
+	setter, ok := client.(metrics.GlobalMetricTagsSetter)
+	if !ok {
+		if len(config.globalMetricTags) == 0 {
+			return nil
+		}
+		return fmt.Errorf("metrics client %T does not support global metric tags", client)
+	}
+	return setter.SetGlobalMetricTags(config.globalMetricTags)
 }
 
 func (config *Config) SetupStatsd(addr string) error {
@@ -713,6 +753,14 @@ func validateIPFilterBypassedDomains(domains []string) error {
 }
 
 func (config *Config) Validate() error {
+	if _, err := metrics.CopyAndValidateGlobalMetricTags(config.globalMetricTags); err != nil {
+		return err
+	}
+	if len(config.globalMetricTags) > 0 {
+		if _, ok := config.MetricsClient.(metrics.GlobalMetricTagsSetter); !ok {
+			return fmt.Errorf("metrics client %T does not support global metric tags", config.MetricsClient)
+		}
+	}
 	if err := validateIPFilterBypassedDomains(config.IPFilterBypassedDomains); err != nil {
 		return err
 	}

@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"regexp"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 // metrics contains the internal metric names eligible for persistent tags.
@@ -27,6 +29,34 @@ type MetricsClientInterface interface {
 	Timing(string, time.Duration, float64) error
 	TimingWithTags(string, time.Duration, map[string]string, float64) error
 	SetStarted()
+}
+
+// GlobalMetricTagsSetter is an optional capability implemented by the built-in
+// metrics clients. It intentionally stays separate from MetricsClientInterface
+// in Smokescreen v1 so existing custom clients remain source-compatible.
+type GlobalMetricTagsSetter interface {
+	SetGlobalMetricTags(map[string]string) error
+}
+
+var globalMetricTagName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+func CopyAndValidateGlobalMetricTags(tags map[string]string) (map[string]string, error) {
+	copied := make(map[string]string, len(tags))
+	for key, value := range tags {
+		if !globalMetricTagName.MatchString(key) || len(key) >= 2 && key[:2] == "__" {
+			return nil, fmt.Errorf("invalid global metric tag key %q: keys must match [a-zA-Z_][a-zA-Z0-9_]* and cannot start with __", key)
+		}
+		if key == "le" || key == "quantile" {
+			return nil, fmt.Errorf("invalid global metric tag key %q: reserved by Prometheus", key)
+		}
+		for _, char := range value {
+			if char == ',' || char == '|' || unicode.IsControl(char) {
+				return nil, fmt.Errorf("invalid value for global metric tag %q: values cannot contain comma, pipe, or control characters", key)
+			}
+		}
+		copied[key] = value
+	}
+	return copied, nil
 }
 
 // reportConnError emits a detailed metric about a connection error, with a tag corresponding to

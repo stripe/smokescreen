@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
@@ -26,6 +27,7 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	}
 
 	var configToReturn *smokescreen.Config
+	metricTagValues := &stringSliceValue{}
 
 	app := &cli.Command{}
 	app.Name = "smokescreen"
@@ -128,6 +130,11 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 			Value: smokescreen.DefaultStatsdAddress,
 			Usage: "Send metrics to statsd at `ADDRESS` (IP:port).",
 		},
+		&cli.GenericFlag{
+			Name:  "metric-tag",
+			Value: metricTagValues,
+			Usage: "Add default metric tag `KEY=VALUE` to every metric. Repeatable; replaces metrics_tags from --config-file.",
+		},
 		&cli.StringFlag{
 			Name:  "tls-server-bundle-file",
 			Usage: "Authenticate to clients using key and certs from `FILE`",
@@ -216,6 +223,24 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 
 		if logger != nil {
 			conf.Log = logger
+		}
+
+		if c.IsSet("metric-tag") {
+			tags := make(map[string]string)
+			values, ok := c.Value("metric-tag").([]string)
+			if !ok {
+				return errors.New("could not parse --metric-tag values")
+			}
+			for _, tag := range values {
+				key, value, found := strings.Cut(tag, "=")
+				if !found || key == "" {
+					return fmt.Errorf("invalid --metric-tag %q: expected KEY=VALUE", tag)
+				}
+				tags[key] = value
+			}
+			if err := conf.SetGlobalMetricTags(tags); err != nil {
+				return fmt.Errorf("invalid global metric tags: %w", err)
+			}
 		}
 
 		if c.IsSet("listen-ip") {
@@ -391,4 +416,21 @@ func NewConfiguration(args []string, logger *log.Logger) (*smokescreen.Config, e
 	err := app.Run(context.Background(), args)
 
 	return configToReturn, err
+}
+
+type stringSliceValue struct {
+	values []string
+}
+
+func (v *stringSliceValue) Set(value string) error {
+	v.values = append(v.values, value)
+	return nil
+}
+
+func (v *stringSliceValue) String() string {
+	return strings.Join(v.values, ",")
+}
+
+func (v *stringSliceValue) Get() any {
+	return append([]string(nil), v.values...)
 }
