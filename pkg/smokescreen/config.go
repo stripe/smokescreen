@@ -24,6 +24,7 @@ import (
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/logging"
 	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	aclv2 "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
@@ -579,6 +580,31 @@ func (config *Config) SetupStatsd(addr string) error {
 	return config.SetupStatsdWithNamespace(addr, DefaultStatsdNamespace)
 }
 
+// loadEgressAcl loads an ACL file of either version. Both versions decide with
+// the v2 engine; a v1 file is translated into a v2 policy first.
+func loadEgressAcl(logger *slog.Logger, aclFile string, disabledActions []string) (acl.Decider, error) {
+	data, err := os.ReadFile(aclFile)
+	if err != nil {
+		return nil, err
+	}
+	version, err := aclv2.FileVersion(data)
+	if err != nil {
+		return nil, err
+	}
+	if version != aclv2.Version {
+		return acl.New(logger, acl.NewYAMLLoader(aclFile), disabledActions)
+	}
+	var opts aclv2.Options
+	for _, a := range disabledActions {
+		m, err := aclv2.ModeFromString(a)
+		if err != nil {
+			return nil, err
+		}
+		opts.DisabledModes = append(opts.DisabledModes, m)
+	}
+	return aclv2.LoadFile(aclFile, opts)
+}
+
 func (config *Config) SetupEgressAcl(aclFile string) error {
 	config.Log = logging.OrDefault(config.Log)
 	if aclFile == "" {
@@ -589,7 +615,7 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 
 	config.Log.Info(fmt.Sprintf("Loading egress ACL from %s", aclFile))
 
-	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	egressACL, err := loadEgressAcl(config.Log, aclFile, config.DisabledAclPolicyActions)
 	if err != nil {
 		config.Log.Info(logging.Error(err))
 		return err
