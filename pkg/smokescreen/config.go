@@ -373,7 +373,7 @@ func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64, maxReque
 
 	// Apply default: 2x rate when not explicitly configured or configured negative
 	if maxRequestBurst < 0 {
-		maxRequestBurst = int(maxRate * 2)
+		maxRequestBurst = defaultRequestBurst(maxRate)
 	}
 
 	config.MaxConcurrentRequests = maxConcurrent

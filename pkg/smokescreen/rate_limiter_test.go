@@ -64,6 +64,51 @@ func TestRateLimitedHandler_RateLimit(t *testing.T) {
 	assert.Equal(t, "1", w.Header().Get("Retry-After"))
 }
 
+func TestRateLimitedHandler_DefaultBurst(t *testing.T) {
+	config := &Config{
+		MaxRequestRate: 5, // 5 req/sec, MaxRequestBurst left unset
+		MetricsClient:  metrics.NewNoOpMetricsClient(),
+	}
+
+	handler := NewRateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), config)
+
+	// Unset burst defaults to 2x rate, so the first 10 requests pass
+	for i := 0; i < 10; i++ {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+		assert.Equal(t, http.StatusOK, w.Code)
+	}
+
+	// 11th request gets rate limited
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
+func TestRateLimitedHandler_DefaultBurstLowRate(t *testing.T) {
+	config := &Config{MetricsClient: metrics.NewNoOpMetricsClient()}
+
+	// 2x a rate of 0.25 req/sec is below one request, so the default burst must be 1
+	assert.NoError(t, config.SetRateLimits(0, 0.25, DefaultMaxRequestBurst))
+	assert.Equal(t, 1, config.MaxRequestBurst)
+
+	handler := NewRateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), config)
+
+	// First request passes
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Second request gets rate limited
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
 func TestRateLimitedHandler_Concurrency(t *testing.T) {
 	config := &Config{
 		MaxConcurrentRequests: 1, // only 1 concurrent

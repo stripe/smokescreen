@@ -53,6 +53,16 @@ func (rl *rateLimiter) Allow() bool {
 	return false
 }
 
+// defaultRequestBurst returns the burst used when none is configured: 2x the
+// rate, and at least 1, because a bucket that holds less than one token
+// rejects every request.
+func defaultRequestBurst(rate float64) int {
+	if rate <= 0 {
+		return 0
+	}
+	return max(1, int(rate*2))
+}
+
 // NewRateLimitedHandler creates a new rate and concurrency limited handler
 func NewRateLimitedHandler(handler http.Handler, config *Config) *RateLimitedHandler {
 	var concurrencyLimiter chan struct{}
@@ -62,7 +72,11 @@ func NewRateLimitedHandler(handler http.Handler, config *Config) *RateLimitedHan
 
 	var rateLim *rateLimiter
 	if config.MaxRequestRate > 0 {
-		rateLim = newRateLimiter(config.MaxRequestRate, config.MaxRequestBurst)
+		burst := config.MaxRequestBurst
+		if burst <= 0 {
+			burst = defaultRequestBurst(config.MaxRequestRate)
+		}
+		rateLim = newRateLimiter(config.MaxRequestRate, burst)
 	}
 
 	return &RateLimitedHandler{
