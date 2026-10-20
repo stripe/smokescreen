@@ -1,43 +1,34 @@
 package acl
 
-import "fmt"
+import (
+	aclv2 "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
+)
 
 // DecisionResult represents the result of checking the ACL
-type DecisionResult int
+type DecisionResult = aclv2.DecisionResult
 
+// Possible decision results.
 const (
-	Allow DecisionResult = iota
-	AllowAndReport
-	Deny
+	Allow          = aclv2.Allow
+	AllowAndReport = aclv2.AllowAndReport
+	Deny           = aclv2.Deny
 )
-
-func (d DecisionResult) String() string {
-	return [...]string{"Allow", "AllowAndReport", "Deny"}[d]
-}
 
 // EnforcementPolicy represents what the policy is for a service
-type EnforcementPolicy int
+type EnforcementPolicy = aclv2.Mode
 
+// Possible enforcement policies.
 const (
-	Unknown EnforcementPolicy = iota
-	Open
-	Report
-	Enforce
+	Unknown = aclv2.ModeUnknown
+	Open    = aclv2.ModeOpen
+	Report  = aclv2.ModeReport
+	Enforce = aclv2.ModeEnforce
 )
 
-var EnforcementPolicies = map[string]EnforcementPolicy{
-	"open":    Open,
-	"report":  Report,
-	"enforce": Enforce,
-}
+// EnforcementPolicies maps action names to enforcement policies.
+var EnforcementPolicies = aclv2.Modes
 
-func (p EnforcementPolicy) String() string {
-	return [...]string{"Unknown", "Open", "Report", "Enforce"}[p]
-}
-
+// PolicyFromAction returns the enforcement policy for an action name.
 func PolicyFromAction(action string) (EnforcementPolicy, error) {
-	if v, ok := EnforcementPolicies[action]; ok {
-		return v, nil
-	}
-	return Unknown, fmt.Errorf("unknown action %v", action)
+	return aclv2.ModeFromString(action)
 }

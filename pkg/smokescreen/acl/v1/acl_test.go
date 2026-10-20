@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	aclv2 "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 )
 
 var testCases = map[string]struct {
@@ -465,7 +467,7 @@ func TestInvalidLabelWildcardNeverMatches(t *testing.T) {
 		t.Run(glob, func(t *testing.T) {
 			require.Error(t, ValidateDomainGlob("svc", glob))
 			assert.False(t, HostMatchesGlob(host, glob))
-			assert.False(t, hostMatchesGlob(host, glob, false))
+			assert.False(t, aclv2.MatchGlob(host, glob, true))
 		})
 	}
 }
