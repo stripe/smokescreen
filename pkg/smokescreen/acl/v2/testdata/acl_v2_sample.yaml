@@ -1,0 +1,54 @@
+---
+version: v2
+
+roles:
+  - name: ci
+    project: ci-infra
+    mode: open
+    proxies: [proxy.example.net]
+  - name: web
+    project: web
+    mode: enforce
+  - name: audit
+    project: security
+    mode: report
+
+unknown_role:
+  project: unknown
+  mode: enforce
+
+rules:
+  - id: deny-package-registries
+    action: deny
+    subjects: {any: true}
+    domains:
+      - pypi.org
+      - {glob: "regis*.npmjs.org", cross_public_suffix: true}
+
+  - id: allow-shared
+    action: allow
+    subjects: {any: true}
+    domains: [api.stripe.com, "*.cdn.example.org"]
+
+  - id: ci-registries
+    action: allow
+    subjects: {roles: [ci]}
+    domains: [pypi.org]
+    overrides: [deny-package-registries]
+    mitm:
+      add_headers: {X-Ci: "1"}
+
+  - id: web-no-cdn
+    action: deny
+    subjects: {roles: [web]}
+    domains: ["*.cdn.example.org"]
+
+  - id: web-api
+    action: allow
+    subjects: {roles: [web]}
+    domains: ["*.example.com"]
+
+  - id: unknown-status
+    action: allow
+    subjects: {unknown_role: true}
+    domains: [status.example.com]

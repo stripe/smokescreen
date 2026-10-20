@@ -303,3 +303,25 @@ func wildcardSuffix(glob string) string {
 	}
 	return glob
 }
+
+// publicSuffixHint explains why host did not match when a domain in one of
+// domainLists would have matched it but for the registrable domain check, so
+// that operators can tell the public suffix list apart from a missing entry.
+// It returns "" if no such domain exists. Callers must only use it once none of
+// domainLists matched host.
+func publicSuffixHint(host string, domainLists ...[]Domain) string {
+	for _, domains := range domainLists {
+		for _, d := range domains {
+			if d.CrossPublicSuffix || !hostMatchesGlob(host, d.Glob, false) {
+				continue
+			}
+			normalizedHost, err := hostport.NormalizeHost(host, false)
+			if err != nil {
+				return ""
+			}
+			suffix, _ := publicsuffix.PublicSuffix(strings.TrimRight(normalizedHost, "."))
+			return fmt.Sprintf("; wildcard '%s' was not applied because '%s' is on the public suffix list", d.Glob, suffix)
+		}
+	}
+	return ""
+}
