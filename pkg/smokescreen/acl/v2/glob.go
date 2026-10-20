@@ -274,3 +274,32 @@ func hostMatchesLabelWildcard(host string, glob string, sameRegistrableDomain bo
 func MatchGlob(host string, domainGlob string, crossPublicSuffix bool) bool {
 	return hostMatchesGlob(host, domainGlob, !crossPublicSuffix)
 }
+
+// globsOverlap reports whether some host could match both a and b. It treats a
+// label wildcard as covering every subdomain of the labels after its wildcard,
+// so it can report an overlap that no real host has. It never misses one.
+func globsOverlap(a, b string) bool {
+	aExact, bExact := !strings.Contains(a, "*"), !strings.Contains(b, "*")
+	switch {
+	case aExact && bExact:
+		return a == b
+	case aExact:
+		return hostMatchesGlob(a, b, false)
+	case bExact:
+		return hostMatchesGlob(b, a, false)
+	}
+	as, bs := wildcardSuffix(a), wildcardSuffix(b)
+	return as == bs || strings.HasSuffix(as, "."+bs) || strings.HasSuffix(bs, "."+as)
+}
+
+// wildcardSuffix returns the labels to the right of the label that holds the
+// wildcard in glob.
+func wildcardSuffix(glob string) string {
+	labels := strings.Split(strings.TrimSuffix(glob, "."), ".")
+	for i, l := range labels {
+		if strings.Contains(l, "*") {
+			return strings.Join(labels[i+1:], ".")
+		}
+	}
+	return glob
+}
