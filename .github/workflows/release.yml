@@ -3,28 +3,23 @@ name: Release
 # Builds static binaries when a release tag is created and attaches them, with
 # checksums and build provenance, to the tag's GitHub Release, and publishes
 # Linux container images to GHCR. Branch pushes
-# never trigger it; tags created from the GitHub release UI do.
+# never trigger it; only pushing a protected v* release tag does.
 #
-# To backfill a release that predates this workflow (such as v0.1.0), run it
-# manually from master with the tag as input. A manual run on the tag itself
-# would fail, because GitHub reads the workflow file from the selected ref.
+# This workflow cannot be run manually: publishing authority must come solely
+# from an authorized release tag, not from branch-editable workflow_dispatch
+# inputs. Backfilling a release that predates this workflow requires a
+# separately controlled publisher.
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag to build, for example v0.1.0
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -36,11 +31,11 @@ jobs:
     env:
       GOFLAGS: -mod=vendor
       CGO_ENABLED: "0"
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          ref: refs/tags/${{ github.ref_name }}
           fetch-depth: 0
           persist-credentials: false
       - name: Validate release tag
@@ -122,12 +117,13 @@ jobs:
     name: Publish binaries
     needs: build
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       id-token: write
       attestations: write
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ github.ref_name }}
       GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -159,15 +155,16 @@ jobs:
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       packages: write
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ github.ref_name }}
       IMAGE: ghcr.io/${{ github.repository }}
     steps:
-      # Packaging comes from the workflow ref so manual backfills also work for
-      # release tags that predate the Dockerfile. Executables come from the tag.
+      # Packaging comes from the workflow ref (the commit the tag points to);
+      # executables come from the tag's build artifact.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.sha }}
@@ -214,6 +211,7 @@ jobs:
     name: Attest containers
     needs: containers
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       packages: write
