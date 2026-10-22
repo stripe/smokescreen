@@ -104,3 +104,52 @@ func TestNewWithScheme(t *testing.T) {
 		})
 	}
 }
+
+// FuzzNormalizeASCIIHost checks that the ASCII fast path only accepts names that
+// the IDNA path normalizes to the same string without an error.
+func FuzzNormalizeASCIIHost(f *testing.F) {
+	for _, s := range []string{
+		"example.com",
+		"Example.COM.",
+		"foo_bar.example.com",
+		"_dmarc.example.com",
+		"a-b.example.com",
+		"123.example",
+		"1234",
+		"xn--jv8h.example.com",
+		"XN--JV8H.example.com",
+		"xn--invalid-.example.com",
+		"ab--cd.example.com",
+		"-foo.example.com",
+		"foo-.example.com",
+		"foo..example.com",
+		".example.com",
+		"example.com..",
+		".",
+		"",
+		"🔐.example.com",
+		"exa mple.com",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		fast, ok := normalizeASCIIHost(s)
+		if !ok {
+			return
+		}
+		slow, err := normalizeIDNAHost(s)
+		require.NoError(t, err)
+		require.Equal(t, slow, fast)
+	})
+}
+
+func BenchmarkNormalizeHost(b *testing.B) {
+	for _, host := range []string{"api.example.com", "🔐.example.com"} {
+		b.Run(host, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_, _ = NormalizeHost(host, false)
+			}
+		})
+	}
+}
