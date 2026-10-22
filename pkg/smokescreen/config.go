@@ -358,7 +358,7 @@ func (config *Config) SetResolverAddresses(resolverAddresses []string) error {
 // SetRateLimits configures the rate and concurrency limits for the proxy.
 // maxConcurrent limits simultaneous requests (0 = unlimited).
 // maxRate limits requests per second (0 = unlimited).
-// maxRequestBurst: -1 = use default (2x rate), >=0 = must be greater than maxRate.
+// maxRequestBurst: < 0 = use default rate based on maxRate, >=0 = must be greater than maxRate.
 func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64, maxRequestBurst int) error {
 	if maxConcurrent < 0 {
 		return fmt.Errorf("maxConcurrent must be >= 0, got %d", maxConcurrent)
@@ -371,7 +371,6 @@ func (config *Config) SetRateLimits(maxConcurrent int, maxRate float64, maxReque
 		return fmt.Errorf("maxRequestBurst (%d) must be greater than maxRequestRate (%.2f); omit to use default (2x rate)", maxRequestBurst, maxRate)
 	}
 
-	// Apply default: 2x rate when not explicitly configured or configured negative
 	if maxRequestBurst < 0 {
 		maxRequestBurst = defaultRequestBurst(maxRate)
 	}
