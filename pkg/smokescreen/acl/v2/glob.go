@@ -276,3 +276,107 @@ func hostMatchesLabelWildcard(host string, glob string, sameRegistrableDomain bo
 func MatchGlob(host string, domainGlob string, crossPublicSuffix bool) bool {
 	return hostMatchesGlob(host, domainGlob, !crossPublicSuffix)
 }
+
+// globsOverlap reports whether some host could match both a and b, honoring
+// each domain's own CrossPublicSuffix setting. Outside the two cases handled
+// precisely below, it treats a label wildcard as covering every subdomain of
+// the labels after its wildcard, so it can report an overlap that no real
+// host has. It never misses a real overlap.
+func globsOverlap(a, b Domain) bool {
+	aExact, bExact := !strings.Contains(a.Glob, "*"), !strings.Contains(b.Glob, "*")
+	switch {
+	case aExact && bExact:
+		// Compare the way hostMatchesGlob compares two exact names, so this
+		// never misses an overlap that normalization (case, a trailing dot,
+		// Unicode) would create.
+		return normalizeGlobText(a.Glob) == normalizeGlobText(b.Glob)
+	case aExact:
+		// b is the only glob; its own CrossPublicSuffix decides whether it can
+		// reach a host outside its registrable domain, such as an S3 bucket.
+		return hostMatchesGlob(a.Glob, b.Glob, !b.CrossPublicSuffix)
+	case bExact:
+		return hostMatchesGlob(b.Glob, a.Glob, !a.CrossPublicSuffix)
+	}
+	// Two confined label wildcards (not a leading "*."), overlap only if some
+	// host can satisfy both at once: every label that is literal in at least
+	// one of them must agree with the other, and a label that is the wildcard
+	// in both must have a common prefix and a common suffix. This keeps
+	// globs with a different, fixed label apart, such as "sts.*.amazonaws.com"
+	// and "iam.*.amazonaws.com", and sibling labels such as "api*.example.com"
+	// and "admin*.example.com", from being flagged.
+	if ag, aerr := parseLabelWildcardGlob(a.Glob); aerr == nil {
+		if bg, berr := parseLabelWildcardGlob(b.Glob); berr == nil {
+			return confinedGlobsOverlap(ag, bg)
+		}
+	}
+	as, bs := normalizeGlobText(wildcardSuffix(a.Glob)), normalizeGlobText(wildcardSuffix(b.Glob))
+	return as == bs || strings.HasSuffix(as, "."+bs) || strings.HasSuffix(bs, "."+as)
+}
+
+// confinedGlobsOverlap reports whether some host can match both a and b,
+// given that both are confined label wildcards (not a leading "*."), which
+// require an exact label count match.
+func confinedGlobsOverlap(a, b labelWildcardGlob) bool {
+	if len(a.labels) != len(b.labels) {
+		return false
+	}
+	for i := range a.labels {
+		switch {
+		case i == a.idx && i == b.idx:
+			if !commonLabelExists(a.prefix, a.suffix, b.prefix, b.suffix) {
+				return false
+			}
+		case i == a.idx:
+			if !labelSatisfies(b.labels[i], a.prefix, a.suffix) {
+				return false
+			}
+		case i == b.idx:
+			if !labelSatisfies(a.labels[i], b.prefix, b.suffix) {
+				return false
+			}
+		case a.labels[i] != b.labels[i]:
+			return false
+		}
+	}
+	return true
+}
+
+// commonLabelExists reports whether some label can start with prefix1 and end
+// with suffix1, and also start with prefix2 and end with suffix2.
+func commonLabelExists(prefix1, suffix1, prefix2, suffix2 string) bool {
+	return (strings.HasPrefix(prefix1, prefix2) || strings.HasPrefix(prefix2, prefix1)) &&
+		(strings.HasSuffix(suffix1, suffix2) || strings.HasSuffix(suffix2, suffix1))
+}
+
+// labelSatisfies reports whether the literal label can stand in the position
+// of a wildcard label with the given literal prefix and suffix, matching the
+// same rule matchLabels uses: the wildcard itself must cover at least one
+// character.
+func labelSatisfies(label, prefix, suffix string) bool {
+	return len(label) > len(prefix)+len(suffix) && strings.HasPrefix(label, prefix) && strings.HasSuffix(label, suffix)
+}
+
+// wildcardSuffix returns the labels to the right of the label that holds the
+// wildcard in glob.
+func wildcardSuffix(glob string) string {
+	labels := strings.Split(strings.TrimSuffix(glob, "."), ".")
+	for i, l := range labels {
+		if strings.Contains(l, "*") {
+			return strings.Join(labels[i+1:], ".")
+		}
+	}
+	return glob
+}
+
+// normalizeGlobText canonicalizes a domain the way hostMatchesGlob canonicalizes
+// an exact host: Punycode, lowercase, with no trailing dot. It falls back to a
+// simpler normalization if the text does not parse as a host, so a caller never
+// gets an error from what is meant to be a best-effort comparison.
+func normalizeGlobText(s string) string {
+	domainPart := strings.TrimPrefix(s, "*.")
+	n, err := hostport.NormalizeHost(domainPart, false)
+	if err != nil {
+		n = domainPart
+	}
+	return strings.TrimRight(strings.ToLower(n), ".")
+}
