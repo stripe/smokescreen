@@ -190,3 +190,73 @@ func TestGlobsOverlap(t *testing.T) {
 		assert.Equal(t, tt.want, globsOverlap(tt.b, tt.a), "%+v %+v", tt.b, tt.a)
 	}
 }
+
+func TestValidateDomainGlobRejects(t *testing.T) {
+	invalidGlobs := map[string]struct {
+		glob     string
+		errorMsg string
+	}{
+		"multiple wildcards": {
+			"*.*.stripe.com",
+			"only one wildcard is allowed per domain glob",
+		},
+		"matches everything (*)": {
+			"*",
+			"domain glob must not match everything",
+		},
+		"matches everything (*.)": {
+			"*.",
+			"domain glob must not match everything",
+		},
+		"non-normalized domain": {
+			"éxämple.com",
+			"incorrect ACL entry; use \"xn--xmple-gra7a.com\"",
+		},
+		"label wildcard and leading wildcard": {
+			"*.api*.example.com",
+			"only one wildcard is allowed per domain glob",
+		},
+		"whole label wildcard under a public suffix": {
+			"login.*.com",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"wildcard under a wildcard public suffix rule": {
+			"api.*.compute.amazonaws.com",
+			"wildcard must not match a public suffix",
+		},
+		"label wildcard without literal prefix": {
+			"*bob.example.com",
+			"domain glob must represent a full prefix (sub)domain",
+		},
+		"label wildcard under a public suffix": {
+			"ex*ample.com",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"label wildcard under a private public suffix": {
+			"foo*.github.io",
+			"wildcard label must be followed by a registrable domain",
+		},
+		"label wildcard in top-level domain": {
+			"example.c*",
+			"wildcard must not be in the top-level domain",
+		},
+		"label wildcard matching IP addresses": {
+			"10.0.0.1*.1",
+			"domain glob must not match IP addresses",
+		},
+		"label wildcard in Punycode label": {
+			"xn--*.example.com",
+			"wildcards are not supported in Punycode labels",
+		},
+		"label wildcard with non-normalized suffix": {
+			"api*.Example.com",
+			"incorrect ACL entry; \"Example.com\" must be in normalized form \"example.com\"",
+		},
+	}
+
+	for name, g := range invalidGlobs {
+		t.Run(name, func(t *testing.T) {
+			assert.ErrorContains(t, ValidateDomainGlob("acl", g.glob), g.errorMsg)
+		})
+	}
+}

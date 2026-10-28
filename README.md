@@ -105,6 +105,7 @@ current CLI reference. Here are the available options:
    --tls-crl-file FILE                         Verify validity of client certificates against Certificate Revocation List from FILE
    --additional-error-message-on-deny MESSAGE  Display MESSAGE in the HTTP response if proxying request is denied
    --disable-acl-policy-action POLICY ACTION   Disable usage of a POLICY ACTION such as "open" in the egress ACL
+   --acl-compat                                Let service allow entries win over global.deny without override_global_policy, and warn (default: false)
    --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
                                                  This should be an absolute path with all symlinks, if any, resolved.
    --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
@@ -129,7 +130,7 @@ override values in the file. Unknown YAML fields are rejected. YAML names can
 differ from CLI flags: for example, `--listen-ip` maps to `ip`,
 `--listen-port` to `port`, `--timeout` to `connect_timeout`, and
 `--egress-acl-file` to `acl_file`. The main configuration and hostname ACL are
-separate files; the ACL has its own `version`, `services`, and `default` fields.
+separate files; the ACL has its own `version`, `services`, `default`, and `global` fields.
 
 ```yaml
 ip: "127.0.0.1"
@@ -332,15 +333,48 @@ max_concurrent_connect_tunnels: 50  # limits active CONNECT tunnel connections
 
 ### Hostname ACLs
 
-A hostname ACL can be described in a YAML formatted file. The ACL, at its top-level, contains a list of services as well as a default behavior.
+A hostname ACL is a YAML file with `version: v2`. It has one entry for each service, an optional `default` for roles that have no entry, and `global` entries that apply to every role. Smokescreen v2 reads only v2 ACL files; if you keep v1 ACL files, stay on the v1 module.
 
-Three policies are supported:
+```yaml
+version: v2
+services:
+  - name: ci
+    project: ci-infra
+    action: open
+    proxies: [proxy.example.net]       # upstream proxies the role may CONNECT through
+    allow:
+      - domains: [pypi.org]
+        override_global_policy: true   # wins over global.deny for pypi.org only
+      - domains: [slack.com]
+        mitm:
+          add_headers: {X-Team: ci}
+    deny: [tracking.example.com]
+default:
+  project: security
+  action: enforce
+global:
+  deny: [pypi.org, "regis*.npmjs.org"]
+  allow:
+    - domains: [api.partner.example]
+```
+
+Each service has an `action`, which decides requests that no entry matches:
 
 | Policy  | Behavior                                                                                                       |
 | ------- | -------------------------------------------------------------------------------------------------------------- |
 | Open    | Allows all traffic for this service                                                                            |
 | Report  | Allows all traffic for this service and warns if client accesses a remote host which is not in the list        |
 | Enforce | Only allows traffic to remote hosts provided in the list. Will warn and deny if remote host is not in the list |
+
+Smokescreen decides a request in this order, and the first step that matches decides:
+
+1. A role that has no service entry uses `default`, or is denied if there is no `default`.
+2. A CONNECT proxy host must match one of the service's `proxies`.
+3. The service's `deny` list, then its `allow` entries.
+4. The `global.deny` list, then the `global.allow` entries.
+5. The service's `action`.
+
+The order of entries in the file does not change a result. A service `allow` entry wins over `global.deny` only if it sets `override_global_policy: true`, and only for the hosts that the entry itself matches: in the example, `ci` can reach `pypi.org`, but not `registry.npmjs.org`. The ACL fails to load if a service `allow` entry overlaps `global.deny` without the field. To load an existing ACL that relies on the old behavior, where a service allow always won, start Smokescreen with `--acl-compat`, or set `acl_compat: true` in the config file. Smokescreen then logs a warning for each such entry. Unknown keys are rejected.
 
 > :warning: **The ACL is only applied to hostnames *as they appear in the request*!** If you want to allow or deny traffic based on the destination IP address *after DNS resolution*, you should be using the config options instead (see the `IP Filtering` section above).
 
@@ -352,15 +386,13 @@ A host can be specified with or without a wildcard, and a glob may contain at mo
 
 Apart from the leading `*.`, a wildcard never crosses a `.`. The labels to its right must form a registrable domain rather than a [public suffix](https://publicsuffix.org/) such as `com`, `co.uk`, or `github.io`, and the wildcard label must be lowercase ASCII.
 
-Outside of the `global_deny_list`, these wildcards also only match hosts in the same registrable domain as the labels to their right, according to the public suffix list. This prevents `access-analyzer.*.amazonaws.com` from matching `access-analyzer.s3.amazonaws.com`, an S3 bucket that anyone can claim. It also means that hosts that are public suffixes themselves, such as `s3.us-west-2.amazonaws.com`, or that sit directly under one, such as `access-analyzer.us-east-1.amazonaws.com`, never match a wildcard; specify such hosts explicitly. When a request is denied or reported only because of this check, the decision reason in the logs and in the response to the client says so:
+In `allow` entries and `proxies`, these wildcards only match hosts in the same registrable domain as the labels to their right, according to the public suffix list. This prevents `access-analyzer.*.amazonaws.com` from matching `access-analyzer.s3.amazonaws.com`, an S3 bucket that anyone can claim. It also means that hosts that are public suffixes themselves, such as `s3.us-west-2.amazonaws.com`, or that sit directly under one, such as `access-analyzer.us-east-1.amazonaws.com`, never match a wildcard; specify such hosts explicitly. When a request is denied or reported only because of this check, the decision reason in the logs and in the response to the client says so:
 
 ```
 rule has enforce policy; wildcard 'sts.*.amazonaws.com' was not applied because 'us-east-1.amazonaws.com' is on the public suffix list
 ```
 
-To turn the check off for an ACL, set `unsafe_allow_wildcards_across_public_suffixes: true` at its top level. Wildcards in that ACL's allow lists then also match hosts under public suffixes, including hosts that belong to other tenants, such as S3 buckets. Validation is unchanged.
-
-The `global_deny_list` always skips this check. There, matching too much only blocks extra hosts, while matching too little would let denied traffic through. Because a wildcard never matches an empty string or a subdomain, denying `api*.example.com` blocks neither `api.example.com` nor `v1.api-east.example.com`; deny those separately if needed.
+Deny globs always match across public suffixes, so a `deny` list blocks every host that the glob's text describes. To match across public suffixes for one allowed domain, write it as a mapping with `cross_public_suffix: true`; this also matches hosts that belong to other tenants, such as S3 buckets. Because a wildcard never matches an empty string or a subdomain, denying `api*.example.com` blocks neither `api.example.com` nor `v1.api-east.example.com`; deny those separately if needed.
 
 | host                              | valid   |
 | --------------------------------- | ------- |
@@ -380,24 +412,9 @@ The `global_deny_list` always skips this check. There, matching too much only bl
 | `éxämple.com`                     | no      |
 | `example.*`                       | hell no |
 
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/acl_sample_config.yaml) is a sample ACL.
+[Here](pkg/smokescreen/acl/v2/testdata/acl_sample.yaml) is a sample ACL.
 
-#### Global Hostname Allow/Deny Lists
-
-Optionally, you may specify a global allow list and a global deny list for hostnames in your ACL config.
-
-These lists override the policy, but do not override the `allowed_domains` list for each role.
-
-For example, specifying `example.com` in your global_allow_list will allow traffic for that domain on that role, even if that role is set to `enforce` and does not specify `example.com` in its allowed domains.
-
-Similarly, specifying `malicious.com` in your global_deny_list will deny traffic for that domain on a role, even if that role is set to `report` or `open`.
-However, if the host specifies `malicious.com` in its `allowed_domains`, traffic to `malicious.com` will be allowed on that role, regardless of policy.
-
-> :warning: **The global_deny_list will only block specific *hostnames*, not entire *destinations*.** For example, if `malicious.com` is in the global_deny_list but the IP address that it resolves to is not, roles with an `open` policy will still be able to access the destination by using its IP address directly. For this reason, **we recommend using allowlists instead of denylists** whenever it is possible to do so, and **blocking IP addresses via config options, not the ACL** (see the `IP Filtering` section above).
-
-If a domain matches both the `global_allow_list` and the `global_deny_list`, the `global_deny_list` behavior takes priority.
-
-[Here](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/acl/v1/testdata/acl_sample_config_with_global.yaml) is a sample ACL specifying these options.
+> :warning: **A deny entry only blocks specific *hostnames*, not entire *destinations*.** For example, if `malicious.com` is in `global.deny` but the IP address that it resolves to is not, roles with an `open` action can still reach the destination by using its IP address directly. For this reason, **we recommend allow entries instead of deny entries** whenever it is possible to do so, and **blocking IP addresses via config options, not the ACL** (see the `IP Filtering` section above).
 
 # Development and Testing
 
