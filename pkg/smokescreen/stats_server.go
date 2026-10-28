@@ -1,6 +1,7 @@
 package smokescreen
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,40 +13,48 @@ import (
 type StatsServer struct {
 	config     *Config
 	ln         net.Listener
+	httpServer *http.Server
 	mux        *http.ServeMux
-	socketPath string
 }
 
-func newServer(config *Config) (s *StatsServer) {
-	s = &StatsServer{
+func newServer(config *Config) (*StatsServer, error) {
+	s := &StatsServer{
 		config: config,
 		mux:    http.NewServeMux(),
 	}
-
 	s.mux.HandleFunc("/", s.stats)
-	return
-}
 
-func (s *StatsServer) Serve() {
-	pid := os.Getpid()
-	s.socketPath = fmt.Sprintf("%s/track-%d.sock", s.config.StatsSocketDir, pid)
-	ln, err := net.Listen("unix", s.socketPath)
-
+	socketPath := fmt.Sprintf("%s/track-%d.sock", config.StatsSocketDir, os.Getpid())
+	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server: ", err)
+		return nil, fmt.Errorf("listen on stats socket %q: %w", socketPath, err)
 	}
-	os.Chmod(s.socketPath, s.config.StatsSocketFileMode)
+	if err := os.Chmod(socketPath, config.StatsSocketFileMode); err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("set permissions on stats socket %q: %w", socketPath, err)
+	}
 
 	s.ln = ln
-	err = http.Serve(s.ln, s.mux)
-	if err != nil {
-		s.config.Log.Fatal("Could not start the reporting server: ", err)
+	s.httpServer = &http.Server{Handler: s.mux}
+	return s, nil
+}
+
+// Serve serves stats until Shutdown is called or the listener fails.
+func (s *StatsServer) Serve() {
+	defer s.Shutdown()
+	if err := s.httpServer.Serve(s.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.config.Log.Errorf("stats server serving failed: %v", err)
 	}
 }
 
+// Shutdown closes the stats server, listener, and any active stats requests.
 func (s *StatsServer) Shutdown() {
-	s.ln.Close()
-	os.Remove(s.socketPath)
+	if err := s.httpServer.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		s.config.Log.Errorf("failed to close stats server: %v", err)
+	}
+	if err := s.ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		s.config.Log.Errorf("failed to close stats listener: %v", err)
+	}
 }
 
 func (s *StatsServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -83,8 +92,14 @@ func (s *StatsServer) stats(rw http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// StartStatsServer starts the Unix stats endpoint. It returns nil and logs an
+// error if the socket cannot be bound or initialized.
 func StartStatsServer(config *Config) *StatsServer {
-	server := newServer(config)
+	server, err := newServer(config)
+	if err != nil {
+		config.Log.Errorf("could not start the stats server: %v", err)
+		return nil
+	}
 	go server.Serve()
 	return server
 }
