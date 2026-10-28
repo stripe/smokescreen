@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 )
 
 func TestNewConfigurationAllowSelfConnections(t *testing.T) {
@@ -55,22 +57,22 @@ func TestNewConfigurationAllowSelfConnections(t *testing.T) {
 }
 
 const aclWithOpenDefaultRule = `
-version: v1
+version: v2
 services:
   - name: some-service
     project: test-project
     action: enforce
-    allowed_domains:
-      - "example.com"
+    allow:
+      - domains: ["example.com"]
 default:
   project: default-project
   action: open
-  allowed_domains:
-    - "allowedbydefault.com"
+  allow:
+    - domains: ["allowedbydefault.com"]
 `
 
 const aclWithOpenNamedRule = `
-version: v1
+version: v2
 services:
   - name: open-service
     project: test-project
@@ -78,8 +80,8 @@ services:
 default:
   project: default-project
   action: enforce
-  allowed_domains:
-    - "example.com"
+  allow:
+    - domains: ["example.com"]
 `
 
 // writeTestConfig writes an ACL file and a top-level smokescreen YAML config
@@ -160,18 +162,18 @@ func TestNewConfigurationEgressAclFileOverridesYAML(t *testing.T) {
 	// The CLI-selected ACL does not use "open" anywhere, so it passes.
 	cliAclPath := filepath.Join(dir, "cli_acl.yaml")
 	require.NoError(t, os.WriteFile(cliAclPath, []byte(`
-version: v1
+version: v2
 services:
   - name: some-service
     project: test-project
     action: enforce
-    allowed_domains:
-      - "example.com"
+    allow:
+      - domains: ["example.com"]
 default:
   project: default-project
   action: enforce
-  allowed_domains:
-    - "example.com"
+  allow:
+    - domains: ["example.com"]
 `), 0644))
 
 	args := []string{
@@ -185,6 +187,54 @@ default:
 	require.NoError(t, err)
 	require.NotNil(t, conf)
 	require.NotNil(t, conf.EgressACL)
+}
+
+// TestNewConfigurationAclCompat covers loading an ACL whose service allow
+// entry overlaps the global deny list without override_global_policy: it
+// fails by default, and loads with --acl-compat or acl_compat in the config
+// file, which is read before the CLI flags.
+func TestNewConfigurationAclCompat(t *testing.T) {
+	const unmarked = `
+version: v2
+services:
+  - name: ci
+    action: enforce
+    allow:
+      - domains: [pypi.org]
+global:
+  deny: [pypi.org]
+`
+	for _, tt := range []struct {
+		name, configYAML string
+		flags            []string
+		err              string
+	}{
+		{name: "strict", err: "set override_global_policy: true"},
+		{name: "CLI compat", flags: []string{"--acl-compat"}},
+		{name: "YAML compat", configYAML: "acl_compat: true\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			aclPath := filepath.Join(dir, "acl.yaml")
+			require.NoError(t, os.WriteFile(aclPath, []byte(unmarked), 0644))
+			args := append([]string{"smokescreen", "--egress-acl-file=" + aclPath}, tt.flags...)
+			if tt.configYAML != "" {
+				configPath := filepath.Join(dir, "config.yaml")
+				require.NoError(t, os.WriteFile(configPath, []byte(tt.configYAML+"acl_file: "+aclPath+"\n"), 0644))
+				args = []string{"smokescreen", "--config-file=" + configPath}
+			}
+
+			conf, err := NewConfiguration(args, nil)
+			if tt.err != "" {
+				require.ErrorContains(t, err, tt.err)
+				return
+			}
+			require.NoError(t, err)
+			d, err := conf.EgressACL.Decide(acl.DecideArgs{Service: "ci", Host: "pypi.org"})
+			require.NoError(t, err)
+			assert.Equal(t, acl.Allow, d.Result)
+		})
+	}
 }
 
 func TestNewConfigurationMostSpecificIPRules(t *testing.T) {

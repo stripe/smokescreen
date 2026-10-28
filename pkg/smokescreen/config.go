@@ -23,7 +23,7 @@ import (
 
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/logging"
-	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
@@ -118,6 +118,12 @@ type Config struct {
 	ConnTracker              conntrack.TrackerInterface
 	Healthcheck              http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown             atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
+
+	// AclCompat loads an egress ACL whose service allow entries overlap the
+	// global deny list without override_global_policy, and lets those entries
+	// win over the global deny list as they did in v1, logging a warning for
+	// each one. Without it, such an ACL fails to load.
+	AclCompat bool
 
 	// IPFilterBypassedDomains bypass IP filters, but not ACLs or self-connection protection.
 	IPFilterBypassedDomains []string
@@ -647,7 +653,18 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 
 	config.Log.Info(fmt.Sprintf("Loading egress ACL from %s", aclFile))
 
-	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	opts := acl.Options{
+		Compat: config.AclCompat,
+		Warn:   func(msg string) { config.Log.Warn(msg) },
+	}
+	for _, action := range config.DisabledAclPolicyActions {
+		mode, err := acl.ModeFromString(action)
+		if err != nil {
+			return err
+		}
+		opts.DisabledModes = append(opts.DisabledModes, mode)
+	}
+	egressACL, err := acl.Load(opts, aclFile)
 	if err != nil {
 		config.Log.Info(logging.Error(err))
 		return err
