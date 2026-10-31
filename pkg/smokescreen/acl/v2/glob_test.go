@@ -160,3 +160,33 @@ func TestIDNHostMatching(t *testing.T) {
 	assert.True(t, HostMatchesGlob("sub.тест.example.com", "*.xn--e1aybc.example.com"))
 	assert.False(t, HostMatchesGlob("тест.example.com", "*.xn--e1aybc.example.com"))
 }
+
+func TestGlobsOverlap(t *testing.T) {
+	g := func(glob string) Domain { return Domain{Glob: glob} }
+	cross := func(glob string) Domain { return Domain{Glob: glob, CrossPublicSuffix: true} }
+
+	tests := []struct {
+		a, b Domain
+		want bool
+	}{
+		{g("pypi.org"), g("pypi.org"), true},
+		{g("pypi.org"), g("PyPI.org."), true}, // exact comparison normalizes case and a trailing dot
+		{g("pypi.org"), g("files.pypi.org"), false},
+		{g("api.example.com"), g("*.example.com"), true},
+		{g("*.a.example.com"), g("*.example.com"), true},
+		{g("*.example.com"), g("*.example.org"), false},
+		{g("regis*.npmjs.org"), g("registry.npmjs.org"), true},
+		{g("regis*.npmjs.org"), g("*.npmjs.org"), true},
+		{g("api*.example.com"), g("admin*.example.com"), false},                                 // disjoint literal prefixes, same label
+		{g("api*.example.com"), g("a*.example.com"), true},                                      // "a" is a prefix of "api"
+		{g("api*.example.com"), g("api*.example.org"), false},                                   // same wildcard label, different suffix
+		{g("sts.*.amazonaws.com"), g("iam.*.amazonaws.com"), false},                             // fixed first label differs
+		{g("sts.*.amazonaws.com"), g("sts.*.amazonaws.com"), true},                              // same glob
+		{g("access-analyzer.*.amazonaws.com"), g("access-analyzer.s3.amazonaws.com"), false},    // s3.amazonaws.com is a public suffix; the allow does not cross it
+		{cross("access-analyzer.*.amazonaws.com"), g("access-analyzer.s3.amazonaws.com"), true}, // ...unless it is marked cross_public_suffix
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, globsOverlap(tt.a, tt.b), "%+v %+v", tt.a, tt.b)
+		assert.Equal(t, tt.want, globsOverlap(tt.b, tt.a), "%+v %+v", tt.b, tt.a)
+	}
+}
