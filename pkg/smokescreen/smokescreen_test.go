@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/pkg/smokescreen/conntrack"
+	"github.com/stripe/smokescreen/pkg/smokescreen/hostport"
 	"github.com/stripe/smokescreen/pkg/smokescreen/metrics"
 )
 
@@ -1674,6 +1675,54 @@ func TestCustomRequestHandler(t *testing.T) {
 }
 
 func TestCONNECTProxyACLs(t *testing.T) {
+	t.Run("validates the proxy header after role extraction", func(t *testing.T) {
+		const role = "test-external-connect-proxy-allowed-srv"
+		for _, tc := range []struct {
+			name         string
+			initialProxy string
+			roleProxy    string
+			allowed      bool
+		}{
+			{name: "role supplies disallowed proxy", roleProxy: "https://unapproved.example:443"},
+			{name: "role replaces approved proxy", initialProxy: "https://myproxy.com", roleProxy: "https://unapproved.example:443"},
+			{name: "role supplies approved proxy with credentials and port", roleProxy: "https://user:password@myproxy.com:12345", allowed: true},
+			{name: "role supplies malformed proxy", roleProxy: "https://myproxy.com:invalid"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				cfg, err := testConfig(role)
+				require.NoError(t, err)
+				cfg.RoleFromRequest = func(req *http.Request) (string, error) {
+					req.Header.Set("X-Upstream-Https-Proxy", tc.roleProxy)
+					return role, nil
+				}
+				req := httptest.NewRequest(http.MethodConnect, "https://127.0.0.1:443", nil)
+				req.Header.Set("X-Upstream-Https-Proxy", tc.initialProxy)
+				decision := checkACLsForRequest(cfg, &SmokescreenContext{}, req, hostport.HostPort{Host: "127.0.0.1", Port: 443})
+				assert.Equal(t, tc.allowed, decision.allow)
+				assert.Equal(t, tc.roleProxy, decision.ClientRequestedProxy)
+				if decision.allow {
+					selectUpstreamProxy(cfg, &SmokescreenContext{}, decision)
+					assert.Equal(t, tc.roleProxy, decision.SelectedUpstreamProxy)
+				}
+			})
+		}
+	})
+
+	t.Run("no ACL preserves the client proxy without requiring a role", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.RoleFromRequest = func(*http.Request) (string, error) {
+			t.Fatal("role extraction must not run without an ACL")
+			return "", nil
+		}
+		req := httptest.NewRequest(http.MethodConnect, "https://127.0.0.1:443", nil)
+		const proxyURL = "https://user:password@myproxy.com:12345"
+		req.Header.Set("X-Upstream-Https-Proxy", proxyURL)
+		decision := checkACLsForRequest(cfg, &SmokescreenContext{}, req, hostport.HostPort{Host: "127.0.0.1", Port: 443})
+		assert.True(t, decision.allow)
+		selectUpstreamProxy(cfg, &SmokescreenContext{}, decision)
+		assert.Equal(t, proxyURL, decision.SelectedUpstreamProxy)
+	})
+
 	t.Run("Blocks a non-approved proxy when the X-Upstream-Https-Proxy header is set", func(t *testing.T) {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))

@@ -1332,16 +1332,8 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 		OutboundHost: destination.String(),
 	}
 
-	// X-Upstream-Https-Proxy is a header that can be set by the client to specify
-	// a _subsequent_ proxy to use for the CONNECT request. This is used to allow traffic
-	// flow as in: client -(TLS)-> smokescreen -(TLS)-> external proxy -(TLS)-> destination.
-	// Without this header, there's no way for the client to specify a subsequent proxy.
-	// Also note - Get returns the first value for a given header, or the empty string,
-	// which is the behavior we want here.
-	clientProvidedProxy := req.Header.Get("X-Upstream-Https-Proxy")
-	decision.ClientRequestedProxy = clientProvidedProxy
-
 	if config.EgressACL == nil {
+		decision.ClientRequestedProxy = req.Header.Get("X-Upstream-Https-Proxy")
 		decision.allow = true
 		decision.Reason = "Egress ACL is not configured"
 		return decision
@@ -1376,6 +1368,11 @@ func checkACLsForRequest(config *Config, sctx *SmokescreenContext, req *http.Req
 	}
 
 	decision.Role = role
+
+	// RoleFromRequest may populate this header. Capture the final client proxy
+	// after role extraction so authorization and selection use the same URL.
+	clientProvidedProxy := req.Header.Get("X-Upstream-Https-Proxy")
+	decision.ClientRequestedProxy = clientProvidedProxy
 
 	// This host validation prevents IPv6 addresses from being used as destinations.
 	// Added for backwards compatibility.
