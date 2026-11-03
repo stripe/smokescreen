@@ -71,6 +71,17 @@ type Resolver interface {
 	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
 }
 
+// DialErrorEvent describes a failed outbound dial. Addresses are snapshotted
+// before dialing and do not imply a route classification.
+type DialErrorEvent struct {
+	Network            string    // Network passed to the dialer.
+	TargetAddr         string    // Actual target before resolution; may be an upstream proxy.
+	ResolvedAddr       string    // Address passed to the underlying dialer.
+	RequestDestination string    // Original ACL destination with port, or empty if unavailable.
+	Err                error     // Original dial error, retaining its type and wrapping.
+	CompletedAt        time.Time // Captured immediately after the dial returns.
+}
+
 type Config struct {
 	Ip       string
 	Port     uint16
@@ -129,6 +140,13 @@ type Config struct {
 
 	// Custom Dial Timeout function to be called
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
+
+	// OnDialError runs once per failed default or custom dial, after accounting
+	// and cleanup, before returning the error. Nil disables it; failures before
+	// dialing or after connection establishment are excluded.
+	// It runs synchronously and may run concurrently; return promptly without
+	// blocking I/O. It cannot alter the error or request a retry. Panics are not recovered here.
+	OnDialError func(context.Context, DialErrorEvent)
 
 	// Custom handler to allow clients to modify reject responses
 	// Deprecated: RejectResponseHandler is deprecated.Please use RejectResponseHandlerWithCtx instead.
