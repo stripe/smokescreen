@@ -182,31 +182,6 @@ use their last value. Per-metric and per-emission tags override global defaults.
 
 Go embedders can call `Config.SetGlobalMetricTags` before startup.
 
-### Outbound dial error notifications
-
-Go embedders can set `Config.OnDialError func(context.Context, smokescreen.DialErrorEvent)`
-to observe failed outbound dials without replacing `ProxyDialTimeout` or parsing
-logs and metrics. A nil hook has no effect. The hook runs once per failed dial
-from either the default or custom dialer, after existing failure accounting and
-cleanup and before the original error is returned. Dial behavior, logging, and
-metrics are unchanged.
-
-`DialErrorEvent` contains `Network`, `TargetAddr`, `ResolvedAddr`,
-`RequestDestination`, `Err`, and `CompletedAt`. Address strings are snapshotted
-before dialing. `TargetAddr` is the actual target supplied to `dialContext` before
-resolution; `ResolvedAddr` is passed to the underlying dialer.
-`RequestDestination` is the original destination from the ACL decision (including
-its port), or empty if unavailable. An upstream proxy endpoint may be the actual
-target while the request destination is a different host. These fields do not
-classify routing. `Err` retains the original error's type and wrapping, and
-`CompletedAt` is captured immediately after the dial returns.
-
-The hook is synchronous, may run concurrently, and must return promptly without
-blocking I/O. It cannot suppress or replace the error or request a retry. Panics
-are not recovered at the hook call. Notifications exclude DNS, ACL, admission,
-and tunnel-limit failures before dialing, and later TLS, HTTP, or established
-connection I/O failures. No connection ownership is transferred.
-
 ### Client Identification
 
 In order to override how Smokescreen identifies its clients, you must:

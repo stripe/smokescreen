@@ -71,23 +71,15 @@ type Resolver interface {
 	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
 }
 
-// DialErrorEvent describes an outbound dial that returned an error.
-// Address fields are value snapshots taken before calling the dialer.
-// The event does not classify routing through an upstream proxy.
+// DialErrorEvent describes a failed outbound dial. Addresses are snapshotted
+// before dialing and do not imply a route classification.
 type DialErrorEvent struct {
-	Network string // Network passed to the dialer.
-	// TargetAddr is the actual target supplied to dialContext before resolution.
-	// With an upstream proxy, it can differ from RequestDestination.
-	TargetAddr string
-	// ResolvedAddr is the address passed to the underlying dialer.
-	ResolvedAddr string
-	// RequestDestination is the original destination from the ACL decision,
-	// including its port, or empty if unavailable.
-	RequestDestination string
-	// Err is the original dial error, preserving its type and wrapping.
-	Err error
-	// CompletedAt is captured immediately after the underlying dial returns.
-	CompletedAt time.Time
+	Network            string    // Network passed to the dialer.
+	TargetAddr         string    // Actual target before resolution; may be an upstream proxy.
+	ResolvedAddr       string    // Address passed to the underlying dialer.
+	RequestDestination string    // Original ACL destination with port, or empty if unavailable.
+	Err                error     // Original dial error, retaining its type and wrapping.
+	CompletedAt        time.Time // Captured immediately after the dial returns.
 }
 
 type Config struct {
@@ -149,13 +141,11 @@ type Config struct {
 	// Custom Dial Timeout function to be called
 	ProxyDialTimeout func(ctx context.Context, network, address string, timeout time.Duration) (net.Conn, error)
 
-	// OnDialError, when non-nil, is called once for each failed outbound dial,
-	// after failure accounting and cleanup and before returning the dial error.
-	// It applies to both the default dialer and ProxyDialTimeout. It does not
-	// report failures before dialing or later TLS, HTTP, or connection I/O errors.
-	// The callback runs synchronously, may be invoked concurrently, and must
-	// return promptly without blocking I/O. It cannot suppress or replace the
-	// error or request a retry. Callback panics are not recovered here.
+	// OnDialError runs once per failed default or custom dial, after accounting
+	// and cleanup, before returning the error. Nil disables it; failures before
+	// dialing or after connection establishment are excluded.
+	// It runs synchronously and may run concurrently; return promptly without
+	// blocking I/O. It cannot alter the error or request a retry. Panics are not recovered here.
 	OnDialError func(context.Context, DialErrorEvent)
 
 	// Custom handler to allow clients to modify reject responses
