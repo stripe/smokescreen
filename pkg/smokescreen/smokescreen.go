@@ -547,12 +547,20 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	var conn net.Conn
 	var err error
 
+	event := DialErrorEvent{
+		Network:            network,
+		TargetAddr:         addr,
+		ResolvedAddr:       d.ResolvedAddr.String(),
+		RequestDestination: d.OutboundHost,
+	}
 	start := time.Now()
 	if sctx.cfg.ProxyDialTimeout == nil {
-		conn, err = net.DialTimeout(network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
+		conn, err = net.DialTimeout(network, event.ResolvedAddr, sctx.cfg.ConnectTimeout)
 	} else {
-		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, d.ResolvedAddr.String(), sctx.cfg.ConnectTimeout)
+		conn, err = sctx.cfg.ProxyDialTimeout(ctx, network, event.ResolvedAddr, sctx.cfg.ConnectTimeout)
 	}
+	event.CompletedAt = time.Now()
+	event.Err = err
 	connTime := time.Since(start)
 	sctx.dialAttrs = dialContextLoggerFields(pctx, sctx, conn, connTime)
 
@@ -569,6 +577,10 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		if sctx.tunnelSlotAcquired && sctx.cfg.TunnelLimiter != nil {
 			sctx.cfg.TunnelLimiter.Release()
 			sctx.tunnelSlotAcquired = false
+		}
+
+		if sctx.cfg.OnDialError != nil {
+			sctx.cfg.OnDialError(ctx, event)
 		}
 
 		return nil, err
