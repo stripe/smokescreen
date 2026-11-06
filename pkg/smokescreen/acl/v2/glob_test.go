@@ -162,11 +162,11 @@ func TestIDNHostMatching(t *testing.T) {
 }
 
 func TestGlobsOverlap(t *testing.T) {
-	g := func(glob string) Domain { return Domain{Glob: glob} }
-	cross := func(glob string) Domain { return Domain{Glob: glob, CrossPublicSuffix: true} }
+	g := func(glob string) globPattern { return globPattern{glob: glob} }
+	cross := func(glob string) globPattern { return globPattern{glob: glob, cross: true} }
 
 	tests := []struct {
-		a, b Domain
+		a, b globPattern
 		want bool
 	}{
 		{g("pypi.org"), g("pypi.org"), true},

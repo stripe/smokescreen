@@ -17,10 +17,11 @@ services:
   - name: ci
     action: open
     allow:
-      - domains: [pypi.org, {glob: "regis*.npmjs.org", cross_public_suffix: true}]
+      - domains: [pypi.org, "regis*.npmjs.org"]
+        cross_public_suffix: true
 `))
 	require.NoError(t, err)
-	assert.Equal(t, []Domain{{Glob: "pypi.org"}, {Glob: "regis*.npmjs.org", CrossPublicSuffix: true}}, p.Services[0].Allow[0].Domains)
+	assert.Equal(t, Entry{Domains: []string{"pypi.org", "regis*.npmjs.org"}, CrossPublicSuffix: true}, p.Services[0].Allow[0])
 	assert.Equal(t, ModeOpen, p.Services[0].Action)
 
 	// A policy round-trips: tooling that loads, edits and writes one back
@@ -36,10 +37,9 @@ services:
 	for doc, want := range map[string]string{
 		"version: v2\nservices: []\nglobal_deny_list: []\n": "field global_deny_list not found",
 		"version: v1\n": `expected version "v2" got "v1"`,
-		"version: v2\nservices: [{name: a, action: closed}]\n":                                                          "unknown action closed",
-		"version: v2\nservices: [{name: a, action: open, allow: [{domains: [{glob: x, cross_public_sufix: true}]}]}]\n": "field cross_public_sufix not found",
-		"version: v2\nservices: []\n---\nversion: v2\nglobal: {deny: [x]}\n":                                            "more than one YAML document",
-		"version: v2\nglobal: {deny: [{glob: x, cross_public_suffix: true}]}\n":                                         "cannot unmarshal !!map into string",
+		"version: v2\nservices: [{name: a, action: closed}]\n":                                                  "unknown action closed",
+		"version: v2\nservices: [{name: a, action: open, allow: [{domains: [x], cross_public_sufix: true}]}]\n": "field cross_public_sufix not found",
+		"version: v2\nservices: []\n---\nversion: v2\nglobal: {deny: [x]}\n":                                    "more than one YAML document",
 	} {
 		_, err := Parse([]byte(doc))
 		require.ErrorContains(t, err, want)
@@ -48,7 +48,7 @@ services:
 
 func TestValidate(t *testing.T) {
 	deny := []string{"*.example.com"}
-	allow := Entry{Domains: []Domain{{Glob: "api.example.com"}}}
+	allow := Entry{Domains: []string{"api.example.com"}}
 	override := Entry{Domains: allow.Domains, OverrideGlobalPolicy: true}
 	svc := func(allow ...Entry) Service { return Service{Name: "web", Action: ModeEnforce, Allow: allow} }
 
@@ -62,13 +62,16 @@ func TestValidate(t *testing.T) {
 		{"missing action", Policy{Services: []Service{{Name: "web"}}}, Options{}, "web: action is required"},
 		{"disabled action", Policy{Services: []Service{svc()}}, Options{DisabledModes: []Mode{ModeEnforce}}, "utilizes a disabled policy:Enforce"},
 		{"empty domains", Policy{Services: []Service{svc(Entry{})}}, Options{}, "web: allow[0]: domains must not be empty"},
-		{"invalid glob", Policy{Services: []Service{svc(Entry{Domains: []Domain{{Glob: "*"}}})}}, Options{}, "must not match everything"},
+		{"invalid glob", Policy{Services: []Service{svc(Entry{Domains: []string{"*"}})}}, Options{}, "must not match everything"},
 		{"invalid deny glob", Policy{Global: Global{Deny: []string{"*"}}}, Options{}, "global.deny: *: domain glob must not match everything"},
 		{"override on global allow", Policy{Global: Global{Allow: []Entry{override}}}, Options{}, "only allowed on service allow entries"},
 		{"overlap without override", Policy{Services: []Service{svc(allow)}, Global: Global{Deny: deny}}, Options{}, `web: allow[0]: overlaps global deny "*.example.com"; set override_global_policy: true`},
 		// Deny globs cross public suffixes, so this deny also covers an S3
 		// bucket host that an allow glob of the same text would not match.
-		{"deny glob crosses public suffixes", Policy{Services: []Service{svc(Entry{Domains: []Domain{{Glob: "access-analyzer.s3.amazonaws.com"}}})}, Global: Global{Deny: []string{"access-analyzer.*.amazonaws.com"}}}, Options{}, "overlaps global deny"},
+		{"deny glob crosses public suffixes", Policy{Services: []Service{svc(Entry{Domains: []string{"access-analyzer.s3.amazonaws.com"}})}, Global: Global{Deny: []string{"access-analyzer.*.amazonaws.com"}}}, Options{}, "overlaps global deny"},
+		// The entry's own flag decides how far its wildcard reaches: crossing,
+		// it also covers the S3 bucket host that the deny list names.
+		{"crossing allow entry overlaps a deny host", Policy{Services: []Service{svc(Entry{Domains: []string{"access-analyzer.*.amazonaws.com"}, CrossPublicSuffix: true})}, Global: Global{Deny: []string{"access-analyzer.s3.amazonaws.com"}}}, Options{}, "overlaps global deny"},
 		{"default with a name", Policy{Default: &Service{Name: "x", Action: ModeEnforce}}, Options{}, "default: name is not allowed"},
 	}
 	for _, tt := range tests {

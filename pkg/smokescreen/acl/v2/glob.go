@@ -277,25 +277,32 @@ func MatchGlob(host string, domainGlob string, crossPublicSuffix bool) bool {
 	return hostMatchesGlob(host, domainGlob, !crossPublicSuffix)
 }
 
+// globPattern is a domain glob together with whether it matches across public
+// suffixes, which is all that globsOverlap needs to know about it.
+type globPattern struct {
+	glob  string
+	cross bool
+}
+
 // globsOverlap reports whether some host could match both a and b, honoring
-// each domain's own CrossPublicSuffix setting. Outside the two cases handled
+// each pattern's own cross setting. Outside the two cases handled
 // precisely below, it treats a label wildcard as covering every subdomain of
 // the labels after its wildcard, so it can report an overlap that no real
 // host has. It never misses a real overlap.
-func globsOverlap(a, b Domain) bool {
-	aExact, bExact := !strings.Contains(a.Glob, "*"), !strings.Contains(b.Glob, "*")
+func globsOverlap(a, b globPattern) bool {
+	aExact, bExact := !strings.Contains(a.glob, "*"), !strings.Contains(b.glob, "*")
 	switch {
 	case aExact && bExact:
 		// Compare the way hostMatchesGlob compares two exact names, so this
 		// never misses an overlap that normalization (case, a trailing dot,
 		// Unicode) would create.
-		return normalizeGlobText(a.Glob) == normalizeGlobText(b.Glob)
+		return normalizeGlobText(a.glob) == normalizeGlobText(b.glob)
 	case aExact:
-		// b is the only glob; its own CrossPublicSuffix decides whether it can
+		// b is the only glob; its own cross setting decides whether it can
 		// reach a host outside its registrable domain, such as an S3 bucket.
-		return hostMatchesGlob(a.Glob, b.Glob, !b.CrossPublicSuffix)
+		return hostMatchesGlob(a.glob, b.glob, !b.cross)
 	case bExact:
-		return hostMatchesGlob(b.Glob, a.Glob, !a.CrossPublicSuffix)
+		return hostMatchesGlob(b.glob, a.glob, !a.cross)
 	}
 	// Two confined label wildcards (not a leading "*."), overlap only if some
 	// host can satisfy both at once: every label that is literal in at least
@@ -304,12 +311,12 @@ func globsOverlap(a, b Domain) bool {
 	// globs with a different, fixed label apart, such as "sts.*.amazonaws.com"
 	// and "iam.*.amazonaws.com", and sibling labels such as "api*.example.com"
 	// and "admin*.example.com", from being flagged.
-	if ag, aerr := parseLabelWildcardGlob(a.Glob); aerr == nil {
-		if bg, berr := parseLabelWildcardGlob(b.Glob); berr == nil {
+	if ag, aerr := parseLabelWildcardGlob(a.glob); aerr == nil {
+		if bg, berr := parseLabelWildcardGlob(b.glob); berr == nil {
 			return confinedGlobsOverlap(ag, bg)
 		}
 	}
-	as, bs := normalizeGlobText(wildcardSuffix(a.Glob)), normalizeGlobText(wildcardSuffix(b.Glob))
+	as, bs := normalizeGlobText(wildcardSuffix(a.glob)), normalizeGlobText(wildcardSuffix(b.glob))
 	return as == bs || strings.HasSuffix(as, "."+bs) || strings.HasSuffix(bs, "."+as)
 }
 

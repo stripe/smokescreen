@@ -67,10 +67,8 @@ func validateService(name string, s Service, globalDeny []string, opts Options) 
 	if slices.Contains(opts.DisabledModes, s.Action) {
 		return fmt.Errorf("rule for svc:%v utilizes a disabled policy:%v", name, s.Action)
 	}
-	for _, d := range s.Proxies {
-		if err := ValidateDomainGlob(name, d.Glob); err != nil {
-			return err
-		}
+	if err := validateGlobs(name, s.Proxies); err != nil {
+		return err
 	}
 	if err := validateGlobs(name+": deny", s.Deny); err != nil {
 		return err
@@ -97,16 +95,11 @@ func validateService(name string, s Service, globalDeny []string, opts Options) 
 	return nil
 }
 
-func validateDomains(where string, domains []Domain) error {
+func validateDomains(where string, domains []string) error {
 	if len(domains) == 0 {
 		return fmt.Errorf("%s: domains must not be empty", where)
 	}
-	for _, d := range domains {
-		if err := ValidateDomainGlob(where, d.Glob); err != nil {
-			return err
-		}
-	}
-	return nil
+	return validateGlobs(where, domains)
 }
 
 func validateGlobs(where string, globs []string) error {
@@ -123,7 +116,7 @@ func validateGlobs(where string, globs []string) error {
 func overlappingDeny(e Entry, globalDeny []string) (string, bool) {
 	for _, x := range e.Domains {
 		for _, g := range globalDeny {
-			if globsOverlap(x, denyDomain(g)) {
+			if globsOverlap(globPattern{x, e.CrossPublicSuffix}, denyPattern(g)) {
 				return g, true
 			}
 		}
@@ -131,8 +124,8 @@ func overlappingDeny(e Entry, globalDeny []string) (string, bool) {
 	return "", false
 }
 
-// denyDomain returns the Domain that a deny glob matches as: deny globs always
-// match across public suffixes.
-func denyDomain(glob string) Domain {
-	return Domain{Glob: glob, CrossPublicSuffix: true}
+// denyPattern returns the pattern that a deny glob matches as: deny globs
+// always match across public suffixes.
+func denyPattern(glob string) globPattern {
+	return globPattern{glob, true}
 }

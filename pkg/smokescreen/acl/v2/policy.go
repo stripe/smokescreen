@@ -31,7 +31,8 @@ type Service struct {
 	// Action decides requests that no entry matches.
 	Action Mode `yaml:"action"`
 	// Proxies are the upstream proxies that the role may CONNECT through.
-	Proxies []Domain `yaml:"proxies"`
+	// Proxy globs never match across public suffixes.
+	Proxies []string `yaml:"proxies"`
 	Allow   []Entry  `yaml:"allow"`
 	// Deny holds domain globs that the role may not reach. Deny globs always
 	// match across public suffixes, so a deny list is as broad as it reads.
@@ -47,9 +48,13 @@ type Global struct {
 	Deny []string `yaml:"deny"`
 }
 
-// Entry is a set of allowed domains and the options that apply to them.
+// Entry is a set of allowed domain globs and the options that apply to them.
+// Domains that need different options go in separate entries.
 type Entry struct {
-	Domains []Domain `yaml:"domains"`
+	Domains []string `yaml:"domains"`
+	// CrossPublicSuffix lets a label wildcard in Domains match hosts outside
+	// the glob's registrable domain. See MatchGlob.
+	CrossPublicSuffix bool `yaml:"cross_public_suffix"`
 	// Mitm applies to requests that this entry allows. Only service allow
 	// entries can have it.
 	Mitm *MitmConfig `yaml:"mitm"`
@@ -59,37 +64,6 @@ type Entry struct {
 	// that overlaps the global deny list, so that each exception is visible
 	// where it is made.
 	OverrideGlobalPolicy bool `yaml:"override_global_policy"`
-}
-
-// Domain is a domain glob. In a file it is either a string or a mapping with
-// glob and cross_public_suffix keys.
-type Domain struct {
-	Glob string `yaml:"glob"`
-	// CrossPublicSuffix lets a label wildcard match hosts outside the glob's
-	// registrable domain. See MatchGlob.
-	CrossPublicSuffix bool `yaml:"cross_public_suffix"`
-}
-
-// UnmarshalYAML accepts a plain string as a Domain with only a glob, or a
-// mapping with glob and cross_public_suffix keys. Node.Decode does not inherit
-// the decoder's KnownFields setting, so the mapping form rejects unknown keys
-// itself.
-func (d *Domain) UnmarshalYAML(n *yaml.Node) error {
-	if n.Kind == yaml.ScalarNode {
-		return n.Decode(&d.Glob)
-	}
-	if n.Kind != yaml.MappingNode {
-		return fmt.Errorf("a domain must be a string or a mapping, not %v", n.Tag)
-	}
-	for i := 0; i < len(n.Content); i += 2 {
-		switch key := n.Content[i].Value; key {
-		case "glob", "cross_public_suffix":
-		default:
-			return fmt.Errorf("field %s not found in type acl.Domain", key)
-		}
-	}
-	type plain Domain
-	return n.Decode((*plain)(d))
 }
 
 // MitmConfig configures how a MITM request is handled.
