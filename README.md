@@ -106,6 +106,7 @@ current CLI reference. Here are the available options:
    --additional-error-message-on-deny MESSAGE  Display MESSAGE in the HTTP response if proxying request is denied
    --disable-acl-policy-action POLICY ACTION   Disable usage of a POLICY ACTION such as "open" in the egress ACL
    --acl-compat                                Let service allow entries win over global.deny without override_global_policy, and warn (default: false)
+   --acl-allow-unknown-fields                  Ignore ACL keys that the v2 format does not define, so the file can carry keys for other tools (default: false)
    --stats-socket-dir DIR                      Enable connection tracking. Will expose one UDS in DIR going by the name of "track-{pid}.sock".
                                                  This should be an absolute path with all symlinks, if any, resolved.
    --stats-socket-file-mode FILE_MODE          Set the filemode to FILE_MODE on the statistics socket (default: "700")
@@ -376,7 +377,9 @@ Smokescreen decides a request in this order, and the first step that matches dec
 4. The `global.deny` list, then the `global.allow` entries.
 5. The service's `action`.
 
-The order of entries in the file does not change a result. A service `allow` entry wins over `global.deny` only if it sets `override_global_policy: true`, and only for the hosts that the entry itself matches: in the example, `ci` can reach `pypi.org`, but not `registry.npmjs.org`. The ACL fails to load if a service `allow` entry overlaps `global.deny` without the field. To load an existing ACL that relies on the old behavior, where a service allow always won, start Smokescreen with `--acl-compat`, or set `acl_compat: true` in the config file. Smokescreen then logs a warning for each such entry. Unknown keys are rejected.
+The order of entries in the file does not change a result. A service `allow` entry wins over `global.deny` only if it sets `override_global_policy: true`, and only for the hosts that the entry itself matches: in the example, `ci` can reach `pypi.org`, but not `registry.npmjs.org`. The ACL fails to load if a service `allow` entry overlaps `global.deny` without the field. To load an existing ACL that relies on the old behavior, where a service allow always won, start Smokescreen with `--acl-compat`, or set `acl_compat: true` in the config file. Smokescreen then logs a warning for each such entry.
+
+Unknown keys are rejected, so a misspelled key fails to load instead of silently doing nothing. To use the ACL file as an extension point, with keys that your own tools read, start Smokescreen with `--acl-allow-unknown-fields`, or set `acl_allow_unknown_fields: true` in the config file. Smokescreen then ignores every key it does not define, as v1 did, so your tools must validate their own keys, and a misspelled Smokescreen key is ignored too.
 
 > :warning: **The ACL is only applied to hostnames *as they appear in the request*!** If you want to allow or deny traffic based on the destination IP address *after DNS resolution*, you should be using the config options instead (see the `IP Filtering` section above).
 
