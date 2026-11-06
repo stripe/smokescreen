@@ -153,19 +153,26 @@ func Parse(data []byte) (*Policy, error) {
 	return &p, nil
 }
 
-// Join combines policies from several files into one. Services and global
-// entries are concatenated; at most one policy may set Default.
+// Join combines policies from several files into one. Services are
+// concatenated. At most one policy may set Default, and at most one may have
+// global entries, so the rules that apply to every role are in one place.
 func Join(policies ...*Policy) (*Policy, error) {
 	out := &Policy{Version: Version}
+	hasGlobal := false
 	for _, p := range policies {
 		out.Services = append(out.Services, p.Services...)
-		out.Global.Allow = append(out.Global.Allow, p.Global.Allow...)
-		out.Global.Deny = append(out.Global.Deny, p.Global.Deny...)
 		if p.Default != nil {
 			if out.Default != nil {
 				return nil, errors.New("default is defined more than once")
 			}
 			out.Default = p.Default
+		}
+		if len(p.Global.Allow) > 0 || len(p.Global.Deny) > 0 {
+			if hasGlobal {
+				return nil, errors.New("global is defined more than once")
+			}
+			hasGlobal = true
+			out.Global = p.Global
 		}
 	}
 	return out, nil

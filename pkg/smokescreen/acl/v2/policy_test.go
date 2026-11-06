@@ -108,4 +108,8 @@ func TestLoadFiles(t *testing.T) {
 
 	_, err = LoadFiles(shared, shared)
 	require.ErrorContains(t, err, "default is defined more than once")
+
+	deny := write("deny.yaml", "version: v2\nglobal: {deny: [pypi.org]}\n")
+	_, err = LoadFiles(shared, deny)
+	require.ErrorContains(t, err, "global is defined more than once")
 }
