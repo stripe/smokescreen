@@ -27,6 +27,7 @@ func TestDecide(t *testing.T) {
 		{"global allow for other services", "audit", "img.cdn.example.org", "", Allow, "host matched rule in global allow list", false},
 		{"open action", "ci", "unlisted.example.org", "", Allow, "rule has open enforcement policy", false},
 		{"report action", "audit", "unlisted.example.org", "", AllowAndReport, "rule has allow and report policy", false},
+		{"allow entry crosses public suffixes when marked", "audit", "sts.s3.amazonaws.com", "", Allow, "host matched allowed domain in rule", false},
 		{"enforce action with public suffix hint", "web", "access-analyzer.s3.amazonaws.com", "", Deny,
 			"rule has enforce policy; wildcard 'access-analyzer.*.amazonaws.com' was not applied because 's3.amazonaws.com' is on the public suffix list", false},
 		{"default service entry", "nobody", "status.example.com", "", Allow, "host matched allowed domain in rule", false},
@@ -61,8 +62,8 @@ func TestMitmSurvivesAnEarlierPlainEntry(t *testing.T) {
 		Services: []Service{{
 			Name: "ci", Action: ModeOpen,
 			Allow: []Entry{
-				{Domains: []Domain{{Glob: "pypi.org"}, {Glob: "slack.com"}}},
-				{Domains: []Domain{{Glob: "slack.com"}}, Mitm: &MitmConfig{AddHeaders: map[string]string{"X-A": "1"}}},
+				{Domains: []string{"pypi.org", "slack.com"}},
+				{Domains: []string{"slack.com"}, Mitm: &MitmConfig{AddHeaders: map[string]string{"X-A": "1"}}},
 			},
 		}},
 	}, Options{})
@@ -83,7 +84,7 @@ func TestDecisionMitmConfigIsNotShared(t *testing.T) {
 		Services: []Service{{
 			Name: "web", Action: ModeEnforce,
 			Allow: []Entry{{
-				Domains: []Domain{{Glob: "example.com"}},
+				Domains: []string{"example.com"},
 				Mitm: &MitmConfig{
 					AddHeaders:                  map[string]string{"X-A": "1"},
 					DetailedHttpLogsFullHeaders: []string{"User-Agent"},
@@ -114,7 +115,7 @@ func TestUnmarkedOverlap(t *testing.T) {
 		Version: Version,
 		Services: []Service{{
 			Name: "web", Action: ModeEnforce,
-			Allow: []Entry{{Domains: []Domain{{Glob: "malicious.com"}}}},
+			Allow: []Entry{{Domains: []string{"malicious.com"}}},
 		}},
 		Global: Global{Deny: []string{"malicious.com"}},
 	}

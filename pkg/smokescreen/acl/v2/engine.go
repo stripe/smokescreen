@@ -123,7 +123,7 @@ func (e *Engine) Decide(args DecideArgs) (Decision, error) {
 	}
 	d.Project = s.Project
 
-	if args.ConnectProxyHost != "" && !matchesAny(args.ConnectProxyHost, s.Proxies) {
+	if args.ConnectProxyHost != "" && !matchesAny(args.ConnectProxyHost, s.Proxies, false) {
 		d.Result = Deny
 		d.Reason = "connect proxy host not allowed in rule" + publicSuffixHint(args.ConnectProxyHost, s.Proxies)
 		return d, nil
@@ -171,7 +171,7 @@ func (e *Engine) Decide(args DecideArgs) (Decision, error) {
 		d.Reason = "default rule policy used"
 	}
 	if d.Result != Allow {
-		lists := make([][]Domain, 0, len(s.Allow)+len(e.globalAllow))
+		lists := make([][]string, 0, len(s.Allow)+len(e.globalAllow))
 		for _, en := range s.Allow {
 			lists = append(lists, en.Domains)
 		}
@@ -185,7 +185,7 @@ func (e *Engine) Decide(args DecideArgs) (Decision, error) {
 
 func matchesEntry(host string, entries []Entry) *Entry {
 	for i := range entries {
-		if matchesAny(host, entries[i].Domains) {
+		if entries[i].matches(host) {
 			return &entries[i]
 		}
 	}
@@ -196,7 +196,7 @@ func matchesEntry(host string, entries []Entry) *Entry {
 // the matching entries sets OverrideGlobalPolicy.
 func matchAllow(host string, allow []Entry) (matched, override bool) {
 	for i := range allow {
-		if matchesAny(host, allow[i].Domains) {
+		if allow[i].matches(host) {
 			matched = true
 			if allow[i].OverrideGlobalPolicy {
 				return true, true
@@ -209,17 +209,18 @@ func matchAllow(host string, allow []Entry) (matched, override bool) {
 // matchesDeny reports whether host matches one of the deny globs. Deny globs
 // always match across public suffixes.
 func matchesDeny(host string, globs []string) bool {
-	for _, g := range globs {
-		if MatchGlob(host, g, true) {
-			return true
-		}
-	}
-	return false
+	return matchesAny(host, globs, true)
 }
 
-func matchesAny(host string, domains []Domain) bool {
-	for _, d := range domains {
-		if MatchGlob(host, d.Glob, d.CrossPublicSuffix) {
+// matches reports whether host matches one of the entry's domains, with the
+// entry's own CrossPublicSuffix setting.
+func (en *Entry) matches(host string) bool {
+	return matchesAny(host, en.Domains, en.CrossPublicSuffix)
+}
+
+func matchesAny(host string, globs []string, crossPublicSuffix bool) bool {
+	for _, g := range globs {
+		if MatchGlob(host, g, crossPublicSuffix) {
 			return true
 		}
 	}
@@ -232,7 +233,7 @@ func matchesAny(host string, domains []Domain) bool {
 // entries, one with a MITM config and one without, still gets it.
 func mitmFor(host string, allow []Entry) *MitmConfig {
 	for i := range allow {
-		if allow[i].Mitm != nil && matchesAny(host, allow[i].Domains) {
+		if allow[i].Mitm != nil && allow[i].matches(host) {
 			return cloneMitmConfig(allow[i].Mitm)
 		}
 	}

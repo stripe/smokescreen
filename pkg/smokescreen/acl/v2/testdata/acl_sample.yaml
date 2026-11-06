@@ -22,6 +22,9 @@ services:
   - name: audit
     project: security
     action: report
+    allow:
+      - domains: ["sts.*.amazonaws.com"]
+        cross_public_suffix: true
 
 default:
   project: unknown
