@@ -91,7 +91,7 @@ func newEngine(p *Policy, compat bool) *Engine {
 
 // Load reads, joins and compiles v2 ACL files.
 func Load(opts Options, paths ...string) (*Engine, error) {
-	p, err := LoadFiles(paths...)
+	p, err := LoadFiles(opts, paths...)
 	if err != nil {
 		return nil, err
 	}
