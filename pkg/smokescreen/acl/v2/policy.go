@@ -129,13 +129,13 @@ func (m Mode) MarshalYAML() (interface{}, error) {
 	return nil, fmt.Errorf("unknown action %d", m)
 }
 
-// Parse decodes one v2 ACL file. Unknown keys are an error, and so is a
-// second "---" document in the file, which Decode would otherwise silently
-// ignore.
-func Parse(data []byte) (*Policy, error) {
+// Parse decodes one v2 ACL file. Unknown keys are an error unless
+// opts.AllowUnknownFields is set. A second "---" document in the file is
+// always an error, since Decode would otherwise silently ignore it.
+func Parse(data []byte, opts Options) (*Policy, error) {
 	var p Policy
 	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
+	dec.KnownFields(!opts.AllowUnknownFields)
 	if err := dec.Decode(&p); err != nil {
 		return nil, err
 	}
@@ -179,14 +179,14 @@ func Join(policies ...*Policy) (*Policy, error) {
 }
 
 // LoadFiles reads, parses and joins v2 ACL files.
-func LoadFiles(paths ...string) (*Policy, error) {
+func LoadFiles(opts Options, paths ...string) (*Policy, error) {
 	policies := make([]*Policy, 0, len(paths))
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
-		p, err := Parse(data)
+		p, err := Parse(data, opts)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}

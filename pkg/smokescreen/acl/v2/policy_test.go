@@ -19,7 +19,7 @@ services:
     allow:
       - domains: [pypi.org, "regis*.npmjs.org"]
         cross_public_suffix: true
-`))
+`), Options{})
 	require.NoError(t, err)
 	assert.Equal(t, Entry{Domains: []string{"pypi.org", "regis*.npmjs.org"}, CrossPublicSuffix: true}, p.Services[0].Allow[0])
 	assert.Equal(t, ModeOpen, p.Services[0].Action)
@@ -29,7 +29,7 @@ services:
 	for _, mode := range []Mode{ModeOpen, ModeReport, ModeEnforce} {
 		out, err := yaml.Marshal(&Policy{Version: Version, Services: []Service{{Name: "a", Action: mode}}})
 		require.NoError(t, err)
-		back, err := Parse(out)
+		back, err := Parse(out, Options{})
 		require.NoError(t, err, "marshaled:\n%s", out)
 		assert.Equal(t, mode, back.Services[0].Action)
 	}
@@ -41,9 +41,15 @@ services:
 		"version: v2\nservices: [{name: a, action: open, allow: [{domains: [x], cross_public_sufix: true}]}]\n": "field cross_public_sufix not found",
 		"version: v2\nservices: []\n---\nversion: v2\nglobal: {deny: [x]}\n":                                    "more than one YAML document",
 	} {
-		_, err := Parse([]byte(doc))
+		_, err := Parse([]byte(doc), Options{})
 		require.ErrorContains(t, err, want)
 	}
+
+	// AllowUnknownFields ignores unknown keys at every level, as v1 did.
+	lenient := Options{AllowUnknownFields: true}
+	p, err = Parse([]byte("version: v2\nowner: x\nservices: [{name: a, action: open, owner: x, allow: [{domains: [x], reason: y}]}]\n"), lenient)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"x"}, p.Services[0].Allow[0].Domains)
 }
 
 func TestValidate(t *testing.T) {
@@ -100,16 +106,16 @@ func TestLoadFiles(t *testing.T) {
 	shared := write("shared.yaml", "version: v2\ndefault: {action: enforce}\nglobal:\n  allow: [{domains: [api.example.com]}]\n")
 	web := write("web.yaml", "version: v2\nservices: [{name: web, action: enforce}]\n")
 
-	p, err := LoadFiles(shared, web)
+	p, err := LoadFiles(Options{}, shared, web)
 	require.NoError(t, err)
 	assert.Len(t, p.Services, 1)
 	assert.NotNil(t, p.Default)
 	assert.Len(t, p.Global.Allow, 1)
 
-	_, err = LoadFiles(shared, shared)
+	_, err = LoadFiles(Options{}, shared, shared)
 	require.ErrorContains(t, err, "default is defined more than once")
 
 	deny := write("deny.yaml", "version: v2\nglobal: {deny: [pypi.org]}\n")
-	_, err = LoadFiles(shared, deny)
+	_, err = LoadFiles(Options{}, shared, deny)
 	require.ErrorContains(t, err, "global is defined more than once")
 }

@@ -6,8 +6,14 @@ import (
 	"slices"
 )
 
-// Options change how a policy is validated.
+// Options change how a policy is parsed and validated.
 type Options struct {
+	// AllowUnknownFields makes parsing ignore keys that the v2 format does
+	// not define, as v1 did, so that a file can also carry keys that other
+	// tools read. By default an unknown key is an error, so that a misspelled
+	// key fails to load instead of silently doing nothing. A caller that sets
+	// this must validate its own keys, and loses that protection for typos.
+	AllowUnknownFields bool
 	// DisabledModes are actions that no service may use.
 	DisabledModes []Mode
 	// Compat keeps the v1 behavior for a service allow entry that overlaps
