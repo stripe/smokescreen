@@ -348,6 +348,8 @@ services:
       - domains: [slack.com]
         mitm:
           add_headers: {X-Team: ci}
+      - domains: ["sts.*.amazonaws.com"]
+        cross_public_suffix: true      # see below; applies to every domain in this entry
     deny: [tracking.example.com]
 default:
   project: security
@@ -386,13 +388,13 @@ A host can be specified with or without a wildcard, and a glob may contain at mo
 
 Apart from the leading `*.`, a wildcard never crosses a `.`. The labels to its right must form a registrable domain rather than a [public suffix](https://publicsuffix.org/) such as `com`, `co.uk`, or `github.io`, and the wildcard label must be lowercase ASCII.
 
-In `allow` entries and `proxies`, these wildcards only match hosts in the same registrable domain as the labels to their right, according to the public suffix list. This prevents `access-analyzer.*.amazonaws.com` from matching `access-analyzer.s3.amazonaws.com`, an S3 bucket that anyone can claim. It also means that hosts that are public suffixes themselves, such as `s3.us-west-2.amazonaws.com`, or that sit directly under one, such as `access-analyzer.us-east-1.amazonaws.com`, never match a wildcard; specify such hosts explicitly. When a request is denied or reported only because of this check, the decision reason in the logs and in the response to the client says so:
+In `allow` entries and `proxies`, these wildcards only match hosts in the same registrable domain as the labels to their right, unless the allow entry sets `cross_public_suffix: true`, according to the public suffix list. This prevents `access-analyzer.*.amazonaws.com` from matching `access-analyzer.s3.amazonaws.com`, an S3 bucket that anyone can claim. It also means that hosts that are public suffixes themselves, such as `s3.us-west-2.amazonaws.com`, or that sit directly under one, such as `access-analyzer.us-east-1.amazonaws.com`, never match a wildcard; specify such hosts explicitly. When a request is denied or reported only because of this check, the decision reason in the logs and in the response to the client says so:
 
 ```
 rule has enforce policy; wildcard 'sts.*.amazonaws.com' was not applied because 'us-east-1.amazonaws.com' is on the public suffix list
 ```
 
-Deny globs always match across public suffixes, so a `deny` list blocks every host that the glob's text describes. To match across public suffixes for one allowed domain, write it as a mapping with `cross_public_suffix: true`; this also matches hosts that belong to other tenants, such as S3 buckets. Because a wildcard never matches an empty string or a subdomain, denying `api*.example.com` blocks neither `api.example.com` nor `v1.api-east.example.com`; deny those separately if needed.
+Deny globs always match across public suffixes, so a `deny` list blocks every host that the glob's text describes. Proxy globs never do. To let an allow entry's wildcards match across public suffixes, set `cross_public_suffix: true` on the entry. The setting applies to every domain in the entry, so put domains that must not cross in a separate entry. A crossing wildcard also matches hosts that belong to other tenants, such as S3 buckets. Because a wildcard never matches an empty string or a subdomain, denying `api*.example.com` blocks neither `api.example.com` nor `v1.api-east.example.com`; deny those separately if needed.
 
 | host                              | valid   |
 | --------------------------------- | ------- |
