@@ -189,11 +189,12 @@ default:
 	require.NotNil(t, conf.EgressACL)
 }
 
-// TestNewConfigurationAclCompat covers loading an ACL whose service allow
-// entry overlaps the global deny list without override_global_policy: it
-// fails by default, and loads with --acl-compat or acl_compat in the config
-// file, which is read before the CLI flags.
-func TestNewConfigurationAclCompat(t *testing.T) {
+// TestNewConfigurationAclLoadOptions covers the switches that loosen how the
+// egress ACL loads. --acl-compat lets a service allow entry that overlaps the
+// global deny list without override_global_policy win, and
+// --acl-allow-unknown-fields ignores keys that the v2 format does not define.
+// Each also works as a config file key, which is read before the CLI flags.
+func TestNewConfigurationAclLoadOptions(t *testing.T) {
 	const unmarked = `
 version: v2
 services:
@@ -204,19 +205,30 @@ services:
 global:
   deny: [pypi.org]
 `
+	const unknownField = `
+version: v2
+services:
+  - name: ci
+    action: enforce
+    owner: ci-team
+    allow:
+      - domains: [pypi.org]
+`
 	for _, tt := range []struct {
-		name, configYAML string
-		flags            []string
-		err              string
+		name, acl, configYAML string
+		flags                 []string
+		err                   string
 	}{
-		{name: "strict", err: "set override_global_policy: true"},
-		{name: "CLI compat", flags: []string{"--acl-compat"}},
-		{name: "YAML compat", configYAML: "acl_compat: true\n"},
+		{name: "overlap without compat", acl: unmarked, err: "set override_global_policy: true"},
+		{name: "CLI compat", acl: unmarked, flags: []string{"--acl-compat"}},
+		{name: "YAML compat", acl: unmarked, configYAML: "acl_compat: true\n"},
+		{name: "CLI allow unknown fields", acl: unknownField, flags: []string{"--acl-allow-unknown-fields"}},
+		{name: "YAML allow unknown fields", acl: unknownField, configYAML: "acl_allow_unknown_fields: true\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			aclPath := filepath.Join(dir, "acl.yaml")
-			require.NoError(t, os.WriteFile(aclPath, []byte(unmarked), 0644))
+			require.NoError(t, os.WriteFile(aclPath, []byte(tt.acl), 0644))
 			args := append([]string{"smokescreen", "--egress-acl-file=" + aclPath}, tt.flags...)
 			if tt.configYAML != "" {
 				configPath := filepath.Join(dir, "config.yaml")
