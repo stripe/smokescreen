@@ -125,6 +125,12 @@ type Config struct {
 	// each one. Without it, such an ACL fails to load.
 	AclCompat bool
 
+	// AclAllowUnknownFields makes the ACL file an extension point: keys that
+	// the v2 format does not define are ignored, as in v1, so that the file
+	// can also carry keys that other tools read and validate. Without it, an
+	// unknown key is a load error, which also catches misspelled keys.
+	AclAllowUnknownFields bool
+
 	// IPFilterBypassedDomains bypass IP filters, but not ACLs or self-connection protection.
 	IPFilterBypassedDomains []string
 
@@ -654,8 +660,9 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 	config.Log.Info(fmt.Sprintf("Loading egress ACL from %s", aclFile))
 
 	opts := acl.Options{
-		Compat: config.AclCompat,
-		Warn:   func(msg string) { config.Log.Warn(msg) },
+		Compat:             config.AclCompat,
+		AllowUnknownFields: config.AclAllowUnknownFields,
+		Warn:               func(msg string) { config.Log.Warn(msg) },
 	}
 	for _, action := range config.DisabledAclPolicyActions {
 		mode, err := acl.ModeFromString(action)
