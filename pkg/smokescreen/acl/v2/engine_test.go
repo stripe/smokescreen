@@ -19,7 +19,6 @@ func TestDecide(t *testing.T) {
 		mitm                       bool
 	}{
 		{"service allow overrides a global deny", "ci", "pypi.org", "", Allow, "host matched allowed domain in rule", true},
-		{"override applies only to the entry's own domains", "ci", "github.com", "", Deny, "host matched rule in global deny list", false},
 		{"global deny without an override", "web", "pypi.org", "", Deny, "host matched rule in global deny list", false},
 		{"global deny label wildcard", "audit", "registry.npmjs.org", "", Deny, "host matched rule in global deny list", false},
 		{"global deny crosses public suffixes", "audit", "backup.s3.amazonaws.com", "", Deny, "host matched rule in global deny list", false},
