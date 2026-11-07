@@ -1,0 +1,42 @@
+---
+version: v2
+
+services:
+  - name: ci
+    project: ci-infra
+    action: open
+    proxies: [proxy.example.net]
+    allow:
+      - domains: [pypi.org]
+        override_global_policy: true
+        mitm:
+          add_headers: {X-Ci: "1"}
+
+  - name: web
+    project: web
+    action: enforce
+    allow:
+      - domains: ["*.example.com", "access-analyzer.*.amazonaws.com"]
+    deny: ["*.cdn.example.org"]
+
+  - name: audit
+    project: security
+    action: report
+    allow:
+      - domains: ["sts.*.amazonaws.com"]
+        cross_public_suffix: true
+
+default:
+  project: unknown
+  action: enforce
+  allow:
+    - domains: [status.example.com]
+
+global:
+  deny:
+    - pypi.org
+    - github.com
+    - "regis*.npmjs.org"
+    - "backup.*.amazonaws.com"
+  allow:
+    - domains: [api.partner.example, "*.cdn.example.org"]

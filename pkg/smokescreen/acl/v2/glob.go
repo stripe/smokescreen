@@ -387,3 +387,25 @@ func normalizeGlobText(s string) string {
 	}
 	return strings.TrimRight(strings.ToLower(n), ".")
 }
+
+// publicSuffixHint explains why host did not match when a glob in one of
+// globLists would have matched it but for the registrable domain check, so
+// that operators can tell the public suffix list apart from a missing entry.
+// It returns "" if no such glob exists. Callers must only use it once none of
+// globLists matched host.
+func publicSuffixHint(host string, globLists ...[]string) string {
+	for _, globs := range globLists {
+		for _, g := range globs {
+			if !hostMatchesGlob(host, g, false) {
+				continue
+			}
+			normalizedHost, err := hostport.NormalizeHost(host, false)
+			if err != nil {
+				return ""
+			}
+			suffix, _ := publicsuffix.PublicSuffix(strings.TrimRight(normalizedHost, "."))
+			return fmt.Sprintf("; wildcard '%s' was not applied because '%s' is on the public suffix list", g, suffix)
+		}
+	}
+	return ""
+}
