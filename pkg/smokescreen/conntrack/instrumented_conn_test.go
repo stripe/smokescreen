@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -157,4 +158,22 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 		}
 		ic.Close()
 	}
+}
+
+// TestInstrumentedConnErrorDuringClose reports an error and closes the
+// connection from different goroutines. Run it with -race.
+func TestInstrumentedConnErrorDuringClose(t *testing.T) {
+	tr := NewTestTracker(0)
+	c1, c2 := net.Pipe()
+	defer c2.Close()
+
+	ic := tr.NewInstrumentedConn(c1, logrus.NewEntry(testLogger), "test", "localhost", "connect", "test_project")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ic.Error(errors.New("copy failed"))
+	}()
+	ic.Close()
+	<-done
 }
