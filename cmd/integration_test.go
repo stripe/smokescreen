@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/smokescreen/v2/internal/testlog"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
-	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
 )
@@ -78,7 +78,7 @@ func testRFRCert(req *http.Request) (string, error) {
 
 type TestCase struct {
 	ExpectAllow   bool
-	Action        acl.EnforcementPolicy
+	Action        acl.Mode
 	ExpectStatus  int
 	OverTLS       bool
 	OverConnect   bool
@@ -150,13 +150,13 @@ func validateProxyResponse(t *testing.T, test *TestCase, resp *http.Response, er
 	}
 }
 
-func generateRoleForPolicy(action acl.EnforcementPolicy) string {
+func generateRoleForPolicy(action acl.Mode) string {
 	switch action {
-	case acl.Open:
+	case acl.ModeOpen:
 		return "open"
-	case acl.Report:
+	case acl.ModeReport:
 		return "report"
-	case acl.Enforce:
+	case acl.ModeEnforce:
 		return "enforce"
 	}
 	panic("unknown-mode")
@@ -334,10 +334,10 @@ func TestSmokescreenIntegration(t *testing.T) {
 	// If the proxy target should be sent to an authorized host
 	authorizedHosts := []bool{true, false}
 
-	enforcementPolicies := []acl.EnforcementPolicy{
-		acl.Enforce,
-		acl.Report,
-		acl.Open,
+	enforcementPolicies := []acl.Mode{
+		acl.ModeEnforce,
+		acl.ModeReport,
+		acl.ModeOpen,
 	}
 
 	var testCases []*TestCase
@@ -360,7 +360,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 			// An authorizedHost indicates the request should be sent to our
 			// local HTTP server. If authorizedHost is false, the request
 			// will use a locally resolved hostname that may or may not be allowed
-			// depending on the acl.EnforcementPolicy.
+			// depending on the acl.Mode.
 			for _, authorizedHost := range authorizedHosts {
 				var proxyTarget string
 				if authorizedHost {
@@ -378,7 +378,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 					}
 
 					// Report and open modes should always allow requests.
-					if policy != acl.Enforce {
+					if policy != acl.ModeEnforce {
 						expectAllow = true
 					}
 
@@ -427,7 +427,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPRangeCase.TargetURL = "http://1.1.1.1:80"
 		badIPRangeCase.ExpectAllow = false
 		badIPRangeCase.ExpectStatus = http.StatusProxyAuthRequired
-		badIPRangeCase.RoleName = generateRoleForPolicy(acl.Open)
+		badIPRangeCase.RoleName = generateRoleForPolicy(acl.ModeOpen)
 
 		// This must be a global unicast, non-loopback address or other IP rules will
 		// block it regardless of the specific configuration we're trying to test.
@@ -435,7 +435,7 @@ func TestSmokescreenIntegration(t *testing.T) {
 		badIPAddressCase.TargetURL = "http://1.0.0.1:123"
 		badIPAddressCase.ExpectAllow = false
 		badIPAddressCase.ExpectStatus = http.StatusProxyAuthRequired
-		badIPAddressCase.RoleName = generateRoleForPolicy(acl.Open)
+		badIPAddressCase.RoleName = generateRoleForPolicy(acl.ModeOpen)
 
 		testCases = append(testCases,
 			&unknownRoleDenyCase, &noRoleDenyCase,
@@ -509,7 +509,7 @@ func TestInvalidUpstreamProxyConfiguration(t *testing.T) {
 				OverTLS:      overConnect,
 				ProxyURL:     servers[overConnect].URL,
 				TargetURL:    proxyTarget,
-				RoleName:     generateRoleForPolicy(acl.Open),
+				RoleName:     generateRoleForPolicy(acl.ModeOpen),
 				ExpectStatus: http.StatusBadGateway,
 			}
 			resp, err := executeRequestForTest(t, testCase, &logHook)

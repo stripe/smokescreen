@@ -38,6 +38,8 @@ type yamlConfig struct {
 	StatsdAddress           string            `yaml:"statsd_address"`
 	MetricTags              map[string]string `yaml:"metrics_tags"`
 	EgressAclFile           string            `yaml:"acl_file"`
+	AclCompat               bool              `yaml:"acl_compat"`
+	AclAllowUnknownFields   bool              `yaml:"acl_allow_unknown_fields"`
 	SupportProxyProtocol    bool              `yaml:"support_proxy_protocol"`
 	AllowSelfConnections    bool              `yaml:"allow_self_connections"`
 	DenyMessageExtra        string            `yaml:"deny_message_extra"`
@@ -157,6 +159,8 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
+	c.AclCompat = yc.AclCompat
+	c.AclAllowUnknownFields = yc.AclAllowUnknownFields
 	if yc.EgressAclFile != "" {
 		err = c.SetupEgressAcl(yc.EgressAclFile)
 		if err != nil {
