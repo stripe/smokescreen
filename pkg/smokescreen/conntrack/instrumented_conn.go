@@ -175,13 +175,15 @@ func (ic *InstrumentedConn) Write(b []byte) (int, error) {
 // Idle returns true when the connection's last activity occured before the
 // configured idle threshold.
 //
-// Idle should be called with the connection's lock held.
+// Idle should be called with the connection's lock held. That lock does not
+// serialise it with Read and Write, which store LastActivity atomically without
+// taking the lock, so LastActivity is read atomically here as well.
 func (ic *InstrumentedConn) Idle() bool {
 	if ic.tracker.IdleTimeout == 0 {
 		return false
 	}
 
-	if time.Since(time.Unix(0, *ic.LastActivity)) > ic.tracker.IdleTimeout {
+	if time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))) > ic.tracker.IdleTimeout {
 		return true
 	}
 	return false
@@ -196,9 +198,9 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 		Rhost:                    ic.OutboundHost,
 		Raddr:                    ic.Conn.RemoteAddr().String(),
 		Created:                  ic.Start,
-		BytesIn:                  *ic.BytesIn,
-		BytesOut:                 *ic.BytesOut,
-		SecondsSinceLastActivity: time.Since(time.Unix(0, *ic.LastActivity)).Seconds(),
+		BytesIn:                  atomic.LoadUint64(ic.BytesIn),
+		BytesOut:                 atomic.LoadUint64(ic.BytesOut),
+		SecondsSinceLastActivity: time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))).Seconds(),
 		ProxyType:                ic.proxyType,
 	}
 }

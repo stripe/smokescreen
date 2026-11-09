@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,4 +158,54 @@ func TestInstrumentedConnWithTimeout(t *testing.T) {
 		}
 		ic.Close()
 	}
+}
+
+// TestInstrumentedConnLastActivityIsReadAtomically reads LastActivity through
+// Idle and Stats while another goroutine writes through the connection, which
+// stores it atomically without the connection's lock. Run it with -race.
+func TestInstrumentedConnLastActivityIsReadAtomically(t *testing.T) {
+	tr := NewTestTracker(time.Hour)
+	c1, c2 := net.Pipe()
+	defer c2.Close()
+
+	ic := tr.NewInstrumentedConn(c1, logrus.NewEntry(testLogger), "test", "localhost", "connect", "test_project")
+	defer ic.Close()
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { // the peer: drains what the connection writes
+		defer wg.Done()
+		buf := make([]byte, 16)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			c2.SetReadDeadline(time.Now().Add(5 * time.Millisecond))
+			c2.Read(buf)
+		}
+	}()
+	go func() { // the copy goroutine: every Write stores LastActivity without the lock
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			ic.Conn.SetWriteDeadline(time.Now().Add(5 * time.Millisecond))
+			ic.Write([]byte("x"))
+		}
+	}()
+
+	for i := 0; i < 2000; i++ {
+		ic.Lock()
+		ic.Idle()
+		ic.Unlock()
+		ic.Stats()
+	}
+	close(stop)
+	wg.Wait()
 }
