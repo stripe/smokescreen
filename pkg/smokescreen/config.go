@@ -23,9 +23,11 @@ import (
 
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/logging"
+	aclv1 "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
 	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
+	"go.yaml.in/yaml/v3"
 )
 
 // Configuration defaults
@@ -671,7 +673,7 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 		}
 		opts.DisabledModes = append(opts.DisabledModes, mode)
 	}
-	egressACL, err := acl.Load(opts, aclFile)
+	egressACL, err := config.loadEgressACL(aclFile, opts)
 	if err != nil {
 		config.Log.Info(logging.Error(err))
 		return err
@@ -680,6 +682,31 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 	config.aclFilePath = aclFile
 
 	return nil
+}
+
+// loadEgressACL loads aclFile with the loader for its version key. A v2 file
+// loads directly. A v1 file loads with the v1 loader and is converted to an
+// equivalent v2 policy, so existing v1 files keep working on the v2 engine.
+func (config *Config) loadEgressACL(aclFile string, opts acl.Options) (*acl.Engine, error) {
+	data, err := os.ReadFile(aclFile)
+	if err != nil {
+		return nil, err
+	}
+	var head struct {
+		Version string `yaml:"version"`
+	}
+	if err := yaml.Unmarshal(data, &head); err != nil {
+		return nil, fmt.Errorf("%s: %w", aclFile, err)
+	}
+	if head.Version != "v1" {
+		return acl.Load(opts, aclFile)
+	}
+	v1ACL, err := aclv1.New(config.Log, aclv1.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	if err != nil {
+		return nil, err
+	}
+	config.Log.Warn(fmt.Sprintf("Egress ACL %s uses the v1 format and was converted to v2. Move it to the v2 format.", aclFile))
+	return v1ACL.Engine(opts)
 }
 
 // ReloadEgressAcl re-validates the last-loaded ACL file against the current

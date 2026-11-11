@@ -193,7 +193,8 @@ default:
 // egress ACL loads. --acl-compat lets a service allow entry that overlaps the
 // global deny list without override_global_policy win, and
 // --acl-allow-unknown-fields ignores keys that the v2 format does not define.
-// Each also works as a config file key, which is read before the CLI flags.
+// Each also works as a config file key, which is read before the CLI flags. A
+// v1 file loads through the converter to v2.
 func TestNewConfigurationAclLoadOptions(t *testing.T) {
 	const unmarked = `
 version: v2
@@ -204,6 +205,16 @@ services:
       - domains: [pypi.org]
 global:
   deny: [pypi.org]
+`
+	const v1File = `
+version: v1
+services:
+  - name: ci
+    project: ci
+    action: enforce
+    owner: ci-team
+    allowed_domains: [pypi.org]
+global_deny_list: [pypi.org]
 `
 	const unknownField = `
 version: v2
@@ -224,6 +235,9 @@ services:
 		{name: "YAML compat", acl: unmarked, configYAML: "acl_compat: true\n"},
 		{name: "CLI allow unknown fields", acl: unknownField, flags: []string{"--acl-allow-unknown-fields"}},
 		{name: "YAML allow unknown fields", acl: unknownField, configYAML: "acl_allow_unknown_fields: true\n"},
+		// A v1 file loads through the converter, with v1's lenient parsing and
+		// its precedence: the service allow wins over the global deny list.
+		{name: "v1 file", acl: v1File},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
