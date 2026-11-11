@@ -92,7 +92,7 @@ current CLI reference. Here are the available options:
                                                  Requires `--expose-prometheus-metrics` to be set.
    --prometheus-endpoint ENDPOINT              Specify endpoint to host Prometheus metrics on. (default: "/metrics")
                                                  Requires `--expose-prometheus-metrics` to be set.
-   --prometheus-listen-ip IP                   Listen for Prometheus metrics on interface with address IP. (default: "0.0.0.0")
+   --prometheus-listen-ip IP                   Listen for Prometheus metrics on interface with address IP. (default: "127.0.0.1")
                                                  Requires `--expose-prometheus-metrics` to be set.
    --prometheus-port PORT                      Specify port to host Prometheus metrics on. (default: "9810")
                                                  Requires `--expose-prometheus-metrics` to be set.
@@ -149,12 +149,14 @@ the main YAML loader does not accept them.
 ### Prometheus metrics
 
 Enable scraping with `--expose-prometheus-metrics`. The metrics listener defaults
-to `0.0.0.0:9810` with path `/metrics`, independently of the proxy's listen address.
-Use `--prometheus-listen-ip`, `--prometheus-port`, and `--prometheus-endpoint` to
-change it. For example, to bind metrics to loopback:
+to `127.0.0.1:9810` with path `/metrics`, independently of the proxy's listen
+address. Use `--prometheus-listen-ip`, `--prometheus-port`, and
+`--prometheus-endpoint` to change the bind address, port, or path. To expose
+metrics on every interface (for example when a scraper runs outside the host),
+set an explicit listen address:
 
 ```sh
-smokescreen --expose-prometheus-metrics --prometheus-listen-ip=127.0.0.1
+smokescreen --expose-prometheus-metrics --prometheus-listen-ip=0.0.0.0
 ```
 
 Select the format with `--prometheus-metrics-format=legacy|dual|v2`:

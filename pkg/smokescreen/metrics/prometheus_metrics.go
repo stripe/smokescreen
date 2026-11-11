@@ -4,6 +4,7 @@ package metrics
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -63,7 +64,19 @@ func NewPrometheusMetricsClient(endpoint string, port string, listenAddr string,
 	}
 	mux := http.NewServeMux()
 	mux.Handle(endpoint, prometheusHandler(mc, prometheus.DefaultGatherer))
-	go http.ListenAndServe(fmt.Sprintf("%s:%s", listenAddr, port), mux)
+	srv := &http.Server{
+		Addr:              fmt.Sprintf("%s:%s", listenAddr, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("prometheus metrics server error: %v", err)
+		}
+	}()
 	return mc, nil
 }
 

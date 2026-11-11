@@ -46,7 +46,7 @@ const (
 
 	// Prometheus defaults
 	DefaultPrometheusEndpoint = "/metrics"
-	DefaultPrometheusListenIP = "0.0.0.0"
+	DefaultPrometheusListenIP = "127.0.0.1"
 	DefaultPrometheusPort     = "9810"
 
 	// Statsd defaults
