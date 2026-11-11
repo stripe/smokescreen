@@ -49,14 +49,13 @@ allow_missing_role: true  # skip mTLS client validation (use default ACL)
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services: []
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains: 
-    - example.com
+  allow:
+    - domains: [example.com]
 ```
 
 #### Run
@@ -84,14 +83,13 @@ allow_missing_role: true  # skip mTLS client validation (use default ACL)
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services: []
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains: 
-    - api.github.com
+  allow:
+    - domains: [api.github.com]
 ```
 
 #### Run
@@ -123,14 +121,13 @@ metrics_tags:
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services: []
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains: 
-    - api.github.com
+  allow:
+    - domains: [api.github.com]
 ```
 
 #### Run
@@ -203,18 +200,16 @@ tls:
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services:
   - name: localhost
     project: github
     action: enforce
-    allowed_domains:
-      - api.github.com
+    allow:
+      - domains: [api.github.com]
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains: []
 ```
 
 #### Run
@@ -245,21 +240,19 @@ mitm_ca_key_file: "vendor/github.com/stripe/goproxy/key.pem"
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services: []
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains:
-    - wttr.in
-  mitm_domains:
-  - domain: wttr.in
-    add_headers:
-      Accept-Language: el
-    detailed_http_logs: true
-    detailed_http_logs_full_headers:
-      - User-Agent
+  allow:
+    - domains: [wttr.in]
+      mitm:
+        add_headers:
+          Accept-Language: el
+        detailed_http_logs: true
+        detailed_http_logs_full_headers:
+          - User-Agent
 ```
 
 #### Run
@@ -296,25 +289,22 @@ mitm_ca_key_file: "vendor/github.com/stripe/goproxy/key.pem"
 ```yaml
 # acl.yaml
 ---
-version: v1
+version: v2
 services:
   - name: localhost
     project: github
     action: enforce
-    allowed_domains:
-      - wttr.in
-    mitm_domains:
-      - domain: wttr.in
-        add_headers:
-          Accept-Language: el
-        detailed_http_logs: true
-        detailed_http_logs_full_headers:
-          - User-Agent
+    allow:
+      - domains: [wttr.in]
+        mitm:
+          add_headers:
+            Accept-Language: el
+          detailed_http_logs: true
+          detailed_http_logs_full_headers:
+            - User-Agent
 default:
-  name: default
   project: security
   action: enforce
-  allowed_domains: []
 ```
 
 #### Run
