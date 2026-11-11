@@ -23,9 +23,11 @@ import (
 
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/logging"
-	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	aclv1 "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
+	"go.yaml.in/yaml/v3"
 )
 
 // Configuration defaults
@@ -118,6 +120,18 @@ type Config struct {
 	ConnTracker              conntrack.TrackerInterface
 	Healthcheck              http.Handler // User defined http.Handler for optional requests to a /healthcheck endpoint
 	ShuttingDown             atomic.Value // Stores a boolean value indicating whether the proxy is actively shutting down
+
+	// AclCompat loads an egress ACL whose service allow entries overlap the
+	// global deny list without override_global_policy, and lets those entries
+	// win over the global deny list as they did in v1, logging a warning for
+	// each one. Without it, such an ACL fails to load.
+	AclCompat bool
+
+	// AclAllowUnknownFields makes the ACL file an extension point: keys that
+	// the v2 format does not define are ignored, as in v1, so that the file
+	// can also carry keys that other tools read and validate. Without it, an
+	// unknown key is a load error, which also catches misspelled keys.
+	AclAllowUnknownFields bool
 
 	// IPFilterBypassedDomains bypass IP filters, but not ACLs or self-connection protection.
 	IPFilterBypassedDomains []string
@@ -647,7 +661,19 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 
 	config.Log.Info(fmt.Sprintf("Loading egress ACL from %s", aclFile))
 
-	egressACL, err := acl.New(config.Log, acl.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	opts := acl.Options{
+		Compat:             config.AclCompat,
+		AllowUnknownFields: config.AclAllowUnknownFields,
+		Warn:               func(msg string) { config.Log.Warn(msg) },
+	}
+	for _, action := range config.DisabledAclPolicyActions {
+		mode, err := acl.ModeFromString(action)
+		if err != nil {
+			return err
+		}
+		opts.DisabledModes = append(opts.DisabledModes, mode)
+	}
+	egressACL, err := config.loadEgressACL(aclFile, opts)
 	if err != nil {
 		config.Log.Info(logging.Error(err))
 		return err
@@ -656,6 +682,31 @@ func (config *Config) SetupEgressAcl(aclFile string) error {
 	config.aclFilePath = aclFile
 
 	return nil
+}
+
+// loadEgressACL loads aclFile with the loader for its version key. A v2 file
+// loads directly. A v1 file loads with the v1 loader and is converted to an
+// equivalent v2 policy, so existing v1 files keep working on the v2 engine.
+func (config *Config) loadEgressACL(aclFile string, opts acl.Options) (*acl.Engine, error) {
+	data, err := os.ReadFile(aclFile)
+	if err != nil {
+		return nil, err
+	}
+	var head struct {
+		Version string `yaml:"version"`
+	}
+	if err := yaml.Unmarshal(data, &head); err != nil {
+		return nil, fmt.Errorf("%s: %w", aclFile, err)
+	}
+	if head.Version != "v1" {
+		return acl.Load(opts, aclFile)
+	}
+	v1ACL, err := aclv1.New(config.Log, aclv1.NewYAMLLoader(aclFile), config.DisabledAclPolicyActions)
+	if err != nil {
+		return nil, err
+	}
+	config.Log.Warn(fmt.Sprintf("Egress ACL %s uses the v1 format and was converted to v2. Move it to the v2 format.", aclFile))
+	return v1ACL.Engine(opts)
 }
 
 // ReloadEgressAcl re-validates the last-loaded ACL file against the current

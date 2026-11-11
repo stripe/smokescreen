@@ -1,50 +1,41 @@
 ---
-version: v1
+version: v2
 services:
   - name: test-trusted-srv
     project: security
     action: enforce
-    allowed_domains:
-      - notarealhost.test
-      - httpbin.org
+    allow:
+      - domains: [notarealhost.test, httpbin.org]
   - name: test-local-srv
     project: security
     action: open
-    allowed_domains:
-      - 127.0.0.1
+    allow:
+      - domains: [127.0.0.1]
   - name: test-open-srv
     project: security
     action: open
   - name: test-external-connect-proxy-blocked-srv
     project: security
     action: enforce
-    allowed_domains:
-      - 127.0.0.1
-    allowed_external_proxies:
-      - myproxy.com
-      - otherproxy.org
+    proxies: [myproxy.com, otherproxy.org]
+    allow:
+      - domains: [127.0.0.1]
   - name: test-external-connect-proxy-allowed-srv
     project: security
     action: enforce
-    allowed_domains:
-      - 127.0.0.1
-    allowed_external_proxies:
-      - localhost 
-      - myproxy.com
-      - myproxy2.com
-      - thisisaproxy.com
+    proxies: [localhost, myproxy.com, myproxy2.com, thisisaproxy.com]
+    allow:
+      - domains: [127.0.0.1]
   - name: test-mitm
     project: security
     action: enforce
-    allowed_domains:
-      - 127.0.0.1
-    mitm_domains:
-      - domain: 127.0.0.1
-        add_headers:
-          Accept-Language: el
-        detailed_http_logs: true
-        detailed_http_logs_full_headers:
-          - User-Agent
+    allow:
+      - domains: [127.0.0.1]
+        mitm:
+          add_headers:
+            Accept-Language: el
+          detailed_http_logs: true
+          detailed_http_logs_full_headers: [User-Agent]
 
-global_deny_list:
-  - stripe.com
+global:
+  deny: [stripe.com]

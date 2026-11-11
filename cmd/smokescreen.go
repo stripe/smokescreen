@@ -155,6 +155,14 @@ func NewConfiguration(args []string, logger *slog.Logger) (*smokescreen.Config, 
 			Name:  "disable-acl-policy-action",
 			Usage: "Disable usage of a `POLICY ACTION` such as \"open\" in the egress ACL",
 		},
+		&cli.BoolFlag{
+			Name:  "acl-compat",
+			Usage: "Load an egress ACL whose service allow entries overlap the global deny list without override_global_policy,\n\t\tletting those entries win as they did in v1 and logging a warning for each. Use acl_compat in the config file\n\t\twhen the config file sets acl_file.",
+		},
+		&cli.BoolFlag{
+			Name:  "acl-allow-unknown-fields",
+			Usage: "Ignore ACL keys that the v2 format does not define, as v1 did, so that the file can carry keys for other tools.\n\t\tBy default an unknown key is an error, which also catches typos. Use acl_allow_unknown_fields in the config file\n\t\twhen the config file sets acl_file.",
+		},
 		&cli.StringFlag{
 			Name:  "stats-socket-dir",
 			Usage: "Enable connection tracking. Will expose one UDS in `DIR` going by the name of \"track-{pid}.sock\".\n\t\tThis should be an absolute path with all symlinks, if any, resolved.",
@@ -275,6 +283,14 @@ func NewConfiguration(args []string, logger *slog.Logger) (*smokescreen.Config, 
 			conf.DisabledAclPolicyActions = c.StringSlice("disable-acl-policy-action")
 		}
 
+		if c.IsSet("acl-compat") {
+			conf.AclCompat = c.Bool("acl-compat")
+		}
+
+		if c.IsSet("acl-allow-unknown-fields") {
+			conf.AclAllowUnknownFields = c.Bool("acl-allow-unknown-fields")
+		}
+
 		if c.IsSet("stats-socket-dir") {
 			conf.StatsSocketDir = c.String("stats-socket-dir")
 		}
@@ -343,8 +359,9 @@ func NewConfiguration(args []string, logger *slog.Logger) (*smokescreen.Config, 
 			if err := conf.SetupEgressAcl(c.String("egress-acl-file")); err != nil {
 				return err
 			}
-		} else if c.IsSet("disable-acl-policy-action") {
-			// Revalidate a YAML-loaded ACL now that disabled actions are known.
+		} else if c.IsSet("disable-acl-policy-action") || c.IsSet("acl-compat") || c.IsSet("acl-allow-unknown-fields") {
+			// Revalidate a YAML-loaded ACL now that disabled actions and the
+			// compat and unknown-field settings are known.
 			if err := conf.ReloadEgressAcl(); err != nil {
 				return err
 			}
