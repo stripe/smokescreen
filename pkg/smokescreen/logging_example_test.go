@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen"
-	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 )
 

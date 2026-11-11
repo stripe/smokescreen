@@ -22,7 +22,7 @@ import (
 	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/einhorn"
 	"github.com/stripe/smokescreen/v2/internal/logging"
-	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v1"
+	acl "github.com/stripe/smokescreen/v2/pkg/smokescreen/acl/v2"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/hostport"
 	"github.com/stripe/smokescreen/v2/pkg/smokescreen/metrics"
