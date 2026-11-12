@@ -1,5 +1,27 @@
 # Smokescreen [![Test](https://github.com/stripe/smokescreen/actions/workflows/test.yml/badge.svg?branch=master&event=push)](https://github.com/stripe/smokescreen/actions/workflows/test.yml?query=branch%3Amaster) [![Coverage Status](https://coveralls.io/repos/github/stripe/smokescreen/badge.svg?branch=master)](https://coveralls.io/github/stripe/smokescreen?branch=master)
 
+## Which version to use
+
+> [!NOTE]
+> **This is the v1 branch.** For now, v1 gets security fixes, major bug fixes and dependency updates. New features go into v2, on [`master`](https://github.com/stripe/smokescreen).
+
+|                | v1                                                        | v2                                         |
+| -------------- | --------------------------------------------------------- | ------------------------------------------ |
+| Branch         | `v1` (this branch)                                        | [`master`](https://github.com/stripe/smokescreen) |
+| Go module      | `github.com/stripe/smokescreen`                           | `github.com/stripe/smokescreen/v2`         |
+| Release tags   | `v0.x.y`, for example `v0.1.0`                            | None yet. v2 is untagged: use the latest `master` commit, for example with `go get github.com/stripe/smokescreen/v2@master` |
+| What it gets   | Security fixes, major bug fixes and dependency updates, for now | New features, security fixes and major bug fixes |
+
+v2 is an early release, and it has no release tag yet. Stripe uses v2 internally, but the first tagged v2 release will have breaking API changes. If you need a stable Go API, stay on v1 for now.
+
+**Risks of moving to v2 now:**
+
+- The Go API will change in the first tagged v2 release. Plan for code changes when you upgrade.
+- v2 is new, so it has had less testing than v1.
+- v2 changes some defaults and the way ACLs make decisions. Read [Migrating to v2](https://github.com/stripe/smokescreen/blob/master/docs/migrating-to-v2.md) before you upgrade.
+
+We fix security issues and major bugs in both v1 and v2.
+
 Smokescreen is a HTTP CONNECT proxy. It proxies most traffic from Stripe to the
 external world (e.g., webhooks).
 
