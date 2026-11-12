@@ -3,7 +3,7 @@
 ## Which version to use
 
 > [!WARNING]
-> **v2 is an early release, and it has no release tag yet.** Stripe uses v2 internally, but the next iteration of v2 will have breaking API changes. If you need a stable Go API, use v1 for now.
+> **v2 is an early release, and it has no release tag yet.** Stripe uses v2 internally, but the first tagged v2 release will have breaking API changes. If you need a stable Go API, use v1 for now.
 
 |                | v1                                                        | v2                                         |
 | -------------- | --------------------------------------------------------- | ------------------------------------------ |
@@ -14,7 +14,7 @@
 
 **Risks of using v2 now:**
 
-- The Go API will change in the next iteration of v2. Plan for code changes when you upgrade.
+- The Go API will change in the first tagged v2 release. Plan for code changes when you upgrade.
 - v2 is new, so it has had less testing than v1.
 - v2 changes some defaults and the way ACLs make decisions. Read [Migrating to v2](docs/migrating-to-v2.md) before you upgrade.
 
