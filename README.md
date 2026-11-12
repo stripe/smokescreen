@@ -9,14 +9,14 @@
 | -------------- | --------------------------------------------------------- | ------------------------------------------ |
 | Branch         | `v1` (this branch)                                        | [`master`](https://github.com/stripe/smokescreen) |
 | Go module      | `github.com/stripe/smokescreen`                           | `github.com/stripe/smokescreen/v2`         |
-| Release tags   | `v0.x.y`, for example `v0.1.0`                            | `v2.x.y`                                   |
+| Release tags   | `v0.x.y`, for example `v0.1.0`                            | None yet. v2 is untagged: use the latest `master` commit, for example with `go get github.com/stripe/smokescreen/v2@master` |
 | What it gets   | Security fixes, major bug fixes and dependency updates, for now | New features, security fixes and major bug fixes |
 
-v2 is an early release. Stripe uses v2 internally, but the next v2 release will have breaking API changes. If you need a stable Go API, stay on v1 for now.
+v2 is an early release, and it has no release tag yet. Stripe uses v2 internally, but the next iteration of v2 will have breaking API changes. If you need a stable Go API, stay on v1 for now.
 
 **Risks of moving to v2 now:**
 
-- The Go API will change again in the next v2 release. Plan for code changes when you upgrade.
+- The Go API will change in the next iteration of v2. Plan for code changes when you upgrade.
 - v2 is new, so it has had less testing than v1.
 - v2 changes some defaults and the way ACLs make decisions. Read [Migrating to v2](https://github.com/stripe/smokescreen/blob/master/docs/migrating-to-v2.md) before you upgrade.
 
