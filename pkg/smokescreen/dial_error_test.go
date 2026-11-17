@@ -243,7 +243,20 @@ func TestOnDialErrorProxyPaths(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/upstream=%t", method, upstream), func(t *testing.T) {
 				cfg, err := testConfig("test-local-srv")
 				require.NoError(t, err)
-				cfg.Resolver = dialErrorResolver{}
+				logs := proxyLogHook(cfg)
+				cfg.Resolver = observingResolver{dialErrorResolver{}, func(ctx context.Context, lookup, value string) {
+					sctx, ok := SmokescreenContextFromContext(ctx)
+					if !assert.True(t, ok) {
+						return
+					}
+					assertRequestMetadata(t, sctx, "test-local-srv", "client-trace")
+					if lookup == "ip" && value == "destination.test" {
+						assert.Nil(t, sctx.Decision.ResolvedAddr)
+						assert.Empty(t, sctx.Decision.SelectedUpstreamProxy)
+					}
+					// Record identity only; do not read the live context asynchronously.
+					sctx.Logger.Info("resolver probe", "lookup", lookup, "value", value, "request_context", fmt.Sprintf("%p", sctx))
+				}}
 				cfg.TunnelLimiter = NewTunnelLimiter(1, cfg)
 				if upstream {
 					cfg.UpstreamHttpProxyAddr = "http://proxy.test:8080"
@@ -252,8 +265,14 @@ func TestOnDialErrorProxyPaths(t *testing.T) {
 				dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("injected failure")}
 				var calls atomic.Int32
 				events := make(chan DialErrorEvent, 2)
-				cfg.ProxyDialTimeout = func(context.Context, string, string, time.Duration) (net.Conn, error) {
+				cfg.ProxyDialTimeout = func(ctx context.Context, _, _ string, _ time.Duration) (net.Conn, error) {
 					calls.Add(1)
+					pctx, ok := proxyContext(ctx)
+					if assert.True(t, ok) {
+						sctx := pctx.UserData.(*SmokescreenContext)
+						assertRequestMetadata(t, sctx, "test-local-srv", "client-trace")
+						sctx.Logger.Info("dial probe", "request_context", fmt.Sprintf("%p", sctx))
+					}
 					return nil, dialErr
 				}
 				cfg.OnDialError = func(_ context.Context, event DialErrorEvent) { events <- event }
@@ -267,7 +286,7 @@ func TestOnDialErrorProxyPaths(t *testing.T) {
 				if method == http.MethodConnect {
 					target = "destination.test:443"
 				}
-				_, err = fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: destination.test:443\r\nConnection: close\r\n\r\n", method, target)
+				_, err = fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: destination.test:443\r\nX-Smokescreen-Trace-ID: client-trace\r\nConnection: close\r\n\r\n", method, target)
 				require.NoError(t, err)
 				resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 				require.NoError(t, err)
@@ -287,6 +306,33 @@ func TestOnDialErrorProxyPaths(t *testing.T) {
 					require.Equal(t, "192.0.2.10:443", event.ResolvedAddr)
 				}
 				require.Zero(t, cfg.TunnelLimiter.ActiveCount())
+				var identity string
+				var lookups []string
+				var dialProbes int
+				for _, entry := range logs.AllEntries() {
+					if entry.Message != "resolver probe" && entry.Message != "dial probe" {
+						continue
+					}
+					if identity == "" {
+						identity = entry.Data["request_context"].(string)
+					}
+					require.Equal(t, identity, entry.Data["request_context"])
+					require.Equal(t, "test-local-srv", entry.Data[LogFieldRole])
+					require.Equal(t, "security", entry.Data[LogFieldProject])
+					require.Equal(t, "client-trace", entry.Data[LogFieldTraceID])
+					require.NotEmpty(t, entry.Data[LogFieldID])
+					if entry.Message == "resolver probe" {
+						lookups = append(lookups, entry.Data["lookup"].(string)+":"+entry.Data["value"].(string))
+					} else {
+						dialProbes++
+					}
+				}
+				expectedLookups := []string{"port:443", "ip:destination.test"}
+				if upstream {
+					expectedLookups = append(expectedLookups, "port:8080", "ip:proxy.test")
+				}
+				require.Equal(t, expectedLookups, lookups)
+				require.Equal(t, 1, dialProbes)
 			})
 		}
 	}

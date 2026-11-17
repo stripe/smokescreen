@@ -1836,6 +1836,22 @@ func TestMitm(t *testing.T) {
 
 		cfg, err := testConfig("test-mitm")
 		r.NoError(err)
+		cfg.RoleFromRequest = func(req *http.Request) (string, error) {
+			if req.Method != http.MethodConnect {
+				return "", errors.New("inner requests must reuse the CONNECT role")
+			}
+			return "test-mitm", nil
+		}
+		var resolverCalls atomic.Int32
+		cfg.Resolver = observingResolver{cfg.Resolver, func(ctx context.Context, _, _ string) {
+			resolverCalls.Add(1)
+			sctx, ok := SmokescreenContextFromContext(ctx)
+			if !a.True(ok) {
+				return
+			}
+			assertRequestMetadata(t, sctx, "test-mitm", "mitm-trace")
+			a.Nil(sctx.Decision.ResolvedAddr)
+		}}
 		// We use the default test certificates from Goproxy
 		mitmCa, err := tls.X509KeyPair(goproxy.CA_CERT, goproxy.CA_KEY)
 		r.NoError(err)
@@ -1873,11 +1889,12 @@ func TestMitm(t *testing.T) {
 		proxy := BuildProxy(cfg)
 		httpProxy := httptest.NewServer(proxy)
 		remote := httptest.NewTLSServer(h)
-		client, err := proxyClient(httpProxy.URL)
+		client, err := proxyClientWithConnectHeaders(httpProxy.URL, http.Header{traceHeader: []string{"mitm-trace"}})
 		r.NoError(err)
 
 		req, err := http.NewRequest("GET", remote.URL, nil)
 		r.NoError(err)
+		req.Header.Set(traceHeader, "mitm-trace")
 
 		go func() {
 			resp, err := client.Do(req)
@@ -1911,6 +1928,7 @@ func TestMitm(t *testing.T) {
 		lookups, err := tmc.GetCount("resolver.attempts_total", make(map[string]string))
 		r.NoError(err)
 		r.Equal(lookups, uint64(2))
+		r.Equal(int32(4), resolverCalls.Load(), "port and IP lookups for CONNECT and the inner request")
 		ltime, err := tmc.GetCount("resolver.lookup_time", make(map[string]string))
 		r.NoError(err)
 		r.Equal(ltime, uint64(2))
