@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/goproxy"
 )
@@ -72,25 +73,140 @@ func TestCanonicalDecisionSemantics(t *testing.T) {
 type deadlineResolver struct {
 	t       *testing.T
 	timeout time.Duration
+	portCtx context.Context
+	wait    bool
 }
 
-func (r deadlineResolver) LookupPort(ctx context.Context, _, _ string) (int, error) {
+func (r *deadlineResolver) LookupPort(ctx context.Context, _, _ string) (int, error) {
+	r.portCtx = ctx
 	deadline, ok := ctx.Deadline()
 	require.True(r.t, ok)
 	require.InDelta(r.t, r.timeout.Seconds(), time.Until(deadline).Seconds(), 0.1)
 	return 80, nil
 }
-func (r deadlineResolver) LookupIP(ctx context.Context, _, _ string) ([]net.IP, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
+func (r *deadlineResolver) LookupIP(ctx context.Context, _, _ string) ([]net.IP, error) {
+	require.Same(r.t, r.portCtx, ctx, "both lookups share one timeout")
+	if r.wait {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return []net.IP{net.ParseIP("192.0.2.10")}, nil
 }
 
 func TestDNSOwnsTimeout(t *testing.T) {
 	cfg := NewConfig()
 	cfg.DNSTimeout = 10 * time.Millisecond
-	cfg.Resolver = deadlineResolver{t, cfg.DNSTimeout}
-	_, err := resolveTCPAddr(cfg, "tcp", "example.com:80")
+	cfg.Resolver = &deadlineResolver{t: t, timeout: cfg.DNSTimeout, wait: true}
+	_, err := resolveTCPAddr(context.Background(), cfg, "tcp", "example.com:80")
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+// Inspect metadata during the callback, without retaining the live request context.
+type observingResolver struct {
+	Resolver
+	observe func(context.Context, string, string)
+}
+
+func (r observingResolver) LookupPort(ctx context.Context, network, service string) (int, error) {
+	r.observe(ctx, "port", service)
+	return r.Resolver.LookupPort(ctx, network, service)
+}
+
+func (r observingResolver) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+	r.observe(ctx, "ip", host)
+	return r.Resolver.LookupIP(ctx, network, host)
+}
+
+func assertRequestMetadata(t *testing.T, sctx *SmokescreenContext, role, trace string) {
+	t.Helper()
+	if !assert.NotNil(t, sctx.Decision) {
+		return
+	}
+	assert.Equal(t, role, sctx.Decision.Role)
+	assert.Equal(t, "security", sctx.Decision.Project)
+	attrs := map[string]any{}
+	counts := map[string]int{}
+	for _, attr := range sctx.LogAttrs() {
+		attrs[attr.Key] = attr.Value.Any()
+		counts[attr.Key]++
+	}
+	assert.Equal(t, role, attrs[LogFieldRole])
+	assert.Equal(t, "security", attrs[LogFieldProject])
+	assert.Equal(t, trace, attrs[LogFieldTraceID])
+	assert.NotEmpty(t, attrs[LogFieldID])
+	assert.Equal(t, 1, counts[LogFieldRole])
+	assert.Equal(t, 1, counts[LogFieldProject])
+	assert.NotContains(t, attrs, LogFieldConnEstablishMS)
+	assert.NotContains(t, attrs, LogFieldOutRemoteAddr)
+}
+
+func TestSmokescreenContextFromContext(t *testing.T) {
+	for _, ctx := range []context.Context{
+		context.Background(),
+		context.WithValue(context.Background(), smokescreenContextKey{}, (*SmokescreenContext)(nil)),
+		context.WithValue(context.Background(), smokescreenContextKey{}, "wrong type"),
+	} {
+		sctx, ok := SmokescreenContextFromContext(ctx)
+		require.Nil(t, sctx)
+		require.False(t, ok)
+	}
+}
+
+func TestSafeResolveContext(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		timeout time.Duration
+		noSctx  bool
+	}{
+		{name: "custom timeout", timeout: 10 * time.Millisecond},
+		{name: "default timeout"},
+		{name: "no request context", timeout: 10 * time.Millisecond, noSctx: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := NewConfig()
+			cfg.DNSTimeout = tc.timeout
+			reqCtx, cancel := context.WithCancel(context.Background())
+			cancel()
+			req := httptest.NewRequest(http.MethodGet, "http://example.com/", nil).WithContext(reqCtx)
+			sctx := newContext(cfg, httpProxy, req)
+			if tc.noSctx {
+				sctx = nil
+			}
+			timeout := tc.timeout
+			if timeout == 0 {
+				timeout = 5 * time.Second
+			}
+			resolver := &deadlineResolver{t: t, timeout: timeout, wait: tc.timeout != 0}
+			var lookupCtx context.Context
+			var calls int
+			cfg.Resolver = observingResolver{resolver, func(ctx context.Context, _, _ string) {
+				calls++
+				got, ok := SmokescreenContextFromContext(ctx)
+				require.Equal(t, !tc.noSctx, ok)
+				if tc.noSctx {
+					require.Nil(t, got)
+				} else {
+					require.Same(t, sctx, got)
+				}
+				require.NoError(t, ctx.Err(), "DNS does not inherit request cancellation")
+				deadline, ok := ctx.Deadline()
+				require.True(t, ok)
+				require.InDelta(t, timeout.Seconds(), time.Until(deadline).Seconds(), 0.1)
+				if lookupCtx != nil {
+					require.Same(t, lookupCtx, ctx)
+				}
+				lookupCtx = ctx
+			}}
+			_, _, err := safeResolve(cfg, sctx, "tcp", "example.com:80")
+			if tc.timeout == 0 {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+			}
+			require.Equal(t, 2, calls)
+			require.Error(t, lookupCtx.Err(), "timeout context is canceled after resolution")
+		})
+	}
 }
 
 func TestFatalConfigExit(t *testing.T) {
@@ -116,7 +232,7 @@ func TestLogAttrsIncludesBoundAndDialAttrs(t *testing.T) {
 	cfg.Log = slog.New(slog.NewJSONHandler(&out, nil))
 	pctx := canonicalFixture(cfg)
 	sctx := pctx.UserData.(*SmokescreenContext)
-	sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
+	sctx.withLogAttrs(extractContextLogFields(sctx))
 	sctx.dialAttrs = []slog.Attr{slog.Int64(LogFieldConnEstablishMS, 7)}
 
 	got := map[string]slog.Value{}

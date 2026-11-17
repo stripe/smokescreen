@@ -107,6 +107,18 @@ type SmokescreenContext struct {
 	tunnelSlotAcquired bool
 }
 
+type smokescreenContextKey struct{}
+
+// SmokescreenContextFromContext returns the request context supplied to Resolver
+// callbacks, or (nil, false) if no non-nil *SmokescreenContext is present.
+// It is the live, phase-specific request context, not a finalized snapshot:
+// resolution, upstream proxy selection, and dial results may not yet be available.
+// Consumers must treat it as read-only and must not retain it for asynchronous access.
+func SmokescreenContextFromContext(ctx context.Context) (*SmokescreenContext, bool) {
+	sctx, ok := ctx.Value(smokescreenContextKey{}).(*SmokescreenContext)
+	return sctx, ok && sctx != nil
+}
+
 // LogAttrs returns a copy of the request attributes Smokescreen attaches to
 // this context's records: those bound to Logger, followed by the latest dial
 // results once an upstream connection has been attempted.
@@ -366,7 +378,7 @@ func classifyAddr(config *Config, addr *net.TCPAddr, host string) ipType {
 	return allowFirstIPPolicy{}.classify(config, addr)
 }
 
-func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) {
+func resolveTCPAddr(ctx context.Context, config *Config, network, addr string) (*net.TCPAddr, error) {
 	if network != "tcp" {
 		return nil, fmt.Errorf("unknown network type %q", network)
 	}
@@ -379,7 +391,7 @@ func resolveTCPAddr(config *Config, network, addr string) (*net.TCPAddr, error) 
 	if dnsTimeout == 0 {
 		dnsTimeout = 5 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dnsTimeout)
 	defer cancel()
 	resolvedPort, err := config.Resolver.LookupPort(ctx, network, port)
 	if err != nil {
@@ -480,11 +492,16 @@ func selectTargetAddr(config *Config, ips []net.IP, port int, host string) (*net
 	return nil, fmt.Errorf("no IP addresses to evaluate")
 }
 
-func safeResolve(config *Config, network, addr string) (*net.TCPAddr, string, error) {
+func safeResolve(config *Config, sctx *SmokescreenContext, network, addr string) (*net.TCPAddr, string, error) {
 	config.MetricsClient.Incr("resolver.attempts_total", 1)
 
+	// Carry request metadata while keeping DNS cancellation independent of the request.
+	ctx := context.Background()
+	if sctx != nil {
+		ctx = context.WithValue(ctx, smokescreenContextKey{}, sctx)
+	}
 	resolveStart := time.Now()
-	resolved, err := resolveTCPAddr(config, network, addr)
+	resolved, err := resolveTCPAddr(ctx, config, network, addr)
 	resolveDuration := time.Since(resolveStart)
 	if err != nil {
 		config.MetricsClient.Incr("resolver.errors_total", 1)
@@ -521,7 +538,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// or is not tcp we must re-resolve it before establishing the connection.
 	if d.ResolvedAddr == nil || d.OutboundHost != addr || network != "tcp" {
 		var err error
-		d.ResolvedAddr, d.Reason, err = safeResolve(sctx.cfg, network, addr)
+		d.ResolvedAddr, d.Reason, err = safeResolve(sctx.cfg, sctx, network, addr)
 		if err != nil {
 			if _, ok := err.(denyError); ok {
 				sctx.cfg.Log.With(slog.String("address", addr),
@@ -858,9 +875,6 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, sctx, req, destination)
 		setUpstreamProxyHeader(req, sctx.Decision.SelectedUpstreamProxy)
 
-		// add context fields to all future log messages sent using this smokescreen context's Logger
-		sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
-
 		// Returning any kind of response in this handler is goproxy's way of short circuiting
 		// the request. The original request will never be sent, and goproxy will invoke our
 		// response filter attached via the OnResponse() handler.
@@ -981,7 +995,7 @@ func logProxy(pctx *goproxy.ProxyCtx) {
 	sctx.Logger.LogAttrs(context.Background(), level, CanonicalProxyDecision, attrs...)
 }
 
-func extractContextLogFields(pctx *goproxy.ProxyCtx, sctx *SmokescreenContext) []slog.Attr {
+func extractContextLogFields(sctx *SmokescreenContext) []slog.Attr {
 	var fields []slog.Attr
 
 	// Retrieve information from the ACL decision
@@ -1010,8 +1024,6 @@ func handleConnect(config *Config, pctx *goproxy.ProxyCtx) (*goproxy.ConnectActi
 	sctx.Decision, sctx.lookupTime, pctx.Error = checkIfRequestShouldBeProxied(config, sctx, pctx.Req, destination)
 	setUpstreamProxyHeader(pctx.Req, sctx.Decision.SelectedUpstreamProxy)
 
-	// add context fields to all future log messages sent using this smokescreen context's Logger
-	sctx.withLogAttrs(extractContextLogFields(pctx, sctx))
 	if pctx.Error != nil {
 		// DNS resolution failure
 		return nil, "", pctx.Error
@@ -1343,12 +1355,14 @@ func selectUpstreamProxy(config *Config, sctx *SmokescreenContext, decision *ACL
 
 func checkIfRequestShouldBeProxied(config *Config, sctx *SmokescreenContext, req *http.Request, destination hostport.HostPort) (*ACLDecision, time.Duration, error) {
 	decision := checkACLsForRequest(config, sctx, req, destination)
+	sctx.Decision = decision
+	sctx.withLogAttrs(extractContextLogFields(sctx))
 
 	var lookupTime time.Duration
 	if decision.allow {
 		start := time.Now()
 		hostPort := destination.String()
-		resolved, reason, err := safeResolve(config, "tcp", hostPort)
+		resolved, reason, err := safeResolve(config, sctx, "tcp", hostPort)
 		lookupTime = time.Since(start)
 		if err != nil {
 			if _, ok := err.(denyError); !ok {
