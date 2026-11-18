@@ -10,7 +10,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/rs/xid v1.6.1-0.20260724084550-40a728ce78a4
 	github.com/stretchr/testify v1.12.1
-	github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
+	github.com/stripe/goproxy v0.0.0-20261118122556-96784eea89f8
 	github.com/urfave/cli/v3 v3.11.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/net v0.62.0

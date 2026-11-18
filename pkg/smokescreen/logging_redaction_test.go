@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/goproxy"
 	"github.com/stripe/smokescreen/v2/internal/testlog"
+	"github.com/stripe/smokescreen/v2/pkg/smokescreen/conntrack"
 )
 
 func TestCallerRedactionWithReplaceAttr(t *testing.T) {
@@ -117,4 +121,22 @@ func TestCanonicalDiagnosticsPreserveText(t *testing.T) {
 	require.NotNil(t, record)
 	require.Equal(t, message, record.Data[LogFieldError])
 	require.Equal(t, message, record.Data[LogFieldDecisionReason])
+}
+
+func TestHTTPCompletionRedactsErrorURLs(t *testing.T) {
+	cfg := NewConfig()
+	logger, records := testlog.New()
+	cfg.Log = logger
+	pctx := canonicalFixture(cfg)
+	logRequestClose(pctx, goproxy.HTTPRequestStats{
+		BytesIn: 3,
+		Error: &url.Error{
+			Op: "Get", URL: "http://alice:secret@example.com/?token=secret", Err: io.ErrUnexpectedEOF,
+		},
+	})
+	entry := records.LastEntry()
+	assert.Equal(t, uint64(3), entry.Data[conntrack.LogFieldBytesIn])
+	assert.NotContains(t, entry.Data[LogFieldError], "alice")
+	assert.NotContains(t, entry.Data[LogFieldError], "secret")
+	assert.Contains(t, entry.Data[LogFieldError], io.ErrUnexpectedEOF.Error())
 }

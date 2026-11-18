@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -68,6 +70,9 @@ const (
 	LogMitmReqUrl            = "mitm_req_url"
 	LogMitmReqMethod         = "mitm_req_method"
 	LogMitmReqHeaders        = "mitm_req_headers"
+
+	// CanonicalProxyRequestClose records plain HTTP request completion and payload bytes.
+	CanonicalProxyRequestClose = "CANONICAL-PROXY-REQUEST-CLOSE"
 )
 
 type ipType int
@@ -93,6 +98,8 @@ type SmokescreenContext struct {
 	logAttrs   []slog.Attr
 	dialAttrs  []slog.Attr
 	statusCode int
+	// httpConnAttrs describes the selected connection, including pooled reuse.
+	httpConnAttrs []slog.Attr
 
 	// Time spent resolving the requested hostname
 	lookupTime time.Duration
@@ -805,7 +812,30 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// attaches goproxy.ProxyCtx prior to calling dialContext.
 	rtFn := goproxy.RoundTripperFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Response, error) {
 		ctx := context.WithValue(req.Context(), goproxy.ProxyContextKey, pctx)
-		return proxy.Tr.RoundTrip(req.WithContext(ctx))
+		sctx := pctx.UserData.(*SmokescreenContext)
+		if sctx.ProxyType != httpProxy {
+			return proxy.Tr.RoundTrip(req.WithContext(ctx))
+		}
+
+		// DialContext does not run on pooled reuse. Trace the selected connection
+		// so completion events carry its addresses for every request.
+		var connMu sync.Mutex
+		var connAttrs []slog.Attr
+		ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) {
+				connMu.Lock()
+				defer connMu.Unlock()
+				connAttrs = []slog.Attr{
+					slog.String(LogFieldOutLocalAddr, info.Conn.LocalAddr().String()),
+					slog.String(LogFieldOutRemoteAddr, info.Conn.RemoteAddr().String()),
+				}
+			},
+		})
+		resp, err := proxy.Tr.RoundTrip(req.WithContext(ctx))
+		connMu.Lock()
+		defer connMu.Unlock()
+		sctx.httpConnAttrs = connAttrs
+		return resp, err
 	})
 
 	// Associate a timeout with the CONNECT proxy client connection
@@ -953,6 +983,7 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 		}
 		return resp
 	})
+	proxy.HTTPRequestCompleteHandler = logRequestClose
 
 	// This function will be called on the response to a successful https CONNECT request.
 	// The goproxy OnResponse() function above is only called for non-https responses.
@@ -968,6 +999,33 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	}
 
 	return proxy
+}
+
+func logRequestClose(pctx *goproxy.ProxyCtx, stats goproxy.HTTPRequestStats) {
+	sctx := pctx.UserData.(*SmokescreenContext)
+	level := canonicalDecisionLevel(sctx.Decision, stats.Error)
+	if !sctx.Logger.Enabled(context.Background(), level) {
+		return
+	}
+	end := time.Now()
+	attrs := []slog.Attr{
+		slog.Uint64(conntrack.LogFieldBytesIn, uint64(stats.BytesIn)),
+		slog.Uint64(conntrack.LogFieldBytesOut, uint64(stats.BytesOut)),
+		slog.Time(conntrack.LogFieldEndTime, end.UTC()),
+		slog.Float64(conntrack.LogFieldDuration, end.Sub(sctx.start).Seconds()),
+		slog.String(LogFieldError, logging.Error(stats.Error)),
+	}
+	if pctx.Resp != nil {
+		attrs = append(attrs, slog.Int("status_code", pctx.Resp.StatusCode))
+	}
+	if decision := sctx.Decision; decision != nil {
+		attrs = append(attrs,
+			slog.Bool(LogFieldAllow, decision.allow),
+			slog.String(LogFieldDecisionReason, decision.Reason),
+			slog.Bool(LogFieldEnforceWouldDeny, decision.enforceWouldDeny))
+	}
+	attrs = append(attrs, sctx.httpConnAttrs...)
+	sctx.Logger.LogAttrs(context.Background(), level, CanonicalProxyRequestClose, attrs...)
 }
 
 func logProxy(pctx *goproxy.ProxyCtx) {
