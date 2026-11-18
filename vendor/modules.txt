@@ -54,7 +54,7 @@ github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/internal/difflib
 github.com/stretchr/testify/internal/spew
 github.com/stretchr/testify/require
-# github.com/stripe/goproxy v0.0.0-20260922184237-948457f542a3
+# github.com/stripe/goproxy v0.0.0-20261118122556-96784eea89f8
 ## explicit; go 1.13
 github.com/stripe/goproxy
 # github.com/urfave/cli/v3 v3.11.0

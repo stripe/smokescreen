@@ -38,6 +38,7 @@ type ProxyHttpServer struct {
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
+
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -68,6 +69,12 @@ type ProxyHttpServer struct {
 	// It can modify the request that will be sent to the upstream proxy.
 	// If it returns an error, the connection is closed and the error is returned to the client.
 	UpstreamProxyConnectReqHandler func(ctx *ProxyCtx, req *http.Request) error
+
+	// HTTPRequestCompleteHandler runs once after plain HTTP forwarding and upload
+	// closure. It excludes CONNECT, MITM, and NonproxyHandler requests. Configure
+	// before serving; callbacks must be concurrency-safe and may run on transport
+	// goroutines after ServeHTTP returns. Do not use the ResponseWriter.
+	HTTPRequestCompleteHandler func(ctx *ProxyCtx, stats HTTPRequestStats)
 
 	// HTTP and HTTPS proxy addresses
 	HttpProxyAddr  string
@@ -162,10 +169,42 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
+		var completion *httpRequestCompletion
+		var responseBodyCounter *httpResponseBodyCounter
+		if proxy.HTTPRequestCompleteHandler != nil {
+			completion = &httpRequestCompletion{
+				handler: proxy.HTTPRequestCompleteHandler,
+				ctx:     ctx,
+			}
+			defer func() {
+				if err == nil {
+					err = ctx.Error
+				}
+				completion.finish(err, responseBodyCounter)
+			}()
+		}
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
+			if completion != nil {
+				// Copy to avoid exposing the wrappers to request filters or callers.
+				// Keep the shared Trailer map, which the server fills at body EOF.
+				requestCopy := *r
+				r = &requestCopy
+				if r.Body != nil && r.Body != http.NoBody {
+					r.Body = completion.requestBody(r.Body)
+				}
+				if getBody := r.GetBody; getBody != nil {
+					r.GetBody = func() (io.ReadCloser, error) {
+						body, bodyErr := getBody()
+						if bodyErr != nil {
+							return nil, bodyErr
+						}
+						return completion.requestBody(body), nil
+					}
+				}
+			}
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
@@ -176,10 +215,21 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					return
 				}
 			}
+			if completion != nil && err == nil && resp.Body != nil {
+				responseBodyCounter = &httpResponseBodyCounter{ReadCloser: resp.Body, completion: completion}
+				if writerTo, ok := resp.Body.(io.WriterTo); ok {
+					resp.Body = &httpResponseBodyWriterTo{httpResponseBodyCounter: responseBodyCounter, writerTo: writerTo}
+				} else {
+					resp.Body = responseBodyCounter
+				}
+			}
 			ctx.Logf("Received response %v", resp.Status)
 		}
 		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
+		if completion != nil {
+			ctx.Resp = resp
+		}
 		defer origBody.Close()
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
@@ -193,11 +243,17 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			ctx.Warnf("Can't close response body %v", err)
+		nr, copyErr := io.Copy(w, resp.Body)
+		if err == nil {
+			err = copyErr
 		}
-		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			ctx.Warnf("Can't close response body %v", closeErr)
+			if err == nil {
+				err = closeErr
+			}
+		}
+		ctx.Logf("Copied %v bytes to client error=%v", nr, copyErr)
 	}
 }
 
