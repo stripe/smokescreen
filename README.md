@@ -9,7 +9,7 @@
 | -------------- | --------------------------------------------------------- | ------------------------------------------ |
 | Branch         | [`v1`](https://github.com/stripe/smokescreen/tree/v1)     | `master`                                   |
 | Go module      | `github.com/stripe/smokescreen`                           | `github.com/stripe/smokescreen/v2`         |
-| Release tags   | `v0.x.y`, for example `v0.1.0`                            | None yet. v2 is untagged: use the latest `master` commit, for example with `go get github.com/stripe/smokescreen/v2@master` |
+| Release tags   | `v1.x.y`, from `v1.0.0`. Earlier releases are `v0.x.y`     | None yet. v2 is untagged: use the latest `master` commit, for example with `go get github.com/stripe/smokescreen/v2@master` |
 | What it gets   | Security fixes, major bug fixes and dependency updates, for now | New features, security fixes and major bug fixes |
 
 **Risks of using v2 now:**
@@ -461,7 +461,7 @@ Pre-built binaries are available on the [GitHub Releases](https://github.com/str
 ## Container Images
 
 Container images are available at `ghcr.io/stripe/smokescreen:<version>`.
-Replace `<version>` with a published release tag, such as `v0.2.0`.
+Replace `<version>` with a published release tag, such as `v1.0.0`.
 
 ### Supported Platforms
 
