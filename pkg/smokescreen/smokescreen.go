@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -522,6 +523,34 @@ func proxyContext(ctx context.Context) (*goproxy.ProxyCtx, bool) {
 	return pctx, ok
 }
 
+type transportDialKey struct{}
+
+// transportDial carries the log attributes of a dial that net/http's Transport
+// runs for a request. The Transport dials on its own goroutine and can finish
+// the dial after RoundTrip returns, so that dial must not read or write the
+// request's mutable SmokescreenContext fields.
+type transportDial struct {
+	// logger is the request's logger when RoundTrip started.
+	logger *slog.Logger
+
+	mu    sync.Mutex
+	attrs []slog.Attr
+}
+
+func (td *transportDial) setAttrs(attrs []slog.Attr) {
+	td.mu.Lock()
+	defer td.mu.Unlock()
+	td.attrs = attrs
+}
+
+func (td *transportDial) takeAttrs() []slog.Attr {
+	td.mu.Lock()
+	defer td.mu.Unlock()
+	attrs := td.attrs
+	td.attrs = nil
+	return attrs
+}
+
 func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	pctx, ok := proxyContext(ctx)
 	if !ok {
@@ -533,12 +562,21 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		return nil, fmt.Errorf("dialContext missing required *SmokescreenContext")
 	}
 	d := sctx.Decision
+	td, _ := ctx.Value(transportDialKey{}).(*transportDial)
 
 	// If an address hasn't been resolved, does not match the original OutboundHost,
 	// or is not tcp we must re-resolve it before establishing the connection.
-	if d.ResolvedAddr == nil || d.OutboundHost != addr || network != "tcp" {
+	resolvedAddr := d.ResolvedAddr
+	if resolvedAddr == nil || d.OutboundHost != addr || network != "tcp" {
+		var reason string
 		var err error
-		d.ResolvedAddr, d.Reason, err = safeResolve(sctx.cfg, sctx, network, addr)
+		resolvedAddr, reason, err = safeResolve(sctx.cfg, sctx, network, addr)
+		// A CONNECT dial runs on the request goroutine, so it records the
+		// result in the decision. A Transport dial can still run after the
+		// request reads its decision, so its result stays local.
+		if td == nil {
+			d.ResolvedAddr, d.Reason = resolvedAddr, reason
+		}
 		if err != nil {
 			if _, ok := err.(denyError); ok {
 				sctx.cfg.Log.With(slog.String("address", addr),
@@ -568,7 +606,7 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	event := DialErrorEvent{
 		Network:            network,
 		TargetAddr:         addr,
-		ResolvedAddr:       d.ResolvedAddr.String(),
+		ResolvedAddr:       resolvedAddr.String(),
 		RequestDestination: d.OutboundHost,
 	}
 	start := time.Now()
@@ -580,7 +618,12 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	event.CompletedAt = time.Now()
 	event.Err = err
 	connTime := time.Since(start)
-	sctx.dialAttrs = dialContextLoggerFields(pctx, sctx, conn, connTime)
+	dialAttrs := dialContextLoggerFields(pctx, sctx, conn, connTime)
+	if td != nil {
+		td.setAttrs(dialAttrs)
+	} else {
+		sctx.dialAttrs = dialAttrs
+	}
 
 	if sctx.cfg.TimeConnect {
 		sctx.cfg.MetricsClient.Timing("cn.atpt.connect.time", connTime, 1)
@@ -609,7 +652,12 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	// Only wrap CONNECT conns with an InstrumentedConn. Connections used for traditional HTTP proxy
 	// requests are pooled and reused by net.Transport.
 	if sctx.ProxyType == connectProxy {
-		logger := sctx.diagnosticLogger()
+		var logger *slog.Logger
+		if td != nil {
+			logger = slog.New(td.logger.Handler().WithAttrs(dialAttrs))
+		} else {
+			logger = sctx.diagnosticLogger()
+		}
 		ic := sctx.cfg.ConnTracker.NewInstrumentedConnWithTimeout(conn, sctx.cfg.IdleTimeout, logger, d.Role, d.OutboundHost, sctx.ProxyType, d.Project)
 		pctx.ConnErrorHandler = ic.Error
 
@@ -805,7 +853,19 @@ func BuildProxy(config *Config) *goproxy.ProxyHttpServer {
 	// attaches goproxy.ProxyCtx prior to calling dialContext.
 	rtFn := goproxy.RoundTripperFunc(func(req *http.Request, pctx *goproxy.ProxyCtx) (*http.Response, error) {
 		ctx := context.WithValue(req.Context(), goproxy.ProxyContextKey, pctx)
-		return proxy.Tr.RoundTrip(req.WithContext(ctx))
+		sctx, ok := pctx.UserData.(*SmokescreenContext)
+		if !ok {
+			return proxy.Tr.RoundTrip(req.WithContext(ctx))
+		}
+		td := &transportDial{logger: sctx.Logger}
+		ctx = context.WithValue(ctx, transportDialKey{}, td)
+		resp, err := proxy.Tr.RoundTrip(req.WithContext(ctx))
+		// Keep the attributes of a dial that finished during RoundTrip. A
+		// dial that finishes later does not change the request's records.
+		if attrs := td.takeAttrs(); attrs != nil {
+			sctx.dialAttrs = attrs
+		}
+		return resp, err
 	})
 
 	// Associate a timeout with the CONNECT proxy client connection
