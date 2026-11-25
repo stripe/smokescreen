@@ -81,8 +81,13 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *slog.Logger, role, 
 	return ic
 }
 
+// Error records err as the connection's error. Close reads ConnError while it
+// holds the connection's lock, and Close can run on another goroutine, for
+// example when the tracker closes connections at shutdown.
 func (ic *InstrumentedConn) Error(err error) {
+	ic.Lock()
 	ic.ConnError = err
+	ic.Unlock()
 }
 
 func (ic *InstrumentedConn) Close() error {
