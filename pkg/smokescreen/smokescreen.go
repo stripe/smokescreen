@@ -566,12 +566,17 @@ func dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 
 	// If an address hasn't been resolved, does not match the original OutboundHost,
 	// or is not tcp we must re-resolve it before establishing the connection.
-	// The result stays local: a Transport dial can still run after the request
-	// reads its decision.
 	resolvedAddr := d.ResolvedAddr
 	if resolvedAddr == nil || d.OutboundHost != addr || network != "tcp" {
+		var reason string
 		var err error
-		resolvedAddr, _, err = safeResolve(sctx.cfg, sctx, network, addr)
+		resolvedAddr, reason, err = safeResolve(sctx.cfg, sctx, network, addr)
+		// A CONNECT dial runs on the request goroutine, so it records the
+		// result in the decision. A Transport dial can still run after the
+		// request reads its decision, so its result stays local.
+		if td == nil {
+			d.ResolvedAddr, d.Reason = resolvedAddr, reason
+		}
 		if err != nil {
 			if _, ok := err.(denyError); ok {
 				sctx.cfg.Log.With(slog.String("address", addr),
