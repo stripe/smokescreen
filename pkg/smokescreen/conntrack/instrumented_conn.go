@@ -185,7 +185,7 @@ func (ic *InstrumentedConn) Idle() bool {
 		return false
 	}
 
-	if time.Since(time.Unix(0, *ic.LastActivity)) > ic.tracker.IdleTimeout {
+	if time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))) > ic.tracker.IdleTimeout {
 		return true
 	}
 	return false
@@ -200,9 +200,9 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 		Rhost:                    ic.OutboundHost,
 		Raddr:                    ic.Conn.RemoteAddr().String(),
 		Created:                  ic.Start,
-		BytesIn:                  *ic.BytesIn,
-		BytesOut:                 *ic.BytesOut,
-		SecondsSinceLastActivity: time.Since(time.Unix(0, *ic.LastActivity)).Seconds(),
+		BytesIn:                  atomic.LoadUint64(ic.BytesIn),
+		BytesOut:                 atomic.LoadUint64(ic.BytesOut),
+		SecondsSinceLastActivity: time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))).Seconds(),
 		ProxyType:                ic.proxyType,
 	}
 }
