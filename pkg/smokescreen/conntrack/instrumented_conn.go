@@ -81,8 +81,13 @@ func (t *Tracker) NewInstrumentedConn(conn net.Conn, logger *slog.Logger, role, 
 	return ic
 }
 
+// Error records err as the connection's error. Close reads ConnError while it
+// holds the connection's lock, and Close can run on another goroutine, for
+// example when the tracker closes connections at shutdown.
 func (ic *InstrumentedConn) Error(err error) {
+	ic.Lock()
 	ic.ConnError = err
+	ic.Unlock()
 }
 
 func (ic *InstrumentedConn) Close() error {
@@ -180,7 +185,7 @@ func (ic *InstrumentedConn) Idle() bool {
 		return false
 	}
 
-	if time.Since(time.Unix(0, *ic.LastActivity)) > ic.tracker.IdleTimeout {
+	if time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))) > ic.tracker.IdleTimeout {
 		return true
 	}
 	return false
@@ -195,9 +200,9 @@ func (ic *InstrumentedConn) Stats() *InstrumentedConnStats {
 		Rhost:                    ic.OutboundHost,
 		Raddr:                    ic.Conn.RemoteAddr().String(),
 		Created:                  ic.Start,
-		BytesIn:                  *ic.BytesIn,
-		BytesOut:                 *ic.BytesOut,
-		SecondsSinceLastActivity: time.Since(time.Unix(0, *ic.LastActivity)).Seconds(),
+		BytesIn:                  atomic.LoadUint64(ic.BytesIn),
+		BytesOut:                 atomic.LoadUint64(ic.BytesOut),
+		SecondsSinceLastActivity: time.Since(time.Unix(0, atomic.LoadInt64(ic.LastActivity))).Seconds(),
 		ProxyType:                ic.proxyType,
 	}
 }
